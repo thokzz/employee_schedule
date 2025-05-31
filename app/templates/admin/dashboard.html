@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Administration{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Administration</h1>
+</div>
+
+<!-- Admin Stats -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_users }}</h3>
+                        <p class="mb-0">Total Users</p>
+                    </div>
+                    <i class="bi bi-people display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.active_users }}</h3>
+                        <p class="mb-0">Active Users</p>
+                    </div>
+                    <i class="bi bi-person-check display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_sections }}</h3>
+                        <p class="mb-0">Sections</p>
+                    </div>
+                    <i class="bi bi-building display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_units }}</h3>
+                        <p class="mb-0">Units</p>
+                    </div>
+                    <i class="bi bi-diagram-3 display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">User Management</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Manage user accounts, roles, and permissions.</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-primary">
+                        <i class="bi bi-people"></i> Manage Users
+                    </a>
+                    <button class="btn btn-outline-primary" onclick="showCreateUserModal()">
+                        <i class="bi bi-person-plus"></i> Add New User
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Organization Structure</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Manage sections and units for your organization.</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-info">
+                        <i class="bi bi-building"></i> Manage Sections
+                    </a>
+                    <a href="{{ url_for('admin.manage_units') }}" class="btn btn-outline-info">
+                        <i class="bi bi-diagram-3"></i> Manage Units
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Settings</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Configure system-wide settings and notifications.</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-warning" onclick="showEmailSettings()">
+                        <i class="bi bi-envelope-gear"></i> Email Settings
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="show2FASettings()">
+                        <i class="bi bi-shield-lock"></i> 2FA Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Reports & Analytics</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">View system usage and generate reports.</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-secondary">
+                        <i class="bi bi-graph-up"></i> Usage Reports
+                    </button>
+                    <button class="btn btn-outline-secondary">
+                        <i class="bi bi-file-earmark-text"></i> Export Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>New user registered:</strong> John Doe
+                            <br><small class="text-muted">2 hours ago</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">User</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Schedule published:</strong> Week of May 27, 2025
+                            <br><small class="text-muted">5 hours ago</small>
+                        </div>
+                        <span class="badge bg-success rounded-pill">Schedule</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Section created:</strong> Customer Service
+                            <br><small class="text-muted">1 day ago</small>
+                        </div>
+                        <span class="badge bg-info rounded-pill">Organization</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

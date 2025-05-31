@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <a href="{{ url_for('schedule.view_schedule') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-calendar3"></i> View Schedule
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="stats-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <h3 class="mb-0">{{ stats.total_shifts }}</h3>
+                    <p class="mb-0">Total Shifts</p>
+                </div>
+                <i class="bi bi-calendar-event display-6"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.scheduled_shifts }}</h3>
+                        <p class="mb-0">Scheduled</p>
+                    </div>
+                    <i class="bi bi-check-circle display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.leave_requests }}</h3>
+                        <p class="mb-0">Leave Requests</p>
+                    </div>
+                    <i class="bi bi-person-x display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.rest_days }}</h3>
+                        <p class="mb-0">Rest Days</p>
+                    </div>
+                    <i class="bi bi-moon display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">This Week's Schedule</h5>
+            </div>
+            <div class="card-body">
+                {% if shifts %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Employee</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for shift in shifts[:10] %}
+                                <tr>
+                                    <td>{{ shift.date.strftime('%a, %b %d') }}</td>
+                                    <td>
+                                        {% if current_user.can_edit_schedule() %}
+                                            {{ shift.employee.full_name }}
+                                        {% else %}
+                                            You
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ shift.time_display }}</td>
+                                    <td>
+                                        <span class="badge" style="background-color: {{ shift.status_color }};">
+                                            {{ shift.status.value.replace('_', ' ').title() }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar-x display-4 text-muted"></i>
+                        <p class="text-muted mt-2">No shifts scheduled for this week</p>
+                        {% if current_user.can_edit_schedule() %}
+                            <a href="{{ url_for('schedule.view_schedule') }}" class="btn btn-primary">
+                                Create Schedule
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('schedule.view_schedule') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-calendar3"></i> View Schedule
+                    </a>
+                    
+                    {% if current_user.can_edit_schedule() %}
+                        <a href="{{ url_for('schedule.export_schedule') }}" class="btn btn-outline-success">
+                            <i class="bi bi-download"></i> Export Schedule
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('main.profile') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-person"></i> Edit Profile
+                    </a>
+                    
+                    {% if current_user.can_admin() %}
+                        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-warning">
+                            <i class="bi bi-gear"></i> Admin Panel
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Profile Card -->
+        <div class="card mt-3">
+            <div class="card-body text-center">
+                <div class="employee-initials mx-auto mb-3" style="width: 60px; height: 60px; font-size: 1.2rem;">
+                    {{ current_user.initials }}
+                </div>
+                <h6 class="card-title">{{ current_user.full_name }}</h6>
+                <p class="card-text text-muted">{{ current_user.role.value.title() }}</p>
+                {% if current_user.section %}
+                    <small class="text-muted">{{ current_user.section.name }}</small>
+                {% endif %}
+                {% if current_user.unit %}
+                    <small class="text-muted">- {{ current_user.unit.name }}</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

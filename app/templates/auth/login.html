@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Employee Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container-fluid vh-100">
+    <div class="row h-100">
+        <div class="col-md-6 d-flex align-items-center justify-content-center">
+            <div class="card shadow-lg border-0" style="max-width: 400px; width: 100%;">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <h3 class="fw-bold text-primary">Welcome Back</h3>
+                        <p class="text-muted">Sign in to your account</p>
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control form-control-lg" id="username" 
+                                   name="username" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control form-control-lg" id="password" 
+                                   name="password" required>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="remember_me" name="remember_me">
+                            <label class="form-check-label" for="remember_me">Remember me</label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mb-3">
+                            Sign In
+                        </button>
+                    </form>
+                    
+                    <div class="text-center">
+                        <small class="text-muted">
+                            Default login: admin / admin123
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 d-none d-md-flex align-items-center justify-content-center" 
+             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="text-center text-white">
+                <h1 class="display-4 fw-bold mb-4">Employee Scheduling</h1>
+                <p class="lead">Streamline your workforce management with our intuitive scheduling system</p>
+                <div class="row mt-5">
+                    <div class="col-4 text-center">
+                        <i class="bi bi-calendar-check display-4 mb-3"></i>
+                        <h5>Easy Scheduling</h5>
+                    </div>
+                    <div class="col-4 text-center">
+                        <i class="bi bi-people display-4 mb-3"></i>
+                        <h5>Team Management</h5>
+                    </div>
+                    <div class="col-4 text-center">
+                        <i class="bi bi-graph-up display-4 mb-3"></i>
+                        <h5>Analytics</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
