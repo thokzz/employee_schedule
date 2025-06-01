@@ -25,6 +25,10 @@ class ShiftStatus(Enum):
     PATERNITY_LEAVE = "paternity_leave"
     MATERNITY_LEAVE = "maternity_leave"
     UNION_LEAVE = "union_leave"
+    FIRE_CALAMITY_LEAVE = "fire_calamity_leave"
+    SOLO_PARENT_LEAVE = "solo_parent_leave"
+    SPECIAL_LEAVE_WOMEN = "special_leave_women"
+    VAWC_LEAVE = "vawc_leave"
     OTHER = "other"
 
 class User(UserMixin, db.Model):
@@ -39,6 +43,15 @@ class User(UserMixin, db.Model):
     role = db.Column(db.Enum(UserRole, name='user_role'), default=UserRole.EMPLOYEE, nullable=False)
     avatar = db.Column(db.String(200), default='default_avatar.png')
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # NEW: Additional user profile fields
+    personnel_number = db.Column(db.String(50), unique=True, nullable=True, index=True)
+    typecode = db.Column(db.String(20), nullable=True)
+    id_number = db.Column(db.String(50), nullable=True)
+    hiring_date = db.Column(db.Date, nullable=True)
+    job_title = db.Column(db.String(100), nullable=True)
+    rank = db.Column(db.String(50), nullable=True)
+    
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -69,6 +82,14 @@ class User(UserMixin, db.Model):
     @property
     def initials(self):
         return f"{self.first_name[0]}{self.last_name[0]}".upper()
+    
+    @property
+    def years_of_service(self):
+        """Calculate years of service if hiring_date is set"""
+        if self.hiring_date:
+            today = date.today()
+            return today.year - self.hiring_date.year - ((today.month, today.day) < (self.hiring_date.month, self.hiring_date.day))
+        return None
     
     def can_edit_schedule(self):
         return self.role in [UserRole.MANAGER, UserRole.ADMINISTRATOR]
@@ -160,6 +181,10 @@ class Shift(db.Model):
             ShiftStatus.PATERNITY_LEAVE: '#0dcaf0',
             ShiftStatus.MATERNITY_LEAVE: '#f8d7da',
             ShiftStatus.UNION_LEAVE: '#d1ecf1',
+            ShiftStatus.FIRE_CALAMITY_LEAVE: '#ff6b6b',
+            ShiftStatus.SOLO_PARENT_LEAVE: '#4ecdc4',
+            ShiftStatus.SPECIAL_LEAVE_WOMEN: '#ff9ff3',
+            ShiftStatus.VAWC_LEAVE: '#a8e6cf',
             ShiftStatus.OTHER: '#dee2e6'
         }
         return color_map.get(self.status, '#007bff')

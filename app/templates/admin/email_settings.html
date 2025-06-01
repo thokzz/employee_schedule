@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Email Settings{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Email Settings</h1>
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">SMTP Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="mail_server" class="form-label">Mail Server</label>
+                        <input type="text" class="form-control" id="mail_server" name="mail_server" 
+                               placeholder="smtp.gmail.com" value="{{ config.MAIL_SERVER or '' }}">
+                        <small class="text-muted">SMTP server hostname</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="mail_port" class="form-label">Port</label>
+                                <input type="number" class="form-control" id="mail_port" name="mail_port" 
+                                       value="{{ config.MAIL_PORT or 587 }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="mail_use_tls" class="form-label">Security</label>
+                                <select class="form-select" id="mail_use_tls" name="mail_use_tls">
+                                    <option value="true" {% if config.MAIL_USE_TLS %}selected{% endif %}>TLS (Recommended)</option>
+                                    <option value="false" {% if not config.MAIL_USE_TLS %}selected{% endif %}>None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="mail_username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="mail_username" name="mail_username" 
+                               value="{{ config.MAIL_USERNAME or '' }}">
+                        <small class="text-muted">SMTP authentication username</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="mail_password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="mail_password" name="mail_password" 
+                               placeholder="Enter password">
+                        <small class="text-muted">SMTP authentication password</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="mail_default_sender" class="form-label">Default Sender</label>
+                        <input type="email" class="form-control" id="mail_default_sender" name="mail_default_sender" 
+                               placeholder="noreply@company.com">
+                        <small class="text-muted">Default "From" email address</small>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-primary" onclick="testEmailSettings()">
+                            <i class="bi bi-envelope-check"></i> Test Connection
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Email Notifications</h6>
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="notify_schedule_changes" checked>
+                    <label class="form-check-label" for="notify_schedule_changes">
+                        Schedule Changes
+                    </label>
+                    <small class="form-text text-muted d-block">Notify employees when their schedule changes</small>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="notify_new_users" checked>
+                    <label class="form-check-label" for="notify_new_users">
+                        New User Registration
+                    </label>
+                    <small class="form-text text-muted d-block">Send welcome emails to new users</small>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="notify_leave_requests">
+                    <label class="form-check-label" for="notify_leave_requests">
+                        Leave Requests
+                    </label>
+                    <small class="form-text text-muted d-block">Notify managers of leave requests</small>
+                </div>
+                
+                <button class="btn btn-sm btn-outline-primary w-100">
+                    Update Notification Settings
+                </button>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Email Templates</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Customize email templates for different notifications.</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-outline-secondary">Schedule Change Template</button>
+                    <button class="btn btn-sm btn-outline-secondary">Welcome Email Template</button>
+                    <button class="btn btn-sm btn-outline-secondary">Leave Request Template</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function testEmailSettings() {
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Testing...';
+    button.disabled = true;
+    
+    // Simulate email test (in real app, this would be an AJAX call)
+    setTimeout(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        // Show result
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
+        alertDiv.innerHTML = `
+            <i class="bi bi-check-circle"></i> Test email sent successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.querySelector('.card-body').appendChild(alertDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }, 2000);
+}
+</script>
+{% endblock %}

@@ -1,4 +1,3 @@
- <!-- app/templates/admin/units.html -->
 {% extends "base.html" %}
 
 {% block title %}Manage Units{% endblock %}
@@ -29,13 +28,34 @@
                     {% for unit in units %}
                     <tr>
                         <td><strong>{{ unit.name }}</strong></td>
-                        <td>{{ unit.section.name }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ unit.section.name }}</span>
+                        </td>
                         <td>{{ unit.description or 'No description' }}</td>
-                        <td>{{ unit.users.count() }}</td>
+                        <td>
+                            <span class="badge bg-primary">{{ unit.users.count() }}</span>
+                            {% if unit.users.count() > 0 %}
+                                <small class="text-muted d-block">
+                                    {% for user in unit.users.limit(2) %}
+                                        {{ user.full_name }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                    {% if unit.users.count() > 2 %}and {{ unit.users.count() - 2 }} more{% endif %}
+                                </small>
+                            {% endif %}
+                        </td>
                         <td>{{ unit.created_at.strftime('%b %d, %Y') }}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('admin.edit_unit', unit_id=unit.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="Edit Unit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmDelete({{ unit.id }}, '{{ unit.name }}', {{ unit.users.count() }})"
+                                        title="Delete Unit">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -56,23 +76,26 @@
             <form method="POST" action="{{ url_for('admin.create_unit') }}">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="name" class="form-label">Unit Name</label>
+                        <label for="name" class="form-label">Unit Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="name" name="name" required>
+                        <small class="text-muted">Enter a unique name for this unit</small>
                     </div>
                     
                     <div class="mb-3">
-                        <label for="section_id" class="form-label">Section</label>
+                        <label for="section_id" class="form-label">Section <span class="text-danger">*</span></label>
                         <select class="form-select" id="section_id" name="section_id" required>
                             <option value="">Select Section</option>
                             {% for section in sections %}
                                 <option value="{{ section.id }}">{{ section.name }}</option>
                             {% endfor %}
                         </select>
+                        <small class="text-muted">Units must belong to a section</small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Describe the purpose and responsibilities of this unit..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -83,4 +106,120 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete unit <strong id="deleteUnitName"></strong>?</p>
+                
+                <div id="deleteWarnings"></div>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" id="deleteButton">
+                        <i class="bi bi-trash"></i> Delete Unit
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete(unitId, unitName, userCount) {
+    document.getElementById('deleteUnitName').textContent = unitName;
+    document.getElementById('deleteForm').action = `/admin/units/${unitId}/delete`;
+    
+    const warningsDiv = document.getElementById('deleteWarnings');
+    const deleteButton = document.getElementById('deleteButton');
+    
+    let warnings = '';
+    let canDelete = true;
+    
+    if (userCount > 0) {
+        warnings += `<div class="alert alert-danger">
+            <i class="bi bi-people"></i> This unit has <strong>${userCount}</strong> users assigned. 
+            You must reassign or remove these users before deleting the unit.
+        </div>`;
+        canDelete = false;
+    }
+    
+    warningsDiv.innerHTML = warnings;
+    
+    if (canDelete) {
+        deleteButton.disabled = false;
+        deleteButton.className = 'btn btn-danger';
+        deleteButton.innerHTML = '<i class="bi bi-trash"></i> Delete Unit';
+    } else {
+        deleteButton.disabled = true;
+        deleteButton.className = 'btn btn-secondary';
+        deleteButton.innerHTML = '<i class="bi bi-x-circle"></i> Cannot Delete';
+    }
+    
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Auto-focus on unit name input when modal opens
+document.getElementById('createUnitModal').addEventListener('shown.bs.modal', function () {
+    document.getElementById('name').focus();
+});
+
+// Validate unit name as user types
+document.getElementById('name')?.addEventListener('input', function() {
+    const name = this.value.trim();
+    const selectedSection = document.getElementById('section_id').value;
+    
+    if (name.length < 2) {
+        this.classList.add('is-invalid');
+        this.setCustomValidity('Unit name must be at least 2 characters');
+    } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+        this.setCustomValidity('');
+    }
+});
+
+// Validate section selection
+document.getElementById('section_id')?.addEventListener('change', function() {
+    if (this.value === '') {
+        this.classList.add('is-invalid');
+        this.setCustomValidity('Please select a section');
+    } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+        this.setCustomValidity('');
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'n' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('createUnitModal')).show();
+    }
+});
+
+// Show section info when selected
+document.getElementById('section_id')?.addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    if (selectedOption.value) {
+        // Could show additional info about the section here
+        console.log('Selected section:', selectedOption.text);
+    }
+});
+</script>
 {% endblock %}

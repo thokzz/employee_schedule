@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block title %}Usage Reports{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Usage Reports</h1>
+    <div class="btn-toolbar">
+        <div class="btn-group me-2">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown">
+                <i class="bi bi-calendar-range"></i> Last 30 Days
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#">Last 7 Days</a></li>
+                <li><a class="dropdown-item" href="#">Last 30 Days</a></li>
+                <li><a class="dropdown-item" href="#">Last 90 Days</a></li>
+                <li><a class="dropdown-item" href="#">Custom Range</a></li>
+            </ul>
+        </div>
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_users }}</h3>
+                        <p class="mb-0">Total Users</p>
+                    </div>
+                    <i class="bi bi-people display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.active_users }}</h3>
+                        <p class="mb-0">Active Users</p>
+                    </div>
+                    <i class="bi bi-person-check display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.users_per_section }}</h3>
+                        <p class="mb-0">Users/Section</p>
+                    </div>
+                    <i class="bi bi-diagram-2 display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.users_per_unit }}</h3>
+                        <p class="mb-0">Users/Unit</p>
+                    </div>
+                    <i class="bi bi-diagram-3 display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- User Activity Chart -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">User Activity Over Time</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="activityChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Quick Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Active Users:</span>
+                    <span class="badge bg-success">{{ stats.active_users }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Inactive Users:</span>
+                    <span class="badge bg-secondary">{{ stats.inactive_users }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Sections:</span>
+                    <span class="badge bg-info">{{ stats.total_sections }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Units:</span>
+                    <span class="badge bg-warning">{{ stats.total_units }}</span>
+                </div>
+                
+                <hr>
+                
+                <h6>User Roles</h6>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Administrators:</span>
+                    <span class="badge bg-danger">1</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Managers:</span>
+                    <span class="badge bg-warning">2</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Employees:</span>
+                    <span class="badge bg-primary">{{ stats.total_users - 3 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Reports -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Login Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Last Login</th>
+                                <th>Login Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>admin</td>
+                                <td>Today, 2:30 PM</td>
+                                <td><span class="badge bg-success">15</span></td>
+                            </tr>
+                            <tr>
+                                <td>manager1</td>
+                                <td>Yesterday, 5:45 PM</td>
+                                <td><span class="badge bg-info">8</span></td>
+                            </tr>
+                            <tr>
+                                <td>employee1</td>
+                                <td>2 days ago</td>
+                                <td><span class="badge bg-warning">3</span></td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">
+                                    <small>More detailed logs available in full report</small>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="d-grid">
+                    <button class="btn btn-outline-primary btn-sm">View Full Login Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Database Size:</span>
+                        <span class="text-muted">2.4 MB</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Active Sessions:</span>
+                        <span class="text-muted">3</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Average Response Time:</span>
+                        <span class="text-muted">120ms</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Uptime:</span>
+                        <span class="text-success">99.9%</span>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="mb-3">
+                    <label class="form-label">Storage Usage</label>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: 25%">25%</div>
+                    </div>
+                    <small class="text-muted">2.4 MB of 10 MB used</small>
+                </div>
+                
+                <div class="d-grid">
+                    <button class="btn btn-outline-info btn-sm">View System Status</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Options -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Export Reports</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Generate detailed reports for external analysis or record keeping.</p>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-success" onclick="exportReport('users')">
+                                <i class="bi bi-file-earmark-spreadsheet"></i> Export User Data
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-info" onclick="exportReport('activity')">
+                                <i class="bi bi-file-earmark-bar-graph"></i> Export Activity Log
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-warning" onclick="exportReport('full')">
+                                <i class="bi bi-file-earmark-zip"></i> Full System Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Activity Chart
+const ctx = document.getElementById('activityChart').getContext('2d');
+const activityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+        datasets: [{
+            label: 'Active Users',
+            data: [12, 15, 18, 16],
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            tension: 0.1
+        }, {
+            label: 'Logins',
+            data: [45, 52, 68, 58],
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            title: {
+                display: true,
+                text: 'System Usage Trends'
+            }
+        }
+    }
+});
+
+function exportReport(type) {
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+    button.disabled = true;
+    
+    // Simulate report generation
+    setTimeout(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        // Show success message
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
+        alertDiv.innerHTML = `
+            <i class="bi bi-check-circle"></i> ${type.charAt(0).toUpperCase() + type.slice(1)} report generated successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.querySelector('.card-body').appendChild(alertDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }, 2000);
+}
+</script>
+{% endblock %}

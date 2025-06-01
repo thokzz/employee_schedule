@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Section - {{ section.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Edit Section - {{ section.name }}</h1>
+    <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Sections
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Section Information -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Section Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.edit_section', section_id=section.id) }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Section Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ section.name }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="4">{{ section.description or '' }}</textarea>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-secondary me-md-2">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update Section</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Assigned Users -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Assigned Users ({{ section_users|length }})</h5>
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-person-plus"></i> Add User
+                </button>
+            </div>
+            <div class="card-body">
+                {% if section_users %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Unit</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in section_users %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="employee-initials me-2" style="width: 30px; height: 30px; font-size: 0.8rem;">
+                                                {{ user.initials }}
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.full_name }}</strong>
+                                                <br><small class="text-muted">{{ user.username }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if user.role.value == 'administrator' else 'warning' if user.role.value == 'manager' else 'primary' }}">
+                                            {{ user.role.value.title() }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if user.unit %}
+                                            {{ user.unit.name }}
+                                        {% else %}
+                                            <span class="text-muted">No unit</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
+                                            {{ 'Active' if user.is_active else 'Inactive' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
+                                               class="btn btn-sm btn-outline-primary" title="Edit User">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{{ url_for('admin.remove_user_from_section', section_id=section.id, user_id=user.id) }}" 
+                                               class="btn btn-sm btn-outline-warning" 
+                                               onclick="return confirm('Remove {{ user.full_name }} from this section?')"
+                                               title="Remove from Section">
+                                                <i class="bi bi-person-dash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-people display-4"></i>
+                        <p class="mt-2">No users assigned to this section</p>
+                        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="bi bi-person-plus"></i> Add First User
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Section Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Section Summary</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Users:</span>
+                    <span class="badge bg-primary">{{ section_users|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Active Users:</span>
+                    <span class="badge bg-success">{{ section_users|selectattr('is_active')|list|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Units:</span>
+                    <span class="badge bg-info">{{ section.units.count() }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Created:</span>
+                    <span class="text-muted">{{ section.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Quick Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.manage_units') }}?section={{ section.id }}" 
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-diagram-3"></i> Manage Units
+                    </a>
+                    <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="bi bi-person-plus"></i> Add Users
+                    </button>
+                    <a href="{{ url_for('schedule.view_schedule') }}?section={{ section.id }}" 
+                       class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-calendar3"></i> View Schedule
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="confirmDelete()">
+                        <i class="bi bi-trash"></i> Delete Section
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Units in Section -->
+        {% if section.units.count() > 0 %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Units in Section</h6>
+            </div>
+            <div class="card-body">
+                {% for unit in section.units %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>{{ unit.name }}</span>
+                    <span class="badge bg-secondary">{{ unit.users.count() }} users</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add User to Section</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin.add_user_to_section', section_id=section.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">Select User</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="">Choose a user...</option>
+                            {% if unassigned_users %}
+                                <optgroup label="Unassigned Users">
+                                    {% for user in unassigned_users %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.full_name }} ({{ user.username }}) - {{ user.role.value.title() }}
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+                            {% if other_users %}
+                                <optgroup label="Users from Other Sections">
+                                    {% for user in other_users %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.full_name }} ({{ user.username }}) - Currently in {{ user.section.name }}
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+                        </select>
+                        <small class="text-muted">
+                            {% if not unassigned_users and not other_users %}
+                                No available users to add. All users are already assigned to sections.
+                            {% else %}
+                                Moving a user from another section will remove them from their current section.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" 
+                            {% if not unassigned_users and not other_users %}disabled{% endif %}>
+                        Add to Section
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete section <strong>{{ section.name }}</strong>?</p>
+                
+                {% if section_users %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-people"></i> This section has <strong>{{ section_users|length }}</strong> users assigned. 
+                    You must reassign or remove these users before deleting the section.
+                </div>
+                {% endif %}
+                
+                {% if section.units.count() > 0 %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-diagram-3"></i> This section has <strong>{{ section.units.count() }}</strong> units. 
+                    You must delete these units before deleting the section.
+                </div>
+                {% endif %}
+                
+                {% if not section_users and section.units.count() == 0 %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('admin.delete_section', section_id=section.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" 
+                            {% if section_users or section.units.count() > 0 %}disabled{% endif %}>
+                        <i class="bi bi-trash"></i> Delete Section
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete() {
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Auto-focus on user select when modal opens
+document.getElementById('addUserModal').addEventListener('shown.bs.modal', function () {
+    document.getElementById('user_id').focus();
+});
+
+// Enhance user selection with search
+document.getElementById('user_id')?.addEventListener('input', function() {
+    // This could be enhanced with a search/filter functionality
+    const selectedOption = this.options[this.selectedIndex];
+    if (selectedOption && selectedOption.text.includes('Currently in')) {
+        const warning = document.createElement('div');
+        warning.className = 'alert alert-warning mt-2';
+        warning.innerHTML = '<small><i class="bi bi-exclamation-triangle"></i> This user will be moved from their current section.</small>';
+        
+        // Remove existing warnings
+        const existingWarning = this.parentNode.querySelector('.alert-warning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+        
+        this.parentNode.appendChild(warning);
+    } else {
+        const existingWarning = this.parentNode.querySelector('.alert-warning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'u' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('addUserModal')).show();
+    }
+});
+</script>
+{% endblock %}

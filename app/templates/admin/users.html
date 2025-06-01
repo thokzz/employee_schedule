@@ -5,9 +5,9 @@
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2">User Management</h1>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+    <a href="{{ url_for('admin.create_user') }}" class="btn btn-primary">
         <i class="bi bi-person-plus"></i> Add New User
-    </button>
+    </a>
 </div>
 
 <div class="card">
@@ -32,7 +32,14 @@
                         <td>
                             <div class="employee-initials">{{ user.initials }}</div>
                         </td>
-                        <td>{{ user.full_name }}</td>
+                        <td>
+                            <div>
+                                <strong>{{ user.full_name }}</strong>
+                                {% if user.unit %}
+                                    <br><small class="text-muted">{{ user.unit.name }}</small>
+                                {% endif %}
+                            </div>
+                        </td>
                         <td>{{ user.username }}</td>
                         <td>{{ user.email }}</td>
                         <td>
@@ -54,10 +61,24 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ url_for('admin.toggle_user_status', user_id=user.id) }}" 
-                               class="btn btn-sm btn-outline-secondary">
-                                {{ 'Deactivate' if user.is_active else 'Activate' }}
-                            </a>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="Edit User">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{{ url_for('admin.toggle_user_status', user_id=user.id) }}" 
+                                   class="btn btn-sm btn-outline-secondary" 
+                                   title="{{ 'Deactivate' if user.is_active else 'Activate' }} User">
+                                    <i class="bi bi-{{ 'toggle-off' if user.is_active else 'toggle-on' }}"></i>
+                                </a>
+                                {% if user.id != current_user.id %}
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmDelete({{ user.id }}, '{{ user.username }}')"
+                                        title="Delete User">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -67,12 +88,39 @@
     </div>
 </div>
 
-<!-- Create User Modal -->
-<div class="modal fade" id="createUserModal" tabindex="-1">
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create New User</h5>
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete user <strong id="deleteUsername"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone. All user data including shifts and schedules will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Delete User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Add User Modal (for convenience) -->
+<div class="modal fade" id="quickAddModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Quick Add User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('admin.create_user') }}">
@@ -110,6 +158,7 @@
                     <div class="mb-3">
                         <label for="role" class="form-label">Role</label>
                         <select class="form-select" id="role" name="role" required>
+                            <option value="">Select Role</option>
                             <option value="employee">Employee</option>
                             <option value="manager">Manager</option>
                             <option value="administrator">Administrator</option>
@@ -119,7 +168,7 @@
                     <div class="mb-3">
                         <label for="section_id" class="form-label">Section</label>
                         <select class="form-select" id="section_id" name="section_id">
-                            <option value="">Select Section</option>
+                            <option value="">No Section</option>
                             {% for section in sections %}
                                 <option value="{{ section.id }}">{{ section.name }}</option>
                             {% endfor %}
@@ -129,9 +178,11 @@
                     <div class="mb-3">
                         <label for="unit_id" class="form-label">Unit</label>
                         <select class="form-select" id="unit_id" name="unit_id">
-                            <option value="">Select Unit</option>
+                            <option value="">No Unit</option>
                             {% for unit in units %}
-                                <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.section.name }})</option>
+                                <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
+                                    {{ unit.name }} ({{ unit.section.name }})
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
@@ -144,4 +195,47 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete(userId, username) {
+    document.getElementById('deleteUsername').textContent = username;
+    document.getElementById('deleteForm').action = `/admin/users/${userId}/delete`;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Filter units based on selected section in quick add modal
+document.getElementById('section_id')?.addEventListener('change', function() {
+    const selectedSection = this.value;
+    const unitSelect = document.getElementById('unit_id');
+    const unitOptions = unitSelect.querySelectorAll('option');
+    
+    unitOptions.forEach(option => {
+        if (option.value === '') {
+            option.style.display = 'block';
+        } else {
+            const unitSection = option.getAttribute('data-section');
+            option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+        }
+    });
+    
+    // Reset unit selection if it's no longer valid
+    const selectedUnit = unitSelect.value;
+    if (selectedUnit && selectedSection) {
+        const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
+        if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
+            unitSelect.value = '';
+        }
+    }
+});
+
+// Show quick add modal when pressing 'n' key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'n' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('quickAddModal')).show();
+    }
+});
+</script>
 {% endblock %}

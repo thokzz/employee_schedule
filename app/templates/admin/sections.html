@@ -29,12 +29,41 @@
                     <tr>
                         <td><strong>{{ section.name }}</strong></td>
                         <td>{{ section.description or 'No description' }}</td>
-                        <td>{{ section.units.count() }}</td>
-                        <td>{{ section.users.count() }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ section.units.count() }}</span>
+                            {% if section.units.count() > 0 %}
+                                <small class="text-muted d-block">
+                                    {% for unit in section.units.limit(3) %}
+                                        {{ unit.name }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                    {% if section.units.count() > 3 %}...{% endif %}
+                                </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-primary">{{ section.users.count() }}</span>
+                            {% if section.users.count() > 0 %}
+                                <small class="text-muted d-block">
+                                    {% for user in section.users.limit(2) %}
+                                        {{ user.full_name }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                    {% if section.users.count() > 2 %}and {{ section.users.count() - 2 }} more{% endif %}
+                                </small>
+                            {% endif %}
+                        </td>
                         <td>{{ section.created_at.strftime('%b %d, %Y') }}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary">Edit</button>
-                            <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('admin.edit_section', section_id=section.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" title="Edit Section">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="confirmDelete({{ section.id }}, '{{ section.name }}', {{ section.users.count() }}, {{ section.units.count() }})"
+                                        title="Delete Section">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -55,13 +84,15 @@
             <form method="POST" action="{{ url_for('admin.create_section') }}">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="name" class="form-label">Section Name</label>
+                        <label for="name" class="form-label">Section Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="name" name="name" required>
+                        <small class="text-muted">Enter a unique name for this section</small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                  placeholder="Describe the purpose and responsibilities of this section..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -72,4 +103,114 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete section <strong id="deleteSectionName"></strong>?</p>
+                
+                <div id="deleteWarnings"></div>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" id="deleteButton">
+                        <i class="bi bi-trash"></i> Delete Section
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete(sectionId, sectionName, userCount, unitCount) {
+    document.getElementById('deleteSectionName').textContent = sectionName;
+    document.getElementById('deleteForm').action = `/admin/sections/${sectionId}/delete`;
+    
+    const warningsDiv = document.getElementById('deleteWarnings');
+    const deleteButton = document.getElementById('deleteButton');
+    
+    let warnings = '';
+    let canDelete = true;
+    
+    if (userCount > 0) {
+        warnings += `<div class="alert alert-danger">
+            <i class="bi bi-people"></i> This section has <strong>${userCount}</strong> users assigned. 
+            You must reassign or remove these users before deleting the section.
+        </div>`;
+        canDelete = false;
+    }
+    
+    if (unitCount > 0) {
+        warnings += `<div class="alert alert-danger">
+            <i class="bi bi-diagram-3"></i> This section has <strong>${unitCount}</strong> units. 
+            You must delete these units before deleting the section.
+        </div>`;
+        canDelete = false;
+    }
+    
+    warningsDiv.innerHTML = warnings;
+    
+    if (canDelete) {
+        deleteButton.disabled = false;
+        deleteButton.className = 'btn btn-danger';
+        deleteButton.innerHTML = '<i class="bi bi-trash"></i> Delete Section';
+    } else {
+        deleteButton.disabled = true;
+        deleteButton.className = 'btn btn-secondary';
+        deleteButton.innerHTML = '<i class="bi bi-x-circle"></i> Cannot Delete';
+    }
+    
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Auto-focus on section name input when modal opens
+document.getElementById('createSectionModal').addEventListener('shown.bs.modal', function () {
+    document.getElementById('name').focus();
+});
+
+// Validate section name as user types
+document.getElementById('name')?.addEventListener('input', function() {
+    const name = this.value.trim();
+    const existingSections = [
+        {% for section in sections %}
+        '{{ section.name }}'{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    
+    if (name && existingSections.includes(name)) {
+        this.classList.add('is-invalid');
+        this.setCustomValidity('Section name already exists');
+    } else if (name.length < 2) {
+        this.classList.add('is-invalid');
+        this.setCustomValidity('Section name must be at least 2 characters');
+    } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+        this.setCustomValidity('');
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'n' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('createSectionModal')).show();
+    }
+});
+</script>
 {% endblock %}

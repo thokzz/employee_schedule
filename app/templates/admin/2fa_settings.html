@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Two-Factor Authentication Settings{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Two-Factor Authentication Settings</h1>
+    <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">2FA Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="enable_2fa" name="enable_2fa">
+                            <label class="form-check-label" for="enable_2fa">
+                                <strong>Enable Two-Factor Authentication</strong>
+                            </label>
+                        </div>
+                        <small class="text-muted">Require all users to use 2FA for enhanced security</small>
+                    </div>
+                    
+                    <div id="2fa_options" style="display: none;">
+                        <h6>2FA Methods</h6>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="totp_enabled" name="totp_enabled" checked>
+                                <label class="form-check-label" for="totp_enabled">
+                                    <strong>TOTP (Time-based One-Time Password)</strong>
+                                </label>
+                                <br>
+                                <small class="text-muted">Google Authenticator, Authy, etc.</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="sms_enabled" name="sms_enabled">
+                                <label class="form-check-label" for="sms_enabled">
+                                    <strong>SMS Verification</strong>
+                                </label>
+                                <br>
+                                <small class="text-muted">Send codes via text message (requires SMS provider)</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="email_enabled" name="email_enabled">
+                                <label class="form-check-label" for="email_enabled">
+                                    <strong>Email Verification</strong>
+                                </label>
+                                <br>
+                                <small class="text-muted">Send codes via email (less secure)</small>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <h6>2FA Policies</h6>
+                        
+                        <div class="mb-3">
+                            <label for="grace_period" class="form-label">Grace Period (days)</label>
+                            <input type="number" class="form-control" id="grace_period" name="grace_period" 
+                                   value="7" min="0" max="30">
+                            <small class="text-muted">How long users have to set up 2FA after it's enabled</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="remember_device" name="remember_device" checked>
+                                <label class="form-check-label" for="remember_device">
+                                    Allow "Remember this device" option
+                                </label>
+                                <br>
+                                <small class="text-muted">Users can skip 2FA on trusted devices for 30 days</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="require_admin_2fa" name="require_admin_2fa" checked>
+                                <label class="form-check-label" for="require_admin_2fa">
+                                    Require 2FA for administrators (recommended)
+                                </label>
+                                <br>
+                                <small class="text-muted">Admins must always use 2FA regardless of global setting</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save 2FA Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">2FA Status</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>System 2FA Status:</span>
+                        <span class="badge bg-danger">Disabled</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Users with 2FA:</span>
+                        <span class="badge bg-secondary">0 / {{ stats.total_users if stats else 0 }}</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Administrators:</span>
+                        <span class="badge bg-warning">0 / 1</span>
+                    </div>
+                </div>
+                
+                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="generateBackupCodes()">
+                    <i class="bi bi-key"></i> Generate Backup Codes
+                </button>
+                
+                <button class="btn btn-sm btn-outline-info w-100">
+                    <i class="bi bi-list-check"></i> View 2FA Users
+                </button>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Setup Instructions</h6>
+            </div>
+            <div class="card-body">
+                <h6 class="text-primary">For TOTP Apps:</h6>
+                <ol class="small">
+                    <li>Download Google Authenticator or Authy</li>
+                    <li>Scan the QR code provided</li>
+                    <li>Enter the 6-digit code to verify</li>
+                </ol>
+                
+                <h6 class="text-primary mt-3">For SMS:</h6>
+                <ol class="small">
+                    <li>Verify your phone number</li>
+                    <li>Receive codes via text message</li>
+                    <li>Enter code when prompted</li>
+                </ol>
+                
+                <div class="alert alert-warning mt-3">
+                    <small><i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> TOTP is more secure than SMS verification.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle 2FA options visibility
+document.getElementById('enable_2fa').addEventListener('change', function() {
+    const options = document.getElementById('2fa_options');
+    if (this.checked) {
+        options.style.display = 'block';
+        // Update status badge
+        document.querySelector('.badge.bg-danger').className = 'badge bg-success';
+        document.querySelector('.badge.bg-success').textContent = 'Enabled';
+    } else {
+        options.style.display = 'none';
+        // Update status badge
+        document.querySelector('.badge.bg-success').className = 'badge bg-danger';
+        document.querySelector('.badge.bg-danger').textContent = 'Disabled';
+    }
+});
+
+// SMS provider dependency
+document.getElementById('sms_enabled').addEventListener('change', function() {
+    if (this.checked) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-info alert-dismissible fade show mt-2';
+        alertDiv.innerHTML = `
+            <i class="bi bi-info-circle"></i> SMS verification requires configuring an SMS provider (Twilio, AWS SNS, etc.)
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        this.closest('.mb-3').appendChild(alertDiv);
+        
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+});
+
+function generateBackupCodes() {
+    // Show modal with backup codes
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Backup Codes Generated</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Important:</strong> Save these codes in a secure location. Each code can only be used once.
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <code class="d-block mb-2">ABC123-DEF456</code>
+                            <code class="d-block mb-2">GHI789-JKL012</code>
+                            <code class="d-block mb-2">MNO345-PQR678</code>
+                            <code class="d-block mb-2">STU901-VWX234</code>
+                            <code class="d-block mb-2">YZA567-BCD890</code>
+                        </div>
+                        <div class="col-6">
+                            <code class="d-block mb-2">EFG123-HIJ456</code>
+                            <code class="d-block mb-2">KLM789-NOP012</code>
+                            <code class="d-block mb-2">QRS345-TUV678</code>
+                            <code class="d-block mb-2">WXY901-ZAB234</code>
+                            <code class="d-block mb-2">CDE567-FGH890</code>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="downloadBackupCodes()">
+                        <i class="bi bi-download"></i> Download Codes
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Clean up modal after it's hidden
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+function downloadBackupCodes() {
+    const codes = [
+        'ABC123-DEF456', 'GHI789-JKL012', 'MNO345-PQR678', 'STU901-VWX234', 'YZA567-BCD890',
+        'EFG123-HIJ456', 'KLM789-NOP012', 'QRS345-TUV678', 'WXY901-ZAB234', 'CDE567-FGH890'
+    ];
+    
+    const content = `Employee Scheduling System - 2FA Backup Codes\nGenerated: ${new Date().toLocaleString()}\n\n${codes.join('\n')}\n\nIMPORTANT: Keep these codes secure. Each can only be used once.`;
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '2fa-backup-codes.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

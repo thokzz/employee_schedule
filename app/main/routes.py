@@ -51,18 +51,85 @@ def profile():
 @bp.route('/profile/update', methods=['POST'])
 @login_required
 def update_profile():
-    current_user.first_name = request.form['first_name']
-    current_user.last_name = request.form['last_name']
-    current_user.email = request.form['email']
+    try:
+        current_user.first_name = request.form['first_name']
+        current_user.last_name = request.form['last_name']
+        current_user.email = request.form['email']
+        
+        # Handle avatar upload
+        if 'avatar' in request.files:
+            file = request.files['avatar']
+            if file and file.filename:
+                filename = f"avatar_{current_user.id}_{datetime.now().timestamp()}.jpg"
+                file.save(f"app/static/uploads/{filename}")
+                current_user.avatar = filename
+        
+        db.session.commit()
+        flash('Personal information updated successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating profile: {str(e)}', 'danger')
     
-    # Handle avatar upload
-    if 'avatar' in request.files:
-        file = request.files['avatar']
-        if file and file.filename:
-            filename = f"avatar_{current_user.id}_{datetime.now().timestamp()}.jpg"
-            file.save(f"app/static/uploads/{filename}")
-            current_user.avatar = filename
+    return redirect(url_for('main.profile'))
+
+@bp.route('/profile/employment', methods=['POST'])
+@login_required
+def update_employment_info():
+    try:
+        current_user.personnel_number = request.form.get('personnel_number') or None
+        current_user.typecode = request.form.get('typecode') or None
+        current_user.id_number = request.form.get('id_number') or None
+        current_user.job_title = request.form.get('job_title') or None
+        current_user.rank = request.form.get('rank') or None
+        
+        # Handle hiring date
+        hiring_date_str = request.form.get('hiring_date')
+        if hiring_date_str:
+            current_user.hiring_date = datetime.strptime(hiring_date_str, '%Y-%m-%d').date()
+        else:
+            current_user.hiring_date = None
+        
+        db.session.commit()
+        flash('Employment information updated successfully!', 'success')
+    except ValueError as e:
+        db.session.rollback()
+        flash('Invalid date format. Please use YYYY-MM-DD format.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating employment information: {str(e)}', 'danger')
     
-    db.session.commit()
-    flash('Profile updated successfully!', 'success')
+    return redirect(url_for('main.profile'))
+
+@bp.route('/profile/password', methods=['POST'])
+@login_required
+def change_password():
+    try:
+        current_password = request.form['current_password']
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+        
+        # Verify current password
+        if not current_user.check_password(current_password):
+            flash('Current password is incorrect.', 'danger')
+            return redirect(url_for('main.profile'))
+        
+        # Validate new password
+        if len(new_password) < 6:
+            flash('New password must be at least 6 characters long.', 'danger')
+            return redirect(url_for('main.profile'))
+        
+        # Confirm password match
+        if new_password != confirm_password:
+            flash('New passwords do not match.', 'danger')
+            return redirect(url_for('main.profile'))
+        
+        # Update password
+        current_user.set_password(new_password)
+        db.session.commit()
+        
+        flash('Password changed successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error changing password: {str(e)}', 'danger')
+    
     return redirect(url_for('main.profile'))

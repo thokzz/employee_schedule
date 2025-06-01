@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User - {{ user.full_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Edit User - {{ user.full_name }}</h1>
+    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Users
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">User Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.edit_user', user_id=user.id) }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="first_name" name="first_name" 
+                                       value="{{ user.first_name }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="last_name" name="last_name" 
+                                       value="{{ user.last_name }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">Username</label>
+                                <input type="text" class="form-control" id="username" name="username" 
+                                       value="{{ user.username }}" readonly>
+                                <small class="text-muted">Username cannot be changed</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" id="email" name="email" 
+                                       value="{{ user.email }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">New Password</label>
+                        <input type="password" class="form-control" id="password" name="password">
+                        <small class="text-muted">Leave blank to keep current password</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="role" class="form-label">Role <span class="text-danger">*</span></label>
+                        <select class="form-select" id="role" name="role" required>
+                            <option value="employee" {% if user.role.value == 'employee' %}selected{% endif %}>Employee</option>
+                            <option value="manager" {% if user.role.value == 'manager' %}selected{% endif %}>Manager</option>
+                            <option value="administrator" {% if user.role.value == 'administrator' %}selected{% endif %}>Administrator</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Employment Information Section -->
+                    <hr>
+                    <h6 class="text-muted mb-3">Employment Information</h6>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="personnel_number" class="form-label">Personnel Number</label>
+                                <input type="text" class="form-control" id="personnel_number" name="personnel_number" 
+                                       value="{{ user.personnel_number or '' }}"
+                                       placeholder="e.g., EMP-2024-001">
+                                <small class="text-muted">Unique employee identification number</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="typecode" class="form-label">Type Code</label>
+                                <input type="text" class="form-control" id="typecode" name="typecode" 
+                                       value="{{ user.typecode or '' }}"
+                                       placeholder="e.g., FT, PT, CT">
+                                <small class="text-muted">Employment type code</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="id_number" class="form-label">ID Number</label>
+                                <input type="text" class="form-control" id="id_number" name="id_number" 
+                                       value="{{ user.id_number or '' }}"
+                                       placeholder="e.g., SSN, National ID">
+                                <small class="text-muted">Government or company issued ID</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="hiring_date" class="form-label">Hiring Date</label>
+                                <input type="date" class="form-control" id="hiring_date" name="hiring_date"
+                                       value="{{ user.hiring_date.isoformat() if user.hiring_date else '' }}">
+                                <small class="text-muted">Date when employment started</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="job_title" class="form-label">Job Title</label>
+                                <input type="text" class="form-control" id="job_title" name="job_title" 
+                                       value="{{ user.job_title or '' }}"
+                                       placeholder="e.g., Senior Developer">
+                                <small class="text-muted">Current position or job title</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="rank" class="form-label">Rank</label>
+                                <input type="text" class="form-control" id="rank" name="rank" 
+                                       value="{{ user.rank or '' }}"
+                                       placeholder="e.g., Level 3, Senior">
+                                <small class="text-muted">Employee rank or level</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    <h6 class="text-muted mb-3">Organizational Assignment</h6>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="section_id" class="form-label">Section</label>
+                                <select class="form-select" id="section_id" name="section_id">
+                                    <option value="">No Section</option>
+                                    {% for section in sections %}
+                                        <option value="{{ section.id }}" 
+                                                {% if user.section_id == section.id %}selected{% endif %}>
+                                            {{ section.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="unit_id" class="form-label">Unit</label>
+                                <select class="form-select" id="unit_id" name="unit_id">
+                                    <option value="">No Unit</option>
+                                    {% for unit in units %}
+                                        <option value="{{ unit.id }}" 
+                                                data-section="{{ unit.section_id }}"
+                                                {% if user.unit_id == unit.id %}selected{% endif %}>
+                                            {{ unit.name }} ({{ unit.section.name }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin.manage_users') }}" class="btn btn-secondary me-md-2">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="employee-initials mx-auto mb-3" style="width: 80px; height: 80px; font-size: 1.5rem;">
+                    {{ user.initials }}
+                </div>
+                <h5 class="card-title">{{ user.full_name }}</h5>
+                <p class="card-text text-muted">{{ user.role.value.title() }}</p>
+                {% if user.section %}
+                    <p class="card-text"><small class="text-muted">{{ user.section.name }}</small></p>
+                {% endif %}
+                {% if user.unit %}
+                    <p class="card-text"><small class="text-muted">{{ user.unit.name }}</small></p>
+                {% endif %}
+                <p class="card-text">
+                    <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
+                        {{ 'Active' if user.is_active else 'Inactive' }}
+                    </span>
+                </p>
+                <p class="card-text"><small class="text-muted">Member since {{ user.created_at.strftime('%B %Y') }}</small></p>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Account Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.toggle_user_status', user_id=user.id) }}" 
+                       class="btn btn-{{ 'warning' if user.is_active else 'success' }} btn-sm">
+                        <i class="bi bi-{{ 'toggle-off' if user.is_active else 'toggle-on' }}"></i>
+                        {{ 'Deactivate' if user.is_active else 'Activate' }} Account
+                    </a>
+                    
+                    {% if user.id != current_user.id %}
+                    <button class="btn btn-danger btn-sm" onclick="confirmDelete()">
+                        <i class="bi bi-trash"></i> Delete User
+                    </button>
+                    {% endif %}
+                    
+                    <button class="btn btn-outline-info btn-sm" onclick="resetPassword()">
+                        <i class="bi bi-key"></i> Reset Password
+                    </button>
+                    
+                    <button class="btn btn-outline-secondary btn-sm" onclick="viewActivity()">
+                        <i class="bi bi-clock-history"></i> View Activity
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        {% if user.shifts.count() > 0 %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Recent Shifts</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">This user has {{ user.shifts.count() }} scheduled shifts.</p>
+                <div class="d-grid">
+                    <a href="{{ url_for('schedule.view_schedule') }}?employee={{ user.id }}" 
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-calendar3"></i> View Schedule
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete user <strong>{{ user.full_name }}</strong>?</p>
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone. All user data including shifts and schedules will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Delete User
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Filter units based on selected section
+document.getElementById('section_id').addEventListener('change', function() {
+    const selectedSection = this.value;
+    const unitSelect = document.getElementById('unit_id');
+    const unitOptions = unitSelect.querySelectorAll('option');
+    
+    unitOptions.forEach(option => {
+        if (option.value === '') {
+            option.style.display = 'block';
+        } else {
+            const unitSection = option.getAttribute('data-section');
+            option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+        }
+    });
+    
+    // Reset unit selection if it's no longer valid
+    const selectedUnit = unitSelect.value;
+    if (selectedUnit && selectedSection) {
+        const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
+        if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
+            unitSelect.value = '';
+        }
+    }
+});
+
+function confirmDelete() {
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+function resetPassword() {
+    const newPassword = prompt('Enter new password for {{ user.full_name }}:');
+    if (newPassword && newPassword.length >= 6) {
+        document.getElementById('password').value = newPassword;
+        alert('Password field updated. Click "Update User" to save changes.');
+    } else if (newPassword) {
+        alert('Password must be at least 6 characters long.');
+    }
+}
+
+function viewActivity() {
+    alert('Activity log feature coming soon!');
+}
+
+// Password strength indicator
+document.getElementById('password').addEventListener('input', function() {
+    const password = this.value;
+    
+    if (password.length > 0) {
+        if (password.length >= 6) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-valid');
+            this.classList.add('is-invalid');
+        }
+    } else {
+        this.classList.remove('is-valid', 'is-invalid');
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Unit - {{ unit.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Edit Unit - {{ unit.name }}</h1>
+    <a href="{{ url_for('admin.manage_units') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Units
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Unit Information -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Unit Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.edit_unit', unit_id=unit.id) }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Unit Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ unit.name }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="section_id" class="form-label">Section <span class="text-danger">*</span></label>
+                        <select class="form-select" id="section_id" name="section_id" required>
+                            {% for section in sections %}
+                                <option value="{{ section.id }}" 
+                                        {% if unit.section_id == section.id %}selected{% endif %}>
+                                    {{ section.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Changing section will affect user assignments</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="4">{{ unit.description or '' }}</textarea>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin.manage_units') }}" class="btn btn-secondary me-md-2">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update Unit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Assigned Users -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Assigned Users ({{ unit_users|length }})</h5>
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-person-plus"></i> Add User
+                </button>
+            </div>
+            <div class="card-body">
+                {% if unit_users %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in unit_users %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="employee-initials me-2" style="width: 30px; height: 30px; font-size: 0.8rem;">
+                                                {{ user.initials }}
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.full_name }}</strong>
+                                                <br><small class="text-muted">{{ user.username }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if user.role.value == 'administrator' else 'warning' if user.role.value == 'manager' else 'primary' }}">
+                                            {{ user.role.value.title() }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
+                                            {{ 'Active' if user.is_active else 'Inactive' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
+                                               class="btn btn-sm btn-outline-primary" title="Edit User">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{{ url_for('admin.remove_user_from_unit', unit_id=unit.id, user_id=user.id) }}" 
+                                               class="btn btn-sm btn-outline-warning" 
+                                               onclick="return confirm('Remove {{ user.full_name }} from this unit?')"
+                                               title="Remove from Unit">
+                                                <i class="bi bi-person-dash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-people display-4"></i>
+                        <p class="mt-2">No users assigned to this unit</p>
+                        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="bi bi-person-plus"></i> Add First User
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Unit Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Unit Summary</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Section:</span>
+                    <span class="badge bg-info">{{ unit.section.name }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Users:</span>
+                    <span class="badge bg-primary">{{ unit_users|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Active Users:</span>
+                    <span class="badge bg-success">{{ unit_users|selectattr('is_active')|list|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Created:</span>
+                    <span class="text-muted">{{ unit.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Quick Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="bi bi-person-plus"></i> Add Users
+                    </button>
+                    <a href="{{ url_for('schedule.view_schedule') }}?unit={{ unit.id }}" 
+                       class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-calendar3"></i> View Schedule
+                    </a>
+                    <a href="{{ url_for('admin.edit_section', section_id=unit.section_id) }}" 
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-building"></i> Manage Section
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="confirmDelete()">
+                        <i class="bi bi-trash"></i> Delete Unit
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section Info -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Section: {{ unit.section.name }}</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">{{ unit.section.description or 'No description available' }}</p>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Total Users:</span>
+                    <span class="badge bg-secondary">{{ unit.section.users.count() }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Total Units:</span>
+                    <span class="badge bg-secondary">{{ unit.section.units.count() }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add User to Unit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin.add_user_to_unit', unit_id=unit.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">Select User</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="">Choose a user...</option>
+                            {% if section_users_no_unit %}
+                                <optgroup label="Users in {{ unit.section.name }} (No Unit)">
+                                    {% for user in section_users_no_unit %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.full_name }} ({{ user.username }}) - {{ user.role.value.title() }}
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+                        </select>
+                        <small class="text-muted">
+                            {% if not section_users_no_unit %}
+                                No available users in this section. All users are already assigned to units or other sections.
+                            {% else %}
+                                Only showing users from the same section who are not assigned to any unit.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" 
+                            {% if not section_users_no_unit %}disabled{% endif %}>
+                        Add to Unit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete unit <strong>{{ unit.name }}</strong>?</p>
+                
+                {% if unit_users %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-people"></i> This unit has <strong>{{ unit_users|length }}</strong> users assigned. 
+                    You must reassign or remove these users before deleting the unit.
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('admin.delete_unit', unit_id=unit.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" 
+                            {% if unit_users %}disabled{% endif %}>
+                        <i class="bi bi-trash"></i> Delete Unit
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete() {
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Auto-focus on user select when modal opens
+document.getElementById('addUserModal').addEventListener('shown.bs.modal', function () {
+    document.getElementById('user_id').focus();
+});
+
+// Warn when changing section
+document.getElementById('section_id')?.addEventListener('change', function() {
+    const originalSection = '{{ unit.section_id }}';
+    const newSection = this.value;
+    
+    if (originalSection !== newSection) {
+        const warning = document.createElement('div');
+        warning.className = 'alert alert-warning mt-2';
+        warning.innerHTML = '<small><i class="bi bi-exclamation-triangle"></i> Changing the section may affect user assignments in this unit.</small>';
+        
+        // Remove existing warnings
+        const existingWarning = this.parentNode.querySelector('.alert-warning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+        
+        this.parentNode.appendChild(warning);
+    } else {
+        const existingWarning = this.parentNode.querySelector('.alert-warning');
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'u' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('addUserModal')).show();
+    }
+});
+</script>
+{% endblock %}

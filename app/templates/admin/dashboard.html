@@ -79,9 +79,9 @@
                     <a href="{{ url_for('admin.manage_users') }}" class="btn btn-primary">
                         <i class="bi bi-people"></i> Manage Users
                     </a>
-                    <button class="btn btn-outline-primary" onclick="showCreateUserModal()">
+                    <a href="{{ url_for('admin.create_user') }}" class="btn btn-outline-primary">
                         <i class="bi bi-person-plus"></i> Add New User
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
@@ -116,12 +116,12 @@
             <div class="card-body">
                 <p class="card-text">Configure system-wide settings and notifications.</p>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-warning" onclick="showEmailSettings()">
+                    <a href="{{ url_for('admin.email_settings') }}" class="btn btn-warning">
                         <i class="bi bi-envelope-gear"></i> Email Settings
-                    </button>
-                    <button class="btn btn-outline-warning" onclick="show2FASettings()">
+                    </a>
+                    <a href="{{ url_for('admin.two_factor_settings') }}" class="btn btn-outline-warning">
                         <i class="bi bi-shield-lock"></i> 2FA Settings
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
@@ -135,12 +135,12 @@
             <div class="card-body">
                 <p class="card-text">View system usage and generate reports.</p>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-secondary">
+                    <a href="{{ url_for('admin.usage_reports') }}" class="btn btn-secondary">
                         <i class="bi bi-graph-up"></i> Usage Reports
-                    </button>
-                    <button class="btn btn-outline-secondary">
+                    </a>
+                    <a href="{{ url_for('admin.export_data') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-file-earmark-text"></i> Export Data
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
