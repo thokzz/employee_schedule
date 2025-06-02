@@ -6,7 +6,8 @@
 from flask import render_template, request, jsonify, redirect, url_for, flash, make_response
 from flask_login import login_required, current_user
 from app.schedule import bp
-from app.models import User, Shift, Section, Unit, ShiftStatus, WorkArrangement, db
+from app.models import (User, Shift, Section, Unit, ShiftStatus, WorkArrangement, db, 
+                       DateRemark, DateRemarkType)  # <-- ADDED MISSING IMPORTS
 from datetime import datetime, date, timedelta, time
 import calendar
 import csv
