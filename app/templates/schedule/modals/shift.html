@@ -1,0 +1,207 @@
+<!-- Enhanced Shift Modal -->
+<div class="modal fade" id="shiftModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="shiftModalTitle">Edit Shift</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="shiftForm">
+                    <input type="hidden" id="shiftId" name="shift_id">
+                    <input type="hidden" id="employeeId" name="employee_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Employee</label>
+                        <div id="employeeInfo" class="form-control-plaintext"></div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="shiftDate" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="shiftDate" name="date" required>
+                    </div>
+                    
+                    <!-- Date Range Option -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="useDateRange" name="use_date_range">
+                            <label class="form-check-label" for="useDateRange">
+                                Apply to multiple dates (date range)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="row" id="dateRangeSection" style="display: none;">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startDate" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="startDate" name="start_date">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endDate" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="endDate" name="end_date">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Days of Week Selection for Range -->
+                    <div class="mb-3" id="daysOfWeekSection" style="display: none;">
+                        <label class="form-label">Apply to these days:</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayMon" name="days[]" value="1" checked>
+                                <label class="form-check-label" for="dayMon">Mon</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayTue" name="days[]" value="2" checked>
+                                <label class="form-check-label" for="dayTue">Tue</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayWed" name="days[]" value="3" checked>
+                                <label class="form-check-label" for="dayWed">Wed</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayThu" name="days[]" value="4" checked>
+                                <label class="form-check-label" for="dayThu">Thu</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayFri" name="days[]" value="5" checked>
+                                <label class="form-check-label" for="dayFri">Fri</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="daySat" name="days[]" value="6">
+                                <label class="form-check-label" for="daySat">Sat</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="daySun" name="days[]" value="0">
+                                <label class="form-check-label" for="daySun">Sun</label>
+                            </div>
+                        </div>
+                        <small class="text-muted">Select which days of the week to apply this shift to within the date range</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startTime" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="startTime" name="start_time">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endTime" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="endTime" name="end_time">
+                                <small class="text-muted" id="shiftDurationInfo"></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shiftRole" class="form-label">Role</label>
+                                <input type="text" class="form-control" id="shiftRole" name="role" 
+                                       placeholder="e.g., Cashier, Manager">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="workArrangement" class="form-label">Work Arrangement</label>
+                                <select class="form-select" id="workArrangement" name="work_arrangement">
+                                    <option value="onsite">ONSITE</option>
+                                    <option value="wfh">WFH (Work From Home)</option>
+                                    <option value="hybrid">HYBRID</option>
+                                    <option value="ob">OB (Official Business)</option>
+                                </select>
+                                <small class="text-muted">Where the employee will be working</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="shiftStatus" class="form-label">Status</label>
+                        <select class="form-select" id="shiftStatus" name="status">
+                            <option value="scheduled">Scheduled</option>
+                            <option value="rest_day">Rest Day</option>
+                            <option value="sick_leave">Sick Leave</option>
+                            <option value="personal_leave">Personal Leave</option>
+                            <option value="emergency_leave">Emergency Leave</option>
+                            <option value="annual_vacation">Annual Vacation</option>
+                            <option value="holiday_off">Holiday Off</option>
+                            <option value="offset">Offset</option>
+                            <option value="bereavement_leave">Bereavement Leave</option>
+                            <option value="paternity_leave">Paternity Leave</option>
+                            <option value="maternity_leave">Maternity Leave</option>
+                            <option value="union_leave">Union Leave</option>
+                            <option value="fire_calamity_leave">Fire/Calamity Leave</option>
+                            <option value="solo_parent_leave">Solo Parent Leave</option>
+                            <option value="special_leave_women">Special Leave for Women</option>
+                            <option value="vawc_leave">VAWC Leave</option>
+                            <option value="other">Other</option>
+                            <option value="cancel_day_off">Cancel Day Off</option>
+                            <option value="holiday_duty">Holiday Duty</option>
+                            <option value="overtime">Overtime</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="shiftNotes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="shiftNotes" name="notes" rows="3" 
+                                  placeholder="Additional notes or remarks..."></textarea>
+                        <small class="text-muted">Any additional information about this shift</small>
+                    </div>
+                    
+                    <!-- Break Information Display -->
+                    <div class="mb-3" id="breakInfoSection" style="display: none;">
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading"><i class="bi bi-info-circle"></i> Break Information</h6>
+                            <div id="breakInfoContent"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Shift Color</label>
+                        <div class="color-picker-grid">
+                            <!-- Primary Colors -->
+                            <div class="color-option" data-color="#007bff" style="background-color: #007bff;" title="Primary Blue"></div>
+                            <div class="color-option" data-color="#6c757d" style="background-color: #6c757d;" title="Secondary Gray"></div>
+                            <div class="color-option" data-color="#28a745" style="background-color: #28a745;" title="Success Green"></div>
+                            <div class="color-option" data-color="#dc3545" style="background-color: #dc3545;" title="Danger Red"></div>
+                            <div class="color-option" data-color="#ffc107" style="background-color: #ffc107;" title="Warning Yellow"></div>
+                            <div class="color-option" data-color="#17a2b8" style="background-color: #17a2b8;" title="Info Cyan"></div>
+                            
+                            <!-- Secondary Colors -->
+                            <div class="color-option" data-color="#6f42c1" style="background-color: #6f42c1;" title="Purple"></div>
+                            <div class="color-option" data-color="#e83e8c" style="background-color: #e83e8c;" title="Pink"></div>
+                            <div class="color-option" data-color="#fd7e14" style="background-color: #fd7e14;" title="Orange"></div>
+                            <div class="color-option" data-color="#20c997" style="background-color: #20c997;" title="Teal"></div>
+                            <div class="color-option" data-color="#0dcaf0" style="background-color: #0dcaf0;" title="Light Blue"></div>
+                            <div class="color-option" data-color="#495057" style="background-color: #495057;" title="Dark Gray"></div>
+                            
+                            <!-- Tertiary Colors -->
+                            <div class="color-option" data-color="#f8d7da" style="background-color: #f8d7da;" title="Light Pink"></div>
+                            <div class="color-option" data-color="#d1ecf1" style="background-color: #d1ecf1;" title="Light Cyan"></div>
+                            <div class="color-option" data-color="#d4edda" style="background-color: #d4edda;" title="Light Green"></div>
+                            <div class="color-option" data-color="#fff3cd" style="background-color: #fff3cd;" title="Light Yellow"></div>
+                            <div class="color-option" data-color="#dee2e6" style="background-color: #dee2e6;" title="Light Gray"></div>
+                            <div class="color-option" data-color="#212529" style="background-color: #212529;" title="Dark"></div>
+                        </div>
+                        <input type="hidden" id="shiftColor" name="color" value="#007bff">
+                        <div class="mt-2">
+                            <small class="text-muted">Selected color: <span id="colorDisplay" class="fw-bold">#007bff</span></small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="deleteShiftBtn" onclick="deleteShift()">
+                    Delete
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveShift()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>

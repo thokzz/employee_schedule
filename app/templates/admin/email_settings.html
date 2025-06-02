@@ -17,57 +17,75 @@
                 <h5 class="card-title mb-0">SMTP Configuration</h5>
             </div>
             <div class="card-body">
-                <form method="POST">
+                <form method="POST" id="emailSettingsForm">
                     <div class="mb-3">
-                        <label for="mail_server" class="form-label">Mail Server</label>
+                        <label for="mail_server" class="form-label">Mail Server <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="mail_server" name="mail_server" 
-                               placeholder="smtp.gmail.com" value="{{ config.MAIL_SERVER or '' }}">
+                               placeholder="smtp.gmail.com" value="{{ settings.mail_server or '' }}" required>
                         <small class="text-muted">SMTP server hostname</small>
                     </div>
                     
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="mail_port" class="form-label">Port</label>
+                                <label for="mail_port" class="form-label">Port <span class="text-danger">*</span></label>
                                 <input type="number" class="form-control" id="mail_port" name="mail_port" 
-                                       value="{{ config.MAIL_PORT or 587 }}">
+                                       value="{{ settings.mail_port or 587 }}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="mail_use_tls" class="form-label">Security</label>
                                 <select class="form-select" id="mail_use_tls" name="mail_use_tls">
-                                    <option value="true" {% if config.MAIL_USE_TLS %}selected{% endif %}>TLS (Recommended)</option>
-                                    <option value="false" {% if not config.MAIL_USE_TLS %}selected{% endif %}>None</option>
+                                    <option value="true" {% if settings.mail_use_tls %}selected{% endif %}>TLS (Recommended)</option>
+                                    <option value="false" {% if not settings.mail_use_tls %}selected{% endif %}>None</option>
                                 </select>
                             </div>
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label for="mail_username" class="form-label">Username</label>
+                        <label for="mail_username" class="form-label">Username <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="mail_username" name="mail_username" 
-                               value="{{ config.MAIL_USERNAME or '' }}">
+                               value="{{ settings.mail_username or '' }}" required>
                         <small class="text-muted">SMTP authentication username</small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="mail_password" class="form-label">Password</label>
                         <input type="password" class="form-control" id="mail_password" name="mail_password" 
-                               placeholder="Enter password">
-                        <small class="text-muted">SMTP authentication password</small>
+                               placeholder="{% if settings.mail_password %}••••••••{% else %}Enter password{% endif %}">
+                        <small class="text-muted">
+                            {% if settings.mail_password %}
+                                Password is set. Leave blank to keep current password.
+                            {% else %}
+                                SMTP authentication password
+                            {% endif %}
+                        </small>
                     </div>
                     
                     <div class="mb-3">
                         <label for="mail_default_sender" class="form-label">Default Sender</label>
                         <input type="email" class="form-control" id="mail_default_sender" name="mail_default_sender" 
+                               value="{{ settings.mail_default_sender or '' }}"
                                placeholder="noreply@company.com">
                         <small class="text-muted">Default "From" email address</small>
                     </div>
                     
+                    <!-- Test Email Section -->
+                    <hr>
+                    <h6 class="text-primary mb-3">Test Email Configuration</h6>
+                    
+                    <div class="mb-3">
+                        <label for="test_email_recipient" class="form-label">Test Email Recipient <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="test_email_recipient" name="test_email_recipient" 
+                               placeholder="admin@company.com" value="{{ current_user.email }}">
+                        <small class="text-muted">Email address where test emails will be sent</small>
+                    </div>
+                    
                     <div class="d-flex justify-content-between">
                         <button type="button" class="btn btn-outline-primary" onclick="testEmailSettings()">
-                            <i class="bi bi-envelope-check"></i> Test Connection
+                            <i class="bi bi-envelope-check"></i> Send Test Email
                         </button>
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-save"></i> Save Settings
@@ -84,47 +102,144 @@
                 <h6 class="card-title mb-0">Email Notifications</h6>
             </div>
             <div class="card-body">
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="notify_schedule_changes" checked>
-                    <label class="form-check-label" for="notify_schedule_changes">
-                        Schedule Changes
-                    </label>
-                    <small class="form-text text-muted d-block">Notify employees when their schedule changes</small>
-                </div>
-                
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="notify_new_users" checked>
-                    <label class="form-check-label" for="notify_new_users">
-                        New User Registration
-                    </label>
-                    <small class="form-text text-muted d-block">Send welcome emails to new users</small>
-                </div>
-                
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="notify_leave_requests">
-                    <label class="form-check-label" for="notify_leave_requests">
-                        Leave Requests
-                    </label>
-                    <small class="form-text text-muted d-block">Notify managers of leave requests</small>
-                </div>
-                
-                <button class="btn btn-sm btn-outline-primary w-100">
-                    Update Notification Settings
-                </button>
+                <form method="POST" id="notificationForm">
+                    <!-- Include hidden fields for main form -->
+                    <input type="hidden" name="mail_server" value="{{ settings.mail_server or '' }}">
+                    <input type="hidden" name="mail_port" value="{{ settings.mail_port or 587 }}">
+                    <input type="hidden" name="mail_use_tls" value="{{ 'true' if settings.mail_use_tls else 'false' }}">
+                    <input type="hidden" name="mail_username" value="{{ settings.mail_username or '' }}">
+                    <input type="hidden" name="mail_default_sender" value="{{ settings.mail_default_sender or '' }}">
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="notify_schedule_changes" 
+                               name="notify_schedule_changes" {% if settings.notify_schedule_changes %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_schedule_changes">
+                            Schedule Changes
+                        </label>
+                        <small class="form-text text-muted d-block">Notify employees when their schedule changes</small>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="notify_new_users" 
+                               name="notify_new_users" {% if settings.notify_new_users %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_new_users">
+                            New User Registration
+                        </label>
+                        <small class="form-text text-muted d-block">Send welcome emails to new users</small>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="notify_leave_requests" 
+                               name="notify_leave_requests" {% if settings.notify_leave_requests %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_leave_requests">
+                            Leave Requests
+                        </label>
+                        <small class="form-text text-muted d-block">Notify managers of leave requests</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                        Update Notification Settings
+                    </button>
+                </form>
             </div>
         </div>
         
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">Email Templates</h6>
+                <h6 class="card-title mb-0">Current Status</h6>
             </div>
             <div class="card-body">
-                <p class="text-muted small">Customize email templates for different notifications.</p>
-                <div class="d-grid gap-2">
-                    <button class="btn btn-sm btn-outline-secondary">Schedule Change Template</button>
-                    <button class="btn btn-sm btn-outline-secondary">Welcome Email Template</button>
-                    <button class="btn btn-sm btn-outline-secondary">Leave Request Template</button>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>SMTP Server:</span>
+                    <span class="text-muted">
+                        {% if settings.mail_server %}
+                            <i class="bi bi-check-circle text-success"></i> {{ settings.mail_server }}
+                        {% else %}
+                            <i class="bi bi-x-circle text-danger"></i> Not configured
+                        {% endif %}
+                    </span>
                 </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Authentication:</span>
+                    <span class="text-muted">
+                        {% if settings.mail_username and settings.mail_password %}
+                            <i class="bi bi-check-circle text-success"></i> Configured
+                        {% else %}
+                            <i class="bi bi-x-circle text-danger"></i> Not configured
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>TLS Security:</span>
+                    <span class="text-muted">
+                        {% if settings.mail_use_tls %}
+                            <i class="bi bi-shield-check text-success"></i> Enabled
+                        {% else %}
+                            <i class="bi bi-shield-x text-warning"></i> Disabled
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Quick Setup Guides</h6>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="setupGuides">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#gmailSetup">
+                                Gmail Setup
+                            </button>
+                        </h2>
+                        <div id="gmailSetup" class="accordion-collapse collapse" data-bs-parent="#setupGuides">
+                            <div class="accordion-body small">
+                                <strong>Server:</strong> smtp.gmail.com<br>
+                                <strong>Port:</strong> 587<br>
+                                <strong>Security:</strong> TLS<br>
+                                <strong>Note:</strong> Use App Password, not regular password<br>
+                                <strong>Steps:</strong><br>
+                                1. Enable 2FA in Gmail<br>
+                                2. Generate App Password<br>
+                                3. Use App Password here
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#outlookSetup">
+                                Outlook Setup
+                            </button>
+                        </h2>
+                        <div id="outlookSetup" class="accordion-collapse collapse" data-bs-parent="#setupGuides">
+                            <div class="accordion-body small">
+                                <strong>Server:</strong> smtp-mail.outlook.com<br>
+                                <strong>Port:</strong> 587<br>
+                                <strong>Security:</strong> TLS
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Result Modal -->
+<div class="modal fade" id="testResultModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Email Test Result</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testResultContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -140,28 +255,220 @@ function testEmailSettings() {
     button.innerHTML = '<i class="bi bi-hourglass-split"></i> Testing...';
     button.disabled = true;
     
-    // Simulate email test (in real app, this would be an AJAX call)
-    setTimeout(() => {
+    // Get current form data including test recipient
+    const formData = {
+        mail_server: document.getElementById('mail_server').value.trim(),
+        mail_port: parseInt(document.getElementById('mail_port').value),
+        mail_use_tls: document.getElementById('mail_use_tls').value === 'true',
+        mail_username: document.getElementById('mail_username').value.trim(),
+        mail_password: document.getElementById('mail_password').value,
+        mail_default_sender: document.getElementById('mail_default_sender').value.trim(),
+        test_email_recipient: document.getElementById('test_email_recipient').value.trim()
+    };
+    
+    // Validate required fields
+    const missingFields = [];
+    if (!formData.mail_server) missingFields.push('Mail Server');
+    if (!formData.mail_username) missingFields.push('Username');
+    if (!formData.mail_port) missingFields.push('Port');
+    if (!formData.test_email_recipient) missingFields.push('Test Email Recipient');
+    
+    if (missingFields.length > 0) {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        const resultContent = document.getElementById('testResultContent');
+        resultContent.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> Missing required fields:
+                <ul class="mb-0 mt-2">
+                    ${missingFields.map(field => `<li>${field}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        new bootstrap.Modal(document.getElementById('testResultModal')).show();
+        return;
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.test_email_recipient)) {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        const resultContent = document.getElementById('testResultContent');
+        resultContent.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> Please enter a valid email address for the test recipient.
+            </div>
+        `;
+        new bootstrap.Modal(document.getElementById('testResultModal')).show();
+        return;
+    }
+    
+    console.log('Sending test data:', {
+        ...formData,
+        mail_password: formData.mail_password ? '••••••••' : 'NOT PROVIDED'
+    });
+    
+    // Send test request
+    fetch('{{ url_for("admin.test_email_settings") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Restore button
         button.innerHTML = originalText;
         button.disabled = false;
         
         // Show result
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
-        alertDiv.innerHTML = `
-            <i class="bi bi-check-circle"></i> Test email sent successfully!
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        const resultContent = document.getElementById('testResultContent');
+        if (data.success) {
+            resultContent.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle"></i> ${data.message}
+                </div>
+                <p class="text-muted">Check the inbox for <strong>${formData.test_email_recipient}</strong> for the test email.</p>
+                <div class="mt-3">
+                    <h6>Configuration Used:</h6>
+                    <small class="text-muted">
+                        Server: ${formData.mail_server}:${formData.mail_port}<br>
+                        TLS: ${formData.mail_use_tls ? 'Enabled' : 'Disabled'}<br>
+                        Username: ${formData.mail_username}<br>
+                        Sender: ${formData.mail_default_sender || formData.mail_username}<br>
+                        Recipient: ${formData.test_email_recipient}
+                    </small>
+                </div>
+            `;
+        } else {
+            resultContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> ${data.message}
+                </div>
+                <div class="mt-3">
+                    <h6>Troubleshooting Tips:</h6>
+                    <ul class="small text-muted">
+                        <li>For Gmail: Use App Password instead of regular password</li>
+                        <li>Check if your email provider requires specific settings</li>
+                        <li>Verify server address and port number</li>
+                        <li>Ensure TLS/SSL settings match your provider's requirements</li>
+                    </ul>
+                </div>
+            `;
+        }
+        
+        new bootstrap.Modal(document.getElementById('testResultModal')).show();
+    })
+    .catch(error => {
+        // Restore button
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        // Show error
+        const resultContent = document.getElementById('testResultContent');
+        resultContent.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle"></i> Network error: ${error.message}
+            </div>
+            <p class="text-muted">Please check your internet connection and try again.</p>
         `;
-        
-        document.querySelector('.card-body').appendChild(alertDiv);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
-            }
-        }, 5000);
-    }, 2000);
+        new bootstrap.Modal(document.getElementById('testResultModal')).show();
+    });
 }
+
+// Sync notification form with main form
+document.getElementById('notificationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Update hidden fields with current SMTP values
+    document.querySelector('input[name="mail_server"]').value = document.getElementById('mail_server').value;
+    document.querySelector('input[name="mail_port"]').value = document.getElementById('mail_port').value;
+    document.querySelector('input[name="mail_use_tls"]').value = document.getElementById('mail_use_tls').value;
+    document.querySelector('input[name="mail_username"]').value = document.getElementById('mail_username').value;
+    document.querySelector('input[name="mail_default_sender"]').value = document.getElementById('mail_default_sender').value;
+    
+    // Submit the form
+    this.submit();
+});
+
+// Form validation
+document.getElementById('emailSettingsForm').addEventListener('submit', function(e) {
+    const mailServer = document.getElementById('mail_server').value.trim();
+    const mailUsername = document.getElementById('mail_username').value.trim();
+    const mailPort = document.getElementById('mail_port').value;
+    
+    if (!mailServer || !mailUsername || !mailPort) {
+        e.preventDefault();
+        alert('Please fill in all required fields (Server, Username, Port)');
+        return false;
+    }
+    
+    if (isNaN(mailPort) || mailPort < 1 || mailPort > 65535) {
+        e.preventDefault();
+        alert('Please enter a valid port number (1-65535)');
+        return false;
+    }
+});
+
+// Real-time validation feedback
+document.getElementById('mail_port').addEventListener('input', function() {
+    const port = parseInt(this.value);
+    if (isNaN(port) || port < 1 || port > 65535) {
+        this.classList.add('is-invalid');
+    } else {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    }
+});
+
+document.getElementById('mail_server').addEventListener('input', function() {
+    if (this.value.trim().length > 0) {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    } else {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+    }
+});
+
+document.getElementById('mail_username').addEventListener('input', function() {
+    if (this.value.trim().length > 0) {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    } else {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+    }
+});
+
+document.getElementById('test_email_recipient').addEventListener('input', function() {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(this.value.trim())) {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    } else if (this.value.trim().length > 0) {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+    } else {
+        this.classList.remove('is-valid', 'is-invalid');
+    }
+});
+
+// Pre-fill test email with current user's email on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const testEmailField = document.getElementById('test_email_recipient');
+    if (!testEmailField.value) {
+        testEmailField.value = '{{ current_user.email }}';
+    }
+});
 </script>
 {% endblock %}

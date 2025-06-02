@@ -1,0 +1,61 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+    <h1 class="h2 mb-3 mb-md-0">Schedule</h1>
+    
+    <div class="d-flex flex-wrap gap-2">
+        <!-- View Toggle -->
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('schedule.view_schedule', view='day', date=selected_date) }}" 
+               class="btn btn-sm {% if view_type == 'day' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Day
+            </a>
+            <a href="{{ url_for('schedule.view_schedule', view='week', date=selected_date) }}" 
+               class="btn btn-sm {% if view_type == 'week' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Week
+            </a>
+            <a href="{{ url_for('schedule.view_schedule', view='month', date=selected_date) }}" 
+               class="btn btn-sm {% if view_type == 'month' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Month
+            </a>
+        </div>
+        
+        <!-- Date Navigation -->
+        <div class="btn-group" role="group">
+            <button class="btn btn-outline-secondary btn-sm" onclick="navigateDate(-1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <input type="date" id="date-picker" class="form-control form-control-sm" 
+                   value="{{ selected_date.isoformat() }}" onchange="navigateToDate(this.value)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="navigateDate(1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+        
+        {% if can_edit %}
+        <button class="btn btn-success btn-sm" onclick="publishSchedule()">
+            <i class="bi bi-check-circle"></i> Publish
+        </button>
+        
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots"></i>
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="exportSchedule()">
+                    <i class="bi bi-download"></i> Export CSV
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="exportWorksched()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="showHolidayManagement()">
+                    <i class="bi bi-calendar-event"></i> Manage Holidays
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="showTemplateModal()">
+                    <i class="bi bi-files"></i> Use Template
+                </a></li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>

@@ -130,16 +130,16 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Reports & Analytics</h5>
+                <h5 class="card-title mb-0">Data & Reports</h5>
             </div>
             <div class="card-body">
-                <p class="card-text">View system usage and generate reports.</p>
+                <p class="card-text">Export data and view system analytics.</p>
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('admin.usage_reports') }}" class="btn btn-secondary">
-                        <i class="bi bi-graph-up"></i> Usage Reports
+                    <a href="{{ url_for('admin.export_data') }}" class="btn btn-primary">
+                        <i class="bi bi-download"></i> Export Data
                     </a>
-                    <a href="{{ url_for('admin.export_data') }}" class="btn btn-outline-secondary">
-                        <i class="bi bi-file-earmark-text"></i> Export Data
+                    <a href="{{ url_for('admin.usage_reports') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-graph-up"></i> Usage Reports
                     </a>
                 </div>
             </div>

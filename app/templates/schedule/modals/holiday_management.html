@@ -1,0 +1,50 @@
+<!-- Holiday Management Modal -->
+<div class="modal fade" id="holidayManagementModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Holiday Management</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold mb-3">Add Preset Holidays</h6>
+                        <div class="mb-3">
+                            <label for="holidayYear" class="form-label">Year</label>
+                            <input type="number" class="form-control" id="holidayYear" 
+                                   value="{{ selected_date.year }}" min="2020" max="2030">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Select Holidays</label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="selectAllHolidays">
+                                <label class="form-check-label fw-bold" for="selectAllHolidays">
+                                    Select All
+                                </label>
+                            </div>
+                            <div id="holidayPresetList" class="holiday-preset-list">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success" onclick="applyPresetHolidays()">
+                            <i class="bi bi-calendar-plus"></i> Apply Selected Holidays
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold mb-3">Current Date Remarks</h6>
+                        <div id="currentRemarksLista" class="mb-3" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                        <button type="button" class="btn btn-outline-primary" onclick="loadCurrentRemarks()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh List
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

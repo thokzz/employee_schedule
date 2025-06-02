@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}Export Data{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Export Data</h1>
+    <div class="btn-toolbar">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Export Scope Info -->
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    <strong>Export Scope:</strong> {{ stats.user_scope }} 
+    ({{ stats.team_members_count }} team members)
+</div>
+
+<!-- Export Options -->
+<div class="row">
+    <!-- CSV Export -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-earmark-text"></i> CSV Export
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Export schedule data in CSV format for spreadsheet analysis and reporting.</p>
+                
+                <div class="mb-3">
+                    <h6 class="text-muted">Features:</h6>
+                    <ul class="small">
+                        <li>Employee names and details</li>
+                        <li>Shift dates and times</li>
+                        <li>Roles and status information</li>
+                        <li>Notes and remarks</li>
+                        <li>Color coding information</li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-primary w-100" onclick="showCSVExportModal()">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+            <div class="card-footer text-muted">
+                <small>Best for: Data analysis, reporting, spreadsheet import</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Worksched Export -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Worksched Export
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Export work schedule in company-specific format with break calculations and DWS columns.</p>
+                
+                <div class="mb-3">
+                    <h6 class="text-muted">Features:</h6>
+                    <ul class="small">
+                        <li>Company-standard format</li>
+                        <li>Break time calculations (30min/1hr)</li>
+                        <li>DWS (Days Work Schedule) column</li>
+                        <li>Employee name formatting</li>
+                        <li>Leave and rest day handling</li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-success w-100" onclick="showWorkschedExportModal()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </button>
+            </div>
+            <div class="card-footer text-muted">
+                <small>Best for: Official records, HR documentation</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- OTND Export -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-earmark-plus"></i> OTND Export
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Export Overtime, Night Differential, and special pay calculations for payroll processing.</p>
+                
+                <div class="mb-3">
+                    <h6 class="text-muted">Features (Coming Soon):</h6>
+                    <ul class="small">
+                        <li>Overtime hours calculation</li>
+                        <li>Night differential tracking</li>
+                        <li>Holiday and special day rates</li>
+                        <li>Payroll-ready format</li>
+                        <li>Compliance reporting</li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-warning w-100" onclick="showOTNDExportModal()" disabled>
+                    <i class="bi bi-file-earmark-plus"></i> Export OTND
+                    <span class="badge bg-light text-dark ms-2">Coming Soon</span>
+                </button>
+            </div>
+            <div class="card-footer text-muted">
+                <small>Best for: Payroll processing, overtime tracking</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Statistics -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Export Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 class="text-primary">{{ stats.team_members_count }}</h3>
+                            <p class="text-muted mb-0">Team Members</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 class="text-success">{{ stats.active_users }}</h3>
+                            <p class="text-muted mb-0">Active Users</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 class="text-info">{{ stats.total_sections }}</h3>
+                            <p class="text-muted mb-0">Sections</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 class="text-warning">{{ stats.total_units }}</h3>
+                            <p class="text-muted mb-0">Units</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Exports -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Export Guidelines</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-primary">Best Practices</h6>
+                        <ul class="small">
+                            <li>Select appropriate date ranges (avoid very large ranges)</li>
+                            <li>Choose the right export format for your needs</li>
+                            <li>Test with small date ranges first</li>
+                            <li>Verify team member scope before exporting</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-success">File Information</h6>
+                        <ul class="small">
+                            <li><strong>CSV:</strong> Comma-separated values, compatible with Excel</li>
+                            <li><strong>Worksched:</strong> Company-specific format with break calculations</li>
+                            <li><strong>OTND:</strong> Overtime and night differential calculations</li>
+                            <li>All exports include UTF-8 encoding for special characters</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSV Export Modal -->
+<div class="modal fade" id="csvExportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export CSV Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>CSV Export:</strong> This exports schedule data in a standard comma-separated format for analysis and reporting.
+                </div>
+                
+                <form id="csvExportForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="csvStartDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="csvStartDate" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="csvEndDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="csvEndDate" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Export will include:</h6>
+                        <ul class="small text-muted">
+                            <li>Employee names and details</li>
+                            <li>Shift dates, start/end times</li>
+                            <li>Roles and status information</li>
+                            <li>Notes and color coding</li>
+                        </ul>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="doCSVExport()">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Worksched Export Modal -->
+<div class="modal fade" id="workschedExportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Work Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Worksched Export:</strong> This generates a CSV file in the company's standard work schedule format with columns for employee names, dates, work times, breaks, and remarks.
+                </div>
+                
+                <form id="workschedExportForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="workschedStartDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="workschedStartDate" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="workschedEndDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="workschedEndDate" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Export Details:</h6>
+                        <ul class="small text-muted">
+                            <li><strong>Employee Names:</strong> Formatted as "LASTNAME, FIRSTNAME"</li>
+                            <li><strong>Dates:</strong> Formatted as DD-MM-YYYY</li>
+                            <li><strong>Work Times:</strong> Regular scheduled shift times</li>
+                            <li><strong>Breaks:</strong> 30-minute (8hr) or 1-hour (9hr) paid breaks</li>
+                            <li><strong>Rest Days/Leave:</strong> Marked as "FREE" in DWS column</li>
+                            <li><strong>Remarks:</strong> Includes roles, work arrangement, and notes</li>
+                        </ul>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="doWorkschedExport()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OTND Export Modal -->
+<div class="modal fade" id="otndExportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export OTND (Overtime & Night Differential)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-construction"></i>
+                    <strong>Coming Soon:</strong> OTND export functionality is currently under development.
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Planned Features:</h6>
+                    <ul class="text-muted">
+                        <li><strong>Overtime Calculation:</strong> Automatic calculation of overtime hours based on standard work hours</li>
+                        <li><strong>Night Differential:</strong> Night shift premium calculations (typically 10% of basic pay)</li>
+                        <li><strong>Holiday Rates:</strong> Special holiday and rest day premium calculations</li>
+                        <li><strong>Payroll Integration:</strong> Export format compatible with payroll systems</li>
+                        <li><strong>Compliance Reporting:</strong> Reports that meet labor law requirements</li>
+                    </ul>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Expected Timeline:</h6>
+                    <p class="text-muted">This feature is planned for the next major update. It will include comprehensive overtime and night differential calculations based on Philippine labor laws.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-warning" disabled>
+                    <i class="bi bi-hourglass-split"></i> Feature In Development
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Set default dates to current week
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1);
+    const friday = new Date(today);
+    friday.setDate(today.getDate() - today.getDay() + 5);
+    
+    const startDate = monday.toISOString().split('T')[0];
+    const endDate = friday.toISOString().split('T')[0];
+    
+    // Set defaults for all modals
+    document.getElementById('csvStartDate').value = startDate;
+    document.getElementById('csvEndDate').value = endDate;
+    document.getElementById('workschedStartDate').value = startDate;
+    document.getElementById('workschedEndDate').value = endDate;
+});
+
+function showCSVExportModal() {
+    new bootstrap.Modal(document.getElementById('csvExportModal')).show();
+}
+
+function showWorkschedExportModal() {
+    new bootstrap.Modal(document.getElementById('workschedExportModal')).show();
+}
+
+function showOTNDExportModal() {
+    new bootstrap.Modal(document.getElementById('otndExportModal')).show();
+}
+
+function doCSVExport() {
+    const startDate = document.getElementById('csvStartDate').value;
+    const endDate = document.getElementById('csvEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date cannot be after end date');
+        return;
+    }
+    
+    window.location.href = `{{ url_for('schedule.export_schedule') }}?start_date=${startDate}&end_date=${endDate}`;
+    bootstrap.Modal.getInstance(document.getElementById('csvExportModal')).hide();
+}
+
+function doWorkschedExport() {
+    const startDate = document.getElementById('workschedStartDate').value;
+    const endDate = document.getElementById('workschedEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date cannot be after end date');
+        return;
+    }
+    
+    // Check if date range is reasonable (not more than 3 months)
+    const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 90) {
+        if (!confirm('You selected a date range longer than 3 months. This may result in a large file. Continue?')) {
+            return;
+        }
+    }
+    
+    window.location.href = `{{ url_for('schedule.export_worksched') }}?start_date=${startDate}&end_date=${endDate}`;
+    bootstrap.Modal.getInstance(document.getElementById('workschedExportModal')).hide();
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch(e.key) {
+            case '1':
+                e.preventDefault();
+                showCSVExportModal();
+                break;
+            case '2':
+                e.preventDefault();
+                showWorkschedExportModal();
+                break;
+            case '3':
+                e.preventDefault();
+                showOTNDExportModal();
+                break;
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -51,6 +51,9 @@ def view_schedule():
         Shift.employee_id.in_([tm.id for tm in team_members])
     ).order_by(Shift.employee_id, Shift.date, Shift.sequence).all()
     
+    # TEMPORARY: Empty date remarks until DateRemark model is implemented
+    date_remarks_dict = {}
+    
     # UPDATED: Organize shifts by employee and date - SUPPORT MULTIPLE SHIFTS
     schedule_grid = {}
     for member in team_members:
@@ -65,6 +68,7 @@ def view_schedule():
                          team_members=team_members,
                          dates=dates,
                          schedule_grid=schedule_grid,
+                         date_remarks=date_remarks_dict,  # Empty for now
                          view_type=view_type,
                          selected_date=selected_date,
                          can_edit=current_user.can_edit_schedule())
@@ -239,6 +243,176 @@ def delete_shift(shift_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error deleting shift: {str(e)}'}), 500
 
+@bp.route('/api/date-remarks')
+@login_required
+def get_date_remarks():
+    """Get date remarks for a date range"""
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        if not start_date_str or not end_date_str:
+            return jsonify({'success': False, 'error': 'Start and end dates required'}), 400
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
+        remarks = DateRemark.get_remarks_for_period(start_date, end_date)
+        
+        return jsonify({
+            'success': True,
+            'remarks': [remark.to_dict() for remark in remarks]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading date remarks: {str(e)}'}), 500
+
+@bp.route('/api/date-remarks', methods=['POST'])
+@login_required
+def create_or_update_date_remark():
+    """Create or update a date remark"""
+    try:
+        # Check permissions - only managers and admins can create/edit date remarks
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        data = request.get_json()
+        
+        remark_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+        
+        # Check if remark already exists for this date
+        existing_remark = DateRemark.get_remark_for_date(remark_date)
+        
+        if existing_remark:
+            # Update existing remark
+            remark = existing_remark
+        else:
+            # Create new remark
+            remark = DateRemark()
+            remark.date = remark_date
+            remark.created_by_id = current_user.id
+        
+        # Update remark data
+        remark.title = data.get('title', '').strip()
+        remark.description = data.get('description', '').strip() or None
+        remark.remark_type = DateRemarkType(data.get('remark_type', 'holiday'))
+        remark.color = data.get('color', '#dc3545')
+        remark.is_work_day = data.get('is_work_day', False)
+        remark.updated_at = datetime.utcnow()
+        
+        if not existing_remark:
+            db.session.add(remark)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Date remark saved successfully!',
+            'remark': remark.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error saving date remark: {str(e)}'}), 500
+
+@bp.route('/api/date-remarks/<int:remark_id>', methods=['DELETE'])
+@login_required
+def delete_date_remark(remark_id):
+    """Delete a date remark"""
+    try:
+        # Check permissions
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        remark = DateRemark.query.get(remark_id)
+        if not remark:
+            return jsonify({'success': False, 'error': 'Date remark not found'}), 404
+        
+        db.session.delete(remark)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Date remark deleted successfully!'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error deleting date remark: {str(e)}'}), 500
+
+@bp.route('/api/holidays/preset')
+@login_required
+def get_preset_holidays():
+    """Get preset holidays for the Philippines"""
+    if not current_user.can_edit_schedule():
+        return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+    
+    # You can expand this with more holidays or make it configurable
+    preset_holidays = [
+        {'title': 'New Year\'s Day', 'month': 1, 'day': 1},
+        {'title': 'Maundy Thursday', 'month': 3, 'day': 28},  # Example date - varies yearly
+        {'title': 'Good Friday', 'month': 3, 'day': 29},      # Example date - varies yearly
+        {'title': 'Araw ng Kagitingan', 'month': 4, 'day': 9},
+        {'title': 'Labor Day', 'month': 5, 'day': 1},
+        {'title': 'Independence Day', 'month': 6, 'day': 12},
+        {'title': 'National Heroes Day', 'month': 8, 'day': 26},  # Last Monday of August
+        {'title': 'All Saints\' Day', 'month': 11, 'day': 1},
+        {'title': 'Bonifacio Day', 'month': 11, 'day': 30},
+        {'title': 'Christmas Day', 'month': 12, 'day': 25},
+        {'title': 'Rizal Day', 'month': 12, 'day': 30},
+        {'title': 'New Year\'s Eve', 'month': 12, 'day': 31}
+    ]
+    
+    return jsonify({
+        'success': True,
+        'holidays': preset_holidays
+    })
+
+@bp.route('/api/holidays/apply-preset', methods=['POST'])
+@login_required
+def apply_preset_holidays():
+    """Apply preset holidays for a specific year"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        data = request.get_json()
+        year = int(data.get('year', datetime.now().year))
+        selected_holidays = data.get('holidays', [])
+        
+        created_count = 0
+        skipped_count = 0
+        
+        for holiday in selected_holidays:
+            holiday_date = date(year, holiday['month'], holiday['day'])
+            
+            # Check if holiday already exists
+            existing = DateRemark.get_remark_for_date(holiday_date)
+            if existing:
+                skipped_count += 1
+                continue
+            
+            # Create new holiday
+            remark = DateRemark(
+                date=holiday_date,
+                title=holiday['title'],
+                remark_type=DateRemarkType.HOLIDAY,
+                color='#dc3545',
+                is_work_day=False,
+                created_by_id=current_user.id
+            )
+            
+            db.session.add(remark)
+            created_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Applied {created_count} holidays for {year}. {skipped_count} holidays were skipped (already exist).',
+            'created_count': created_count,
+            'skipped_count': skipped_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error applying preset holidays: {str(e)}'}), 500
+
 @bp.route('/export')
 @login_required
 def export_schedule():
@@ -402,10 +576,10 @@ def export_worksched():
                 break_end_time.strftime('%H:%M')     # 30min break end
             )
     
-    # Generate data for each employee and date
-    current_date = start_date
-    while current_date <= end_date:
-        for employee in sorted(team_members, key=lambda x: x.full_name):
+    # FIXED: Generate data by employee first, then by date
+    for employee in sorted(team_members, key=lambda x: x.full_name):
+        current_date = start_date
+        while current_date <= end_date:
             emp_shifts = employee_shifts.get(employee.id, {}).get(current_date, [])
             
             # Format employee name as "LASTNAME, FIRSTNAME"
@@ -499,8 +673,8 @@ def export_worksched():
                         break_30min_end,     # 30min paid break end (for 8-hour shifts)
                         remarks              # Remarks
                     ])
-        
-        current_date += timedelta(days=1)
+            
+            current_date += timedelta(days=1)
     
     # Create response
     response = make_response(output.getvalue())

@@ -1,0 +1,11 @@
+<div class="d-flex align-items-center">
+    <div class="employee-initials me-2">
+        {{ member.initials }}
+    </div>
+    <div>
+        <div class="fw-medium">{{ member.full_name }}</div>
+        {% if member.section %}
+            <small class="text-muted">{{ member.section.name }}</small>
+        {% endif %}
+    </div>
+</div>

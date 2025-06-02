@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date
+from datetime import datetime, date, timedelta  # Added timedelta import
 from enum import Enum
 import json
 
@@ -276,3 +276,119 @@ class ScheduleTemplate(db.Model):
     
     def __repr__(self):
         return f'<ScheduleTemplate {self.name}>'
+
+class EmailSettings(db.Model):
+    __tablename__ = 'email_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    mail_server = db.Column(db.String(100), nullable=True)
+    mail_port = db.Column(db.Integer, default=587)
+    mail_use_tls = db.Column(db.Boolean, default=True)
+    mail_username = db.Column(db.String(100), nullable=True)
+    mail_password = db.Column(db.String(255), nullable=True)  # Should be encrypted in production
+    mail_default_sender = db.Column(db.String(100), nullable=True)
+    
+    # Notification settings
+    notify_schedule_changes = db.Column(db.Boolean, default=True)
+    notify_new_users = db.Column(db.Boolean, default=True)
+    notify_leave_requests = db.Column(db.Boolean, default=False)
+    
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    @classmethod
+    def get_settings(cls):
+        """Get the current email settings (create default if none exist)"""
+        settings = cls.query.first()
+        if not settings:
+            settings = cls()
+            db.session.add(settings)
+            db.session.commit()
+        return settings
+    
+    def to_dict(self):
+        """Convert settings to dictionary for JSON response"""
+        return {
+            'mail_server': self.mail_server,
+            'mail_port': self.mail_port,
+            'mail_use_tls': self.mail_use_tls,
+            'mail_username': self.mail_username,
+            'mail_default_sender': self.mail_default_sender,
+            'notify_schedule_changes': self.notify_schedule_changes,
+            'notify_new_users': self.notify_new_users,
+            'notify_leave_requests': self.notify_leave_requests
+        }
+    
+    def __repr__(self):
+        return f'<EmailSettings {self.mail_server}>'
+
+# Date Remarks for Holiday Tracker
+
+class DateRemarkType(Enum):
+    HOLIDAY = "holiday"
+    SPECIAL_DAY = "special_day"
+    NOTICE = "notice"
+    OTHER = "other"
+
+class DateRemark(db.Model):
+    """Model for storing remarks on specific dates (holidays, special days, etc.)"""
+    __tablename__ = 'date_remarks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, unique=True, index=True)
+    title = db.Column(db.String(100), nullable=False)  # e.g., "Independence Day", "Christmas"
+    description = db.Column(db.Text)  # Optional longer description
+    remark_type = db.Column(db.Enum(DateRemarkType), nullable=False, default=DateRemarkType.HOLIDAY)
+    color = db.Column(db.String(7), default='#dc3545')  # Hex color for display
+    is_work_day = db.Column(db.Boolean, default=False)  # False for holidays (no work), True for special work days
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    created_by = db.relationship('User', backref='date_remarks_created')
+    
+    def __repr__(self):
+        return f'<DateRemark {self.date}: {self.title}>'
+    
+    @property
+    def display_name(self):
+        """Get display name for the remark"""
+        return self.title
+    
+    @property
+    def badge_class(self):
+        """Get CSS class for badge display"""
+        type_classes = {
+            DateRemarkType.HOLIDAY: 'badge-danger',
+            DateRemarkType.SPECIAL_DAY: 'badge-info',
+            DateRemarkType.NOTICE: 'badge-warning',
+            DateRemarkType.OTHER: 'badge-secondary'
+        }
+        return type_classes.get(self.remark_type, 'badge-secondary')
+    
+    @classmethod
+    def get_remarks_for_period(cls, start_date, end_date):
+        """Get all remarks for a date range"""
+        return cls.query.filter(
+            cls.date.between(start_date, end_date)
+        ).all()
+    
+    @classmethod
+    def get_remark_for_date(cls, date):
+        """Get remark for a specific date"""
+        return cls.query.filter_by(date=date).first()
+    
+    def to_dict(self):
+        """Convert to dictionary for JSON responses"""
+        return {
+            'id': self.id,
+            'date': self.date.isoformat(),
+            'title': self.title,
+            'description': self.description,
+            'remark_type': self.remark_type.value,
+            'color': self.color,
+            'is_work_day': self.is_work_day,
+            'display_name': self.display_name,
+            'badge_class': self.badge_class
+        }

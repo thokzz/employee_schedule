@@ -1,0 +1,14 @@
+<div class="date-header" id="date-header-{{ date.isoformat() }}">
+    {% if can_edit %}
+    <div class="date-actions">
+        <button class="date-action-btn" onclick="editDateRemark('{{ date.isoformat() }}')" title="Edit date remark">
+            <i class="bi bi-pencil"></i>
+        </button>
+    </div>
+    {% endif %}
+    <div class="date-header-main">
+        <div class="fw-bold">{{ date.strftime('%a') }}</div>
+        <small>{{ date.strftime('%b %d') }}</small>
+        <div id="date-remark-{{ date.isoformat() }}" class="date-remark-container"></div>
+    </div>
+</div>

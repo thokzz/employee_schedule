@@ -1,0 +1,34 @@
+<div class="card">
+    <div class="card-body p-0">
+        <div class="schedule-grid">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 120px;">Team Member</th>
+                            {% for date in dates %}
+                                <th class="text-center" style="min-width: 150px;">
+                                    {% include 'schedule/partials/date_header.html' %}
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for member in team_members %}
+                        <tr>
+                            <td class="align-middle">
+                                {% include 'schedule/partials/employee_cell.html' %}
+                            </td>
+                            {% for date in dates %}
+                                <td class="align-top p-2" style="min-height: 80px;">
+                                    {% include 'schedule/partials/shift_cell.html' %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

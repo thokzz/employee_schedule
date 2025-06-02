@@ -1,0 +1,42 @@
+<!-- Template Selection Modal -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Apply Schedule Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="list-group">
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">Standard Weekday Template</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('standard')">Apply</button>
+                        </div>
+                        <p class="mb-1">Mon-Fri: 9am-5pm shifts</p>
+                        <small>Standard business hours template</small>
+                    </div>
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">Retail Template</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('retail')">Apply</button>
+                        </div>
+                        <p class="mb-1">7 days: 10am-9pm shifts with rotating staff</p>
+                        <small>Retail store schedule with weekend coverage</small>
+                    </div>
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">Restaurant Template</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('restaurant')">Apply</button>
+                        </div>
+                        <p class="mb-1">Split shifts: 11am-3pm & 5pm-10pm</p>
+                        <small>Restaurant service with lunch and dinner shifts</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>

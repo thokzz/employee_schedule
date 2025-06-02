@@ -1,0 +1,24 @@
+<div id="contextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="contextMenuCopy()">
+        <i class="bi bi-files"></i> Copy Shift
+    </div>
+    <div class="context-menu-item" onclick="contextMenuPaste()" id="pasteOption">
+        <i class="bi bi-clipboard"></i> Paste Shift
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" onclick="contextMenuEdit()">
+        <i class="bi bi-pencil"></i> Edit Shift
+    </div>
+    <div class="context-menu-item text-danger" onclick="contextMenuDelete()">
+        <i class="bi bi-trash"></i> Delete Shift
+    </div>
+</div>
+
+<div id="cellContextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="contextMenuCreate()">
+        <i class="bi bi-plus"></i> Create Shift
+    </div>
+    <div class="context-menu-item" onclick="contextMenuPasteCell()" id="pasteCellOption">
+        <i class="bi bi-clipboard"></i> Paste Shift
+    </div>
+</div>

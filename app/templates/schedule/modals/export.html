@@ -1,0 +1,79 @@
+<!-- Export Modals -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exportForm">
+                    <div class="mb-3">
+                        <label for="exportStartDate" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="exportStartDate" name="start_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exportEndDate" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="exportEndDate" name="end_date" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="doExport()">Export CSV</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="exportWorkschedModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Work Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Work Schedule Format:</strong> This export generates a CSV file in the company's standard work schedule format with columns for employee names, dates, work times, breaks, and remarks.
+                </div>
+                
+                <form id="exportWorkschedForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportWorkschedStartDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportWorkschedStartDate" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportWorkschedEndDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportWorkschedEndDate" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Export Details:</h6>
+                        <ul class="small text-muted">
+                            <li><strong>Employee Names:</strong> Formatted as "LASTNAME, FIRSTNAME"</li>
+                            <li><strong>Dates:</strong> Formatted as DD-MM-YYYY</li>
+                            <li><strong>Work Times:</strong> Regular scheduled shift times</li>
+                            <li><strong>Breaks:</strong> 30-minute (8hr) or 1-hour (9hr) paid breaks</li>
+                            <li><strong>Rest Days/Leave:</strong> Marked as "FREE" in DWS column</li>
+                            <li><strong>Remarks:</strong> Includes roles, work arrangement, and notes</li>
+                        </ul>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="doExportWorksched()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

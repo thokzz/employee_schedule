@@ -1,0 +1,47 @@
+{% set shifts = schedule_grid[member.id][date.isoformat()] %}
+{% if shifts %}
+    <!-- Multiple shifts in one cell -->
+    {% for shift in shifts %}
+        <div class="shift-card mb-1" 
+             style="background-color: {{ shift.color or shift.status_color }};"
+             onclick="editShift({{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}')"
+             oncontextmenu="showShiftContextMenu(event, {{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}'); return false;">
+            <div class="fw-bold" style="font-size: 0.7rem;">{{ shift.time_display }}</div>
+            {% if shift.role %}
+                <div style="font-size: 0.65rem;">{{ shift.role }}</div>
+            {% endif %}
+            <div style="font-size: 0.65rem;">
+                {{ shift.status.value.replace('_', ' ').title() }}
+            </div>
+            {% if shift.work_arrangement and shift.work_arrangement.value != 'onsite' %}
+                <div style="font-size: 0.6rem; opacity: 0.9;">
+                    {{ shift.work_arrangement.value.upper() }}
+                </div>
+            {% endif %}
+            {% if shifts|length > 1 %}
+                <div class="shift-sequence" style="font-size: 0.6rem; opacity: 0.8;">
+                    #{{ shift.sequence }}
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+    
+    <!-- Add another shift button -->
+    {% if can_edit %}
+        <div class="add-shift-btn" 
+             onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
+             oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
+             style="cursor: pointer; text-align: center; padding: 4px; border: 1px dashed #ccc; border-radius: 4px; color: #666; font-size: 0.7rem;">
+            <i class="bi bi-plus"></i> Add
+        </div>
+    {% endif %}
+{% else %}
+    {% if can_edit %}
+        <div class="shift-card bg-light text-dark border border-dashed" 
+             onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
+             oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
+             style="min-height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <i class="bi bi-plus"></i>
+        </div>
+    {% endif %}
+{% endif %}

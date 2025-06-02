@@ -227,10 +227,20 @@
                             </a>
                         </li>
                         
-                        {% if current_user.can_admin() %}
+                        {% if current_user.can_edit_schedule() %}
                         <hr class="text-white-50">
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint.startswith('admin.') %}active{% endif %}" 
+                            <a class="nav-link {% if request.endpoint == 'admin.export_data' %}active{% endif %}" 
+                               href="{{ url_for('admin.export_data') }}">
+                                <i class="bi bi-download"></i>
+                                Export Data
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.can_admin() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint.startswith('admin.') and request.endpoint != 'admin.export_data' %}active{% endif %}" 
                                href="{{ url_for('admin.admin_dashboard') }}">
                                 <i class="bi bi-gear"></i>
                                 Administration

@@ -64,7 +64,7 @@
                                 <label for="personnel_number" class="form-label">Personnel Number</label>
                                 <input type="text" class="form-control" id="personnel_number" name="personnel_number" 
                                        value="{{ current_user.personnel_number or '' }}"
-                                       placeholder="e.g., EMP-2024-001">
+                                       placeholder="e.g., Based on Worksched information">
                                 <small class="text-muted">Unique employee identification number</small>
                             </div>
                         </div>
@@ -73,7 +73,7 @@
                                 <label for="typecode" class="form-label">Type Code</label>
                                 <input type="text" class="form-control" id="typecode" name="typecode" 
                                        value="{{ current_user.typecode or '' }}"
-                                       placeholder="e.g., FT, PT, CT">
+                                       placeholder="e.g., Based on Worksched information">
                                 <small class="text-muted">Employment type code</small>
                             </div>
                         </div>
@@ -86,7 +86,9 @@
                                 <label for="employee_type" class="form-label">Employee Type</label>
                                 <select class="form-select" id="employee_type" name="employee_type">
                                     <option value="rank_and_file" {% if current_user.employee_type and current_user.employee_type.value == 'rank_and_file' %}selected{% endif %}>Rank and File</option>
+                                    <option value="rank_and_file_probationary" {% if current_user.employee_type and current_user.employee_type.value == 'rank_and_file_probationary' %}selected{% endif %}>Rank and File Probationary</option>
                                     <option value="confidential" {% if current_user.employee_type and current_user.employee_type.value == 'confidential' %}selected{% endif %}>Confidential</option>
+                                    <option value="confidential_probationary" {% if current_user.employee_type and current_user.employee_type.value == 'confidential_probationary' %}selected{% endif %}>Confidential Probationary</option>
                                     <option value="contractual" {% if current_user.employee_type and current_user.employee_type.value == 'contractual' %}selected{% endif %}>Contractual</option>
                                 </select>
                                 <small class="text-muted">Employee classification type</small>
@@ -111,7 +113,7 @@
                                 <label for="id_number" class="form-label">ID Number</label>
                                 <input type="text" class="form-control" id="id_number" name="id_number" 
                                        value="{{ current_user.id_number or '' }}"
-                                       placeholder="e.g., SSN, National ID">
+                                       placeholder="e.g., Employee ID Number">
                                 <small class="text-muted">Government or company issued ID</small>
                             </div>
                         </div>
@@ -140,7 +142,7 @@
                                 <label for="rank" class="form-label">Rank</label>
                                 <input type="text" class="form-control" id="rank" name="rank" 
                                        value="{{ current_user.rank or '' }}"
-                                       placeholder="e.g., Level 3, Senior">
+                                       placeholder="e.g., RF3, CONFI B">
                                 <small class="text-muted">Employee rank or level</small>
                             </div>
                         </div>
