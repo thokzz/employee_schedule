@@ -1,4 +1,20 @@
-{% extends "base.html" %}
+// Work arrangement styling
+    document.getElementById('workArrangement')?.addEventListener('change', function() {
+        const value = this.value;
+        const parent = this.parentElement;
+        
+        // Remove any existing arrangement classes
+        parent.classList.remove('arrangement-wfh', 'arrangement-onsite', 'arrangement-hybrid', 'arrangement-ob');
+        
+        // Add new class for styling
+        if (value !== 'onsite') {
+            parent.classList.add(`arrangement-${value}`);
+        }
+    });
+    
+    // Date range functionality
+    document.getElementById('useDateRange')?.addEventListener('change', function() {
+        const dateRangeSection = document.getElementById('dateR{% extends "base.html" %}
 
 {% block title %}Schedule{% endblock %}
 
@@ -60,6 +76,113 @@
     color: #000;
     text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
 }
+
+/* Work arrangement styling */
+.arrangement-wfh {
+    background-color: rgba(32, 201, 151, 0.1);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.arrangement-hybrid {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.arrangement-ob {
+    background-color: rgba(13, 202, 240, 0.1);
+    border-radius: 8px;
+    padding: 8px;
+}
+
+/* Enhanced shift modal styling */
+#breakInfoSection {
+    margin-top: 1rem;
+}
+
+#shiftDurationInfo {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.work-arrangement-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+}
+
+/* Context Menu Styling */
+.context-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 5px 0;
+    min-width: 150px;
+    z-index: 9999;
+    font-size: 14px;
+}
+
+.context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.2s ease;
+}
+
+.context-menu-item:hover {
+    background-color: #f8f9fa;
+}
+
+.context-menu-item i {
+    margin-right: 8px;
+    width: 16px;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: #eee;
+    margin: 5px 0;
+}
+
+.context-menu-item.text-danger:hover {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Copied Shift Styling */
+.copied-shift {
+    border: 2px dashed #007bff !important;
+    animation: pulse-border 1.5s infinite;
+}
+
+@keyframes pulse-border {
+    0% { border-color: #007bff; }
+    50% { border-color: #80bdff; }
+    100% { border-color: #007bff; }
+}
+
+/* Date Range Section Styling */
+#dateRangeSection.show,
+#daysOfWeekSection.show {
+    display: block !important;
+    animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 </style>
 {% endblock %}
 
@@ -111,6 +234,10 @@
                 <li><a class="dropdown-item" href="#" onclick="exportSchedule()">
                     <i class="bi bi-download"></i> Export CSV
                 </a></li>
+                <li><a class="dropdown-item" href="#" onclick="exportWorksched()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="#" onclick="showTemplateModal()">
                     <i class="bi bi-files"></i> Use Template
                 </a></li>
@@ -163,7 +290,8 @@
                                         {% for shift in shifts %}
                                             <div class="shift-card mb-1" 
                                                  style="background-color: {{ shift.color or shift.status_color }};"
-                                                 onclick="editShift({{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}')">
+                                                 onclick="editShift({{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}')"
+                                                 oncontextmenu="showShiftContextMenu(event, {{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}'); return false;">
                                                 <div class="fw-bold" style="font-size: 0.7rem;">{{ shift.time_display }}</div>
                                                 {% if shift.role %}
                                                     <div style="font-size: 0.65rem;">{{ shift.role }}</div>
@@ -171,6 +299,11 @@
                                                 <div style="font-size: 0.65rem;">
                                                     {{ shift.status.value.replace('_', ' ').title() }}
                                                 </div>
+                                                {% if shift.work_arrangement and shift.work_arrangement.value != 'onsite' %}
+                                                    <div style="font-size: 0.6rem; opacity: 0.9;">
+                                                        {{ shift.work_arrangement.value.upper() }}
+                                                    </div>
+                                                {% endif %}
                                                 {% if shifts|length > 1 %}
                                                     <div class="shift-sequence" style="font-size: 0.6rem; opacity: 0.8;">
                                                         #{{ shift.sequence }}
@@ -183,6 +316,7 @@
                                         {% if can_edit %}
                                             <div class="add-shift-btn" 
                                                  onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
+                                                 oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
                                                  style="cursor: pointer; text-align: center; padding: 4px; border: 1px dashed #ccc; border-radius: 4px; color: #666; font-size: 0.7rem;">
                                                 <i class="bi bi-plus"></i> Add
                                             </div>
@@ -191,6 +325,7 @@
                                         {% if can_edit %}
                                             <div class="shift-card bg-light text-dark border border-dashed" 
                                                  onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
+                                                 oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
                                                  style="min-height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
                                                 <i class="bi bi-plus"></i>
                                             </div>
@@ -204,6 +339,33 @@
                 </table>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Context Menu -->
+<div id="contextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="contextMenuCopy()">
+        <i class="bi bi-files"></i> Copy Shift
+    </div>
+    <div class="context-menu-item" onclick="contextMenuPaste()" id="pasteOption">
+        <i class="bi bi-clipboard"></i> Paste Shift
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" onclick="contextMenuEdit()">
+        <i class="bi bi-pencil"></i> Edit Shift
+    </div>
+    <div class="context-menu-item text-danger" onclick="contextMenuDelete()">
+        <i class="bi bi-trash"></i> Delete Shift
+    </div>
+</div>
+
+<!-- Cell Context Menu -->
+<div id="cellContextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" onclick="contextMenuCreate()">
+        <i class="bi bi-plus"></i> Create Shift
+    </div>
+    <div class="context-menu-item" onclick="contextMenuPasteCell()" id="pasteCellOption">
+        <i class="bi bi-clipboard"></i> Paste Shift
     </div>
 </div>
 
@@ -236,8 +398,10 @@
         </div>
     </div>
 </div>
+
+<!-- Enhanced Shift Modal with Work Arrangement -->
 <div class="modal fade" id="shiftModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="shiftModalTitle">Edit Shift</h5>
@@ -258,6 +422,67 @@
                         <input type="date" class="form-control" id="shiftDate" name="date" required>
                     </div>
                     
+                    <!-- Date Range Option -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="useDateRange" name="use_date_range">
+                            <label class="form-check-label" for="useDateRange">
+                                Apply to multiple dates (date range)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="row" id="dateRangeSection" style="display: none;">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="startDate" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="startDate" name="start_date">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="endDate" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="endDate" name="end_date">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Days of Week Selection for Range -->
+                    <div class="mb-3" id="daysOfWeekSection" style="display: none;">
+                        <label class="form-label">Apply to these days:</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayMon" name="days[]" value="1" checked>
+                                <label class="form-check-label" for="dayMon">Mon</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayTue" name="days[]" value="2" checked>
+                                <label class="form-check-label" for="dayTue">Tue</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayWed" name="days[]" value="3" checked>
+                                <label class="form-check-label" for="dayWed">Wed</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayThu" name="days[]" value="4" checked>
+                                <label class="form-check-label" for="dayThu">Thu</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="dayFri" name="days[]" value="5" checked>
+                                <label class="form-check-label" for="dayFri">Fri</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="daySat" name="days[]" value="6">
+                                <label class="form-check-label" for="daySat">Sat</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="daySun" name="days[]" value="0">
+                                <label class="form-check-label" for="daySun">Sun</label>
+                            </div>
+                        </div>
+                        <small class="text-muted">Select which days of the week to apply this shift to within the date range</small>
+                    </div>
+                    
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -269,14 +494,31 @@
                             <div class="mb-3">
                                 <label for="endTime" class="form-label">End Time</label>
                                 <input type="time" class="form-control" id="endTime" name="end_time">
+                                <small class="text-muted" id="shiftDurationInfo"></small>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="shiftRole" class="form-label">Role</label>
-                        <input type="text" class="form-control" id="shiftRole" name="role" 
-                               placeholder="e.g., Cashier, Manager">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shiftRole" class="form-label">Role</label>
+                                <input type="text" class="form-control" id="shiftRole" name="role" 
+                                       placeholder="e.g., Cashier, Manager">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="workArrangement" class="form-label">Work Arrangement</label>
+                                <select class="form-select" id="workArrangement" name="work_arrangement">
+                                    <option value="onsite">ONSITE</option>
+                                    <option value="wfh">WFH (Work From Home)</option>
+                                    <option value="hybrid">HYBRID</option>
+                                    <option value="ob">OB (Official Business)</option>
+                                </select>
+                                <small class="text-muted">Where the employee will be working</small>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -305,8 +547,16 @@
                     <div class="mb-3">
                         <label for="shiftNotes" class="form-label">Notes</label>
                         <textarea class="form-control" id="shiftNotes" name="notes" rows="3" 
-                                  placeholder="Leave a note for your employee..."></textarea>
-                        <small class="text-muted">You've used 0 of 3 free Shift Notes this month.</small>
+                                  placeholder="Additional notes or remarks..."></textarea>
+                        <small class="text-muted">Any additional information about this shift</small>
+                    </div>
+                    
+                    <!-- Break Information Display -->
+                    <div class="mb-3" id="breakInfoSection" style="display: none;">
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading"><i class="bi bi-info-circle"></i> Break Information</h6>
+                            <div id="breakInfoContent"></div>
+                        </div>
                     </div>
                     
                     <div class="mb-3">
@@ -382,6 +632,59 @@
     </div>
 </div>
 
+<!-- Export Worksched Modal -->
+<div class="modal fade" id="exportWorkschedModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Work Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Work Schedule Format:</strong> This export generates a CSV file in the company's standard work schedule format with columns for employee names, dates, work times, breaks, and remarks.
+                </div>
+                
+                <form id="exportWorkschedForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportWorkschedStartDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportWorkschedStartDate" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportWorkschedEndDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportWorkschedEndDate" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Export Details:</h6>
+                        <ul class="small text-muted">
+                            <li><strong>Employee Names:</strong> Formatted as "LASTNAME, FIRSTNAME"</li>
+                            <li><strong>Dates:</strong> Formatted as DD-MM-YYYY</li>
+                            <li><strong>Work Times:</strong> Regular scheduled shift times</li>
+                            <li><strong>Breaks:</strong> 30-minute (8hr) or 1-hour (9hr) paid breaks</li>
+                            <li><strong>Rest Days/Leave:</strong> Marked as "FREE" in DWS column</li>
+                            <li><strong>Remarks:</strong> Includes roles, work arrangement, and notes</li>
+                        </ul>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="doExportWorksched()">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Template Selection Modal -->
 <div class="modal fade" id="templateModal" tabindex="-1">
     <div class="modal-dialog">
@@ -428,11 +731,14 @@
 
 {% block extra_js %}
 <script>
+// Global variables
 let currentShiftId = null;
 let currentEmployeeId = null;
 let currentDate = null;
 let allEmployeeShifts = [];
+let copiedShift = null; // For copy/paste functionality
 
+// Navigation functions
 function navigateDate(direction) {
     const currentDate = new Date(document.getElementById('date-picker').value);
     const viewType = '{{ view_type }}';
@@ -452,7 +758,173 @@ function navigateToDate(dateStr) {
     window.location.href = `{{ url_for('schedule.view_schedule') }}?view={{ view_type }}&date=${dateStr}`;
 }
 
-// NEW: Show multi-shift modal for days with multiple shifts or to add shifts
+// Copy/Paste functionality
+function copyShift(shiftId, employeeId, date) {
+    fetch(`/schedule/api/shift/${shiftId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                copiedShift = data.shift;
+                showSuccessMessage('Shift copied! Right-click on any cell to paste.');
+                
+                // Visual feedback - highlight copied shift
+                document.querySelectorAll('.shift-card').forEach(card => {
+                    card.classList.remove('copied-shift');
+                });
+                
+                // Find and highlight the copied shift
+                const copiedCard = document.querySelector(`[onclick*="editShift(${shiftId}"]`);
+                if (copiedCard) {
+                    copiedCard.classList.add('copied-shift');
+                }
+            } else {
+                alert('Error copying shift: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error copying shift:', error);
+            alert('Error copying shift');
+    // Context menu functionality
+let contextMenuData = null;
+
+function showShiftContextMenu(event, shiftId, employeeId, date) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    contextMenuData = { shiftId, employeeId, date, type: 'shift' };
+    
+    const contextMenu = document.getElementById('contextMenu');
+    const pasteOption = document.getElementById('pasteOption');
+    
+    // Show/hide paste option based on copied shift
+    pasteOption.style.display = copiedShift ? 'flex' : 'none';
+    
+    // Position and show context menu
+    contextMenu.style.left = event.pageX + 'px';
+    contextMenu.style.top = event.pageY + 'px';
+    contextMenu.style.display = 'block';
+    
+    // Hide context menu when clicking elsewhere
+    setTimeout(() => {
+        document.addEventListener('click', hideContextMenu, { once: true });
+    }, 10);
+}
+
+function showCellContextMenu(event, employeeId, date) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    contextMenuData = { employeeId, date, type: 'cell' };
+    
+    const cellContextMenu = document.getElementById('cellContextMenu');
+    const pasteCellOption = document.getElementById('pasteCellOption');
+    
+    // Show/hide paste option based on copied shift
+    pasteCellOption.style.display = copiedShift ? 'flex' : 'none';
+    
+    // Position and show context menu
+    cellContextMenu.style.left = event.pageX + 'px';
+    cellContextMenu.style.top = event.pageY + 'px';
+    cellContextMenu.style.display = 'block';
+    
+    // Hide context menu when clicking elsewhere
+    setTimeout(() => {
+        document.addEventListener('click', hideCellContextMenu, { once: true });
+    }, 10);
+}
+
+function hideContextMenu() {
+    document.getElementById('contextMenu').style.display = 'none';
+}
+
+function hideCellContextMenu() {
+    document.getElementById('cellContextMenu').style.display = 'none';
+}
+
+function contextMenuCopy() {
+    if (contextMenuData && contextMenuData.type === 'shift') {
+        copyShift(contextMenuData.shiftId, contextMenuData.employeeId, contextMenuData.date);
+    }
+    hideContextMenu();
+}
+
+function contextMenuPaste() {
+    if (contextMenuData && contextMenuData.type === 'shift') {
+        pasteShift(contextMenuData.employeeId, contextMenuData.date);
+    }
+    hideContextMenu();
+}
+
+function contextMenuEdit() {
+    if (contextMenuData && contextMenuData.type === 'shift') {
+        editShift(contextMenuData.shiftId, contextMenuData.employeeId, contextMenuData.date);
+    }
+    hideContextMenu();
+}
+
+function contextMenuDelete() {
+    if (contextMenuData && contextMenuData.type === 'shift') {
+        deleteShiftConfirm(contextMenuData.shiftId);
+    }
+    hideContextMenu();
+}
+
+function contextMenuCreate() {
+    if (contextMenuData && contextMenuData.type === 'cell') {
+        createShift(contextMenuData.employeeId, contextMenuData.date);
+    }
+    hideCellContextMenu();
+}
+
+function contextMenuPasteCell() {
+    if (contextMenuData && contextMenuData.type === 'cell') {
+        pasteShift(contextMenuData.employeeId, contextMenuData.date);
+    }
+    hideCellContextMenu();
+}
+
+function pasteShift(employeeId, date) {
+    if (!copiedShift) {
+        alert('No shift copied. Please copy a shift first.');
+        return;
+    }
+    
+    // Create new shift with copied data
+    const newShiftData = {
+        employee_id: employeeId,
+        date: date,
+        start_time: copiedShift.start_time,
+        end_time: copiedShift.end_time,
+        role: copiedShift.role,
+        status: copiedShift.status,
+        notes: copiedShift.notes,
+        color: copiedShift.color,
+        work_arrangement: copiedShift.work_arrangement
+    };
+    
+    fetch('/schedule/api/shift', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newShiftData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage('Shift pasted successfully!');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            alert('Error pasting shift: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error pasting shift:', error);
+        alert('Error pasting shift');
+    });
+}
+
+// Multi-shift modal functions
 function showMultiShiftModal(employeeId, date) {
     currentEmployeeId = employeeId;
     currentDate = date;
@@ -528,6 +1000,7 @@ function renderShiftsContainer() {
                             
                             ${shift.role ? `<div class="text-muted small">Role: ${shift.role}</div>` : ''}
                             <div class="text-muted small">Status: ${shift.status.replace('_', ' ')}</div>
+                            ${shift.work_arrangement && shift.work_arrangement !== 'onsite' ? `<div class="text-muted small">Work: ${shift.work_arrangement.toUpperCase()}</div>` : ''}
                             ${shift.notes ? `<div class="text-muted small mt-1">Notes: ${shift.notes}</div>` : ''}
                         </div>
                         
@@ -548,70 +1021,7 @@ function renderShiftsContainer() {
     container.innerHTML = html;
 }
 
-function addNewShift() {
-    currentShiftId = null;
-    
-    // Reset form
-    document.getElementById('shiftForm').reset();
-    document.getElementById('shiftId').value = '';
-    document.getElementById('employeeId').value = currentEmployeeId;
-    document.getElementById('shiftDate').value = currentDate;
-    
-    // Reset color picker to default
-    document.querySelectorAll('.color-option').forEach(option => {
-        option.classList.remove('selected');
-        if (option.dataset.color === '#007bff') {
-            option.classList.add('selected');
-        }
-    });
-    document.getElementById('shiftColor').value = '#007bff';
-    document.getElementById('colorDisplay').textContent = '#007bff';
-    
-    // Set employee info
-    const employee = getEmployeeInfo(currentEmployeeId);
-    document.getElementById('employeeInfo').innerHTML = `
-        <div class="d-flex align-items-center">
-            <div class="employee-initials me-2">${employee.initials}</div>
-            <span>${employee.name}</span>
-        </div>
-    `;
-    
-    document.getElementById('shiftModalTitle').textContent = 'Add New Shift';
-    document.getElementById('deleteShiftBtn').style.display = 'none';
-    
-    // Enable all fields
-    document.querySelectorAll('#startTime, #endTime, #shiftRole').forEach(field => {
-        field.removeAttribute('disabled');
-    });
-    
-    new bootstrap.Modal(document.getElementById('shiftModal')).show();
-}
-
-function deleteShiftConfirm(shiftId) {
-    if (confirm('Are you sure you want to delete this shift?')) {
-        fetch(`/schedule/api/shift/${shiftId}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showSuccessMessage('Shift deleted successfully!');
-                // Reload shifts in the modal
-                loadEmployeeShifts(currentEmployeeId, currentDate);
-                // Also refresh the page after a delay
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                alert('Error deleting shift: ' + (data.error || 'Unknown error'));
-            }
-        })
-        .catch(error => {
-            console.error('Error deleting shift:', error);
-            alert('Error deleting shift');
-        });
-    }
-}
-
-// UPDATED: Check if cell has multiple shifts and show appropriate modal
+// Shift management functions
 function createShift(employeeId, date) {
     // First check if there are existing shifts for this day
     fetch(`/schedule/api/shifts/${employeeId}/${date}`)
@@ -664,11 +1074,79 @@ function showCreateShiftModal(employeeId, date) {
     document.getElementById('deleteShiftBtn').style.display = 'none';
     
     // Enable all fields for new shift
-    document.querySelectorAll('#startTime, #endTime, #shiftRole').forEach(field => {
+    document.querySelectorAll('#startTime, #endTime, #shiftRole, #workArrangement').forEach(field => {
         field.removeAttribute('disabled');
     });
     
+    // Fetch employee schedule format for break calculations
+    fetchEmployeeScheduleFormat(employeeId);
+    
     new bootstrap.Modal(document.getElementById('shiftModal')).show();
+}
+
+function addNewShift() {
+    currentShiftId = null;
+    
+    // Reset form
+    document.getElementById('shiftForm').reset();
+    document.getElementById('shiftId').value = '';
+    document.getElementById('employeeId').value = currentEmployeeId;
+    document.getElementById('shiftDate').value = currentDate;
+    
+    // Reset color picker to default
+    document.querySelectorAll('.color-option').forEach(option => {
+        option.classList.remove('selected');
+        if (option.dataset.color === '#007bff') {
+            option.classList.add('selected');
+        }
+    });
+    document.getElementById('shiftColor').value = '#007bff';
+    document.getElementById('colorDisplay').textContent = '#007bff';
+    
+    // Set employee info
+    const employee = getEmployeeInfo(currentEmployeeId);
+    document.getElementById('employeeInfo').innerHTML = `
+        <div class="d-flex align-items-center">
+            <div class="employee-initials me-2">${employee.initials}</div>
+            <span>${employee.name}</span>
+        </div>
+    `;
+    
+    document.getElementById('shiftModalTitle').textContent = 'Add New Shift';
+    document.getElementById('deleteShiftBtn').style.display = 'none';
+    
+    // Enable all fields
+    document.querySelectorAll('#startTime, #endTime, #shiftRole, #workArrangement').forEach(field => {
+        field.removeAttribute('disabled');
+    });
+    
+    // Fetch employee schedule format for break calculations
+    fetchEmployeeScheduleFormat(currentEmployeeId);
+    
+    new bootstrap.Modal(document.getElementById('shiftModal')).show();
+}
+
+// Helper function to fetch employee schedule format
+function fetchEmployeeScheduleFormat(employeeId) {
+    return fetch(`/schedule/api/employee/${employeeId}/schedule-format`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Store employee schedule format globally for break calculations
+                window.currentEmployeeScheduleFormat = data.schedule_format;
+                window.currentEmployeeBreakDuration = data.break_duration_minutes;
+                console.log(`Employee schedule format: ${data.schedule_format} (${data.break_duration_minutes} min break)`);
+            } else {
+                console.warn('Could not fetch employee schedule format, using default');
+                window.currentEmployeeScheduleFormat = '8_hour_shift';
+                window.currentEmployeeBreakDuration = 30;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching employee schedule format:', error);
+            window.currentEmployeeScheduleFormat = '8_hour_shift';
+            window.currentEmployeeBreakDuration = 30;
+        });
 }
 
 function editShift(shiftId, employeeId, date) {
@@ -689,6 +1167,7 @@ function editShift(shiftId, employeeId, date) {
                 document.getElementById('shiftRole').value = shift.role || '';
                 document.getElementById('shiftStatus').value = shift.status;
                 document.getElementById('shiftNotes').value = shift.notes || '';
+                document.getElementById('workArrangement').value = shift.work_arrangement || 'onsite';
                 
                 // Set color picker
                 const shiftColor = shift.color || '#007bff';
@@ -714,6 +1193,11 @@ function editShift(shiftId, employeeId, date) {
                 document.getElementById('shiftModalTitle').textContent = 'Edit Shift';
                 document.getElementById('deleteShiftBtn').style.display = 'block';
                 
+                // Fetch employee schedule format for break calculations
+                fetchEmployeeScheduleFormat(employeeId).then(() => {
+                    updateBreakInfo();
+                });
+                
                 new bootstrap.Modal(document.getElementById('shiftModal')).show();
             } else {
                 alert('Error loading shift: ' + (data.error || 'Unknown error'));
@@ -727,36 +1211,140 @@ function editShift(shiftId, employeeId, date) {
 
 function saveShift() {
     const formData = new FormData(document.getElementById('shiftForm'));
-    const data = Object.fromEntries(formData.entries());
+    const useDateRange = document.getElementById('useDateRange').checked;
     
-    fetch('/schedule/api/shift', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show success message
-            showSuccessMessage(data.message || 'Shift saved successfully!');
-            
-            // Close modal
-            bootstrap.Modal.getInstance(document.getElementById('shiftModal')).hide();
-            
-            // Reload the page to show updated schedule
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
-        } else {
-            alert('Error saving shift: ' + (data.error || 'Unknown error'));
+    if (useDateRange && !currentShiftId) {
+        // Handle date range for new shifts
+        saveShiftRange();
+    } else {
+        // Handle single shift save
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch('/schedule/api/shift', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccessMessage(data.message || 'Shift saved successfully!');
+                bootstrap.Modal.getInstance(document.getElementById('shiftModal')).hide();
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                alert('Error saving shift: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error saving shift:', error);
+            alert('Error saving shift');
+        });
+    }
+}
+
+function saveShiftRange() {
+    const formData = new FormData(document.getElementById('shiftForm'));
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    const selectedDays = Array.from(document.querySelectorAll('input[name="days[]"]:checked')).map(cb => parseInt(cb.value));
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates for the range.');
+        return;
+    }
+    
+    if (selectedDays.length === 0) {
+        alert('Please select at least one day of the week.');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date cannot be after end date.');
+        return;
+    }
+    
+    // Calculate date range
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const dates = [];
+    
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay();
+        if (selectedDays.includes(dayOfWeek)) {
+            dates.push(new Date(d).toISOString().split('T')[0]);
         }
-    })
-    .catch(error => {
-        console.error('Error saving shift:', error);
-        alert('Error saving shift');
+    }
+    
+    if (dates.length === 0) {
+        alert('No dates found matching the selected days of week in the specified range.');
+        return;
+    }
+    
+    if (dates.length > 50) {
+        if (!confirm(`This will create ${dates.length} shifts. Continue?`)) {
+            return;
+        }
+    }
+    
+    // Show progress
+    let completed = 0;
+    const total = dates.length;
+    
+    showSuccessMessage(`Creating ${total} shifts...`);
+    
+    // Create shifts for each date
+    const promises = dates.map(date => {
+        const shiftData = {
+            employee_id: formData.get('employee_id'),
+            date: date,
+            start_time: formData.get('start_time'),
+            end_time: formData.get('end_time'),
+            role: formData.get('role'),
+            status: formData.get('status'),
+            notes: formData.get('notes'),
+            color: formData.get('color'),
+            work_arrangement: formData.get('work_arrangement')
+        };
+        
+        return fetch('/schedule/api/shift', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(shiftData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            completed++;
+            if (data.success) {
+                console.log(`Shift created for ${date}`);
+            } else {
+                console.warn(`Failed to create shift for ${date}: ${data.error}`);
+            }
+            return data;
+        });
     });
+    
+    Promise.all(promises)
+        .then(results => {
+            const successful = results.filter(r => r.success).length;
+            const failed = results.filter(r => !r.success).length;
+            
+            if (failed === 0) {
+                showSuccessMessage(`Successfully created ${successful} shifts!`);
+            } else {
+                showSuccessMessage(`Created ${successful} shifts, ${failed} failed.`);
+            }
+            
+            bootstrap.Modal.getInstance(document.getElementById('shiftModal')).hide();
+            setTimeout(() => location.reload(), 2000);
+        })
+        .catch(error => {
+            console.error('Error creating shift range:', error);
+            alert('Error creating shifts');
+        });
 }
 
 function deleteShift() {
@@ -785,40 +1373,31 @@ function deleteShift() {
     }
 }
 
-// Helper function to show success messages
-function showSuccessMessage(message) {
-    // Create success alert
-    const alertDiv = document.createElement('div');
-    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(alertDiv);
-    
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 3000);
+function deleteShiftConfirm(shiftId) {
+    if (confirm('Are you sure you want to delete this shift?')) {
+        fetch(`/schedule/api/shift/${shiftId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccessMessage('Shift deleted successfully!');
+                // Reload shifts in the modal
+                loadEmployeeShifts(currentEmployeeId, currentDate);
+                // Also refresh the page after a delay
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                alert('Error deleting shift: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting shift:', error);
+            alert('Error deleting shift');
+        });
+    }
 }
 
-function getEmployeeInfo(employeeId) {
-    // This would normally come from the server, but for demo purposes:
-    const employees = {
-        {% for member in team_members %}
-        {{ member.id }}: {
-            name: '{{ member.full_name }}',
-            initials: '{{ member.initials }}'
-        },
-        {% endfor %}
-    };
-    return employees[employeeId] || { name: 'Unknown', initials: '??' };
-}
-
+// Export functions
 function publishSchedule() {
     if (confirm('Are you sure you want to publish this schedule? Team members will be notified.')) {
         alert('Schedule published successfully! Notifications sent to team members.');
@@ -839,6 +1418,20 @@ function exportSchedule() {
     new bootstrap.Modal(document.getElementById('exportModal')).show();
 }
 
+function exportWorksched() {
+    // Set default date range to current week
+    const today = new Date('{{ selected_date.isoformat() }}');
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - today.getDay() + 1);
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - today.getDay() + 7);
+    
+    document.getElementById('exportWorkschedStartDate').value = monday.toISOString().split('T')[0];
+    document.getElementById('exportWorkschedEndDate').value = sunday.toISOString().split('T')[0];
+    
+    new bootstrap.Modal(document.getElementById('exportWorkschedModal')).show();
+}
+
 function doExport() {
     const startDate = document.getElementById('exportStartDate').value;
     const endDate = document.getElementById('exportEndDate').value;
@@ -850,6 +1443,32 @@ function doExport() {
     
     window.location.href = `{{ url_for('schedule.export_schedule') }}?start_date=${startDate}&end_date=${endDate}`;
     bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+}
+
+function doExportWorksched() {
+    const startDate = document.getElementById('exportWorkschedStartDate').value;
+    const endDate = document.getElementById('exportWorkschedEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date cannot be after end date');
+        return;
+    }
+    
+    // Check if date range is reasonable (not more than 3 months)
+    const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 90) {
+        if (!confirm('You selected a date range longer than 3 months. This may result in a large file. Continue?')) {
+            return;
+        }
+    }
+    
+    window.location.href = `{{ url_for('schedule.export_worksched') }}?start_date=${startDate}&end_date=${endDate}`;
+    bootstrap.Modal.getInstance(document.getElementById('exportWorkschedModal')).hide();
 }
 
 function showTemplateModal() {
@@ -864,7 +1483,110 @@ function applyTemplate(templateType) {
     }
 }
 
-// Color picker functionality and other event listeners
+// Helper functions
+function getEmployeeInfo(employeeId) {
+    // This would normally come from the server, but for demo purposes:
+    const employees = {
+        {% for member in team_members %}
+        {{ member.id }}: {
+            name: '{{ member.full_name }}',
+            initials: '{{ member.initials }}'
+        },
+        {% endfor %}
+    };
+    return employees[employeeId] || { name: 'Unknown', initials: '??' };
+}
+
+function showSuccessMessage(message) {
+    // Create success alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+// Enhanced shift modal functionality with break calculations
+function getEmployeeScheduleFormat() {
+    // Use the fetched employee schedule format
+    return window.currentEmployeeScheduleFormat || '8_hour_shift';
+}
+
+function updateBreakInfo() {
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
+    const statusSelect = document.getElementById('shiftStatus');
+    
+    const startTime = startTimeInput?.value;
+    const endTime = endTimeInput?.value;
+    const status = statusSelect?.value;
+    
+    const breakInfoSection = document.getElementById('breakInfoSection');
+    const breakInfoContent = document.getElementById('breakInfoContent');
+    const durationInfo = document.getElementById('shiftDurationInfo');
+    
+    if (!breakInfoSection || !breakInfoContent || !durationInfo) return;
+    
+    if (startTime && endTime && status === 'scheduled') {
+        // Calculate duration
+        const start = new Date(`2000-01-01T${startTime}:00`);
+        const end = new Date(`2000-01-01T${endTime}:00`);
+        
+        // Handle overnight shifts
+        if (end < start) {
+            end.setDate(end.getDate() + 1);
+        }
+        
+        const durationMs = end - start;
+        const durationHours = durationMs / (1000 * 60 * 60);
+        
+        durationInfo.textContent = `Duration: ${durationHours.toFixed(1)} hours`;
+        
+        if (durationHours >= 4) {
+            const employeeScheduleFormat = getEmployeeScheduleFormat();
+            const breakDuration = window.currentEmployeeBreakDuration || 30;
+            
+            let breakType;
+            if (employeeScheduleFormat === '9_hour_shift') {
+                breakType = '1 hour paid break';
+            } else {
+                breakType = '30 minute paid break';
+            }
+            
+            const breakStart = new Date(start.getTime() + (3 * 60 * 60 * 1000)); // 3 hours after start
+            const breakEnd = new Date(breakStart.getTime() + (breakDuration * 60 * 1000));
+            
+            breakInfoContent.innerHTML = `
+                <strong>Break Schedule:</strong> ${breakType}<br>
+                <strong>Break Time:</strong> ${breakStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${breakEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}<br>
+                <small class="text-muted">Break starts 3 hours after shift begins (${employeeScheduleFormat.replace('_', ' ')} format)</small>
+            `;
+            breakInfoSection.style.display = 'block';
+        } else {
+            breakInfoContent.innerHTML = `
+                <strong>No Break:</strong> Shift duration less than 4 hours<br>
+                <small class="text-muted">Minimum 4 hours required for break eligibility</small>
+            `;
+            breakInfoSection.style.display = 'block';
+        }
+    } else {
+        breakInfoSection.style.display = 'none';
+        durationInfo.textContent = '';
+    }
+}
+
+// Document ready functionality
 document.addEventListener('DOMContentLoaded', function() {
     // Color picker logic
     document.querySelectorAll('.color-option').forEach(option => {
@@ -882,26 +1604,170 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Status change logic
+    // Enhanced shift modal event listeners
+    const startTimeInput = document.getElementById('startTime');
+    const endTimeInput = document.getElementById('endTime');
     const statusSelect = document.getElementById('shiftStatus');
-    if (statusSelect) {
-        statusSelect.addEventListener('change', function() {
-            const timeFields = document.querySelectorAll('#startTime, #endTime');
-            const roleField = document.getElementById('shiftRole');
-            
-            if (this.value === 'scheduled') {
-                timeFields.forEach(field => field.removeAttribute('disabled'));
-                roleField.removeAttribute('disabled');
-            } else {
-                timeFields.forEach(field => {
-                    field.setAttribute('disabled', 'disabled');
+    
+    startTimeInput?.addEventListener('change', updateBreakInfo);
+    endTimeInput?.addEventListener('change', updateBreakInfo);
+    statusSelect?.addEventListener('change', function() {
+        updateBreakInfo();
+        
+        const timeFields = document.querySelectorAll('#startTime, #endTime');
+        const roleField = document.getElementById('shiftRole');
+        const workArrangementField = document.getElementById('workArrangement');
+        
+        if (this.value === 'scheduled') {
+            timeFields.forEach(field => field.removeAttribute('disabled'));
+            roleField?.removeAttribute('disabled');
+            workArrangementField?.removeAttribute('disabled');
+        } else {
+            timeFields.forEach(field => {
+                field.setAttribute('disabled', 'disabled');
+                if (['rest_day', 'sick_leave', 'personal_leave', 'emergency_leave', 'annual_vacation', 'holiday_off'].includes(this.value)) {
                     field.value = '';
-                });
-                roleField.setAttribute('disabled', 'disabled');
-                roleField.value = '';
+                }
+            });
+            if (['rest_day'].includes(this.value)) {
+                roleField?.setAttribute('disabled', 'disabled');
+                if (roleField) roleField.value = '';
+                workArrangementField?.setAttribute('disabled', 'disabled');
+                if (workArrangementField) workArrangementField.value = 'onsite';
+            } else {
+                roleField?.removeAttribute('disabled');
+                workArrangementField?.removeAttribute('disabled');
             }
+        }
+    });
+    
+    // Work arrangement styling
+    document.getElementById('workArrangement')?.addEventListener('change', function() {
+        const value = this.value;
+        const parent = this.parentElement;
+        
+        // Remove any existing arrangement classes
+        parent.classList.remove('arrangement-wfh', 'arrangement-onsite', 'arrangement-hybrid', 'arrangement-ob');
+        
+        // Add new class for styling
+        if (value !== 'onsite') {
+            parent.classList.add(`arrangement-${value}`);
+        }
+    });
+    
+    // Date range functionality
+    document.getElementById('useDateRange')?.addEventListener('change', function() {
+        const dateRangeSection = document.getElementById('dateRangeSection');
+        const daysOfWeekSection = document.getElementById('daysOfWeekSection');
+        const singleDateField = document.getElementById('shiftDate');
+        
+        if (this.checked) {
+            // Show date range options
+            dateRangeSection.style.display = 'block';
+            daysOfWeekSection.style.display = 'block';
+            dateRangeSection.classList.add('show');
+            daysOfWeekSection.classList.add('show');
+            
+            // Set default dates
+            const currentDate = singleDateField.value || new Date().toISOString().split('T')[0];
+            document.getElementById('startDate').value = currentDate;
+            
+            // Set end date to one week later
+            const endDate = new Date(currentDate);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+            
+            // Disable single date field
+            singleDateField.disabled = true;
+            singleDateField.style.opacity = '0.5';
+        } else {
+            // Hide date range options
+            dateRangeSection.style.display = 'none';
+            daysOfWeekSection.style.display = 'none';
+            
+            // Enable single date field
+            singleDateField.disabled = false;
+            singleDateField.style.opacity = '1';
+        }
+    });
+    
+    // Quick day selection buttons
+    const weekdaysBtn = document.createElement('button');
+    weekdaysBtn.type = 'button';
+    weekdaysBtn.className = 'btn btn-sm btn-outline-primary me-2';
+    weekdaysBtn.textContent = 'Weekdays Only';
+    weekdaysBtn.onclick = function() {
+        // Uncheck all days
+        document.querySelectorAll('input[name="days[]"]').forEach(cb => cb.checked = false);
+        // Check weekdays only (Mon-Fri)
+        ['dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri'].forEach(id => {
+            document.getElementById(id).checked = true;
         });
+    };
+    
+    const allDaysBtn = document.createElement('button');
+    allDaysBtn.type = 'button';
+    allDaysBtn.className = 'btn btn-sm btn-outline-secondary';
+    allDaysBtn.textContent = 'All Days';
+    allDaysBtn.onclick = function() {
+        document.querySelectorAll('input[name="days[]"]').forEach(cb => cb.checked = true);
+    };
+    
+    // Add quick selection buttons
+    const daysOfWeekSection = document.getElementById('daysOfWeekSection');
+    if (daysOfWeekSection) {
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'mt-2 mb-2';
+        buttonContainer.appendChild(weekdaysBtn);
+        buttonContainer.appendChild(allDaysBtn);
+        daysOfWeekSection.appendChild(buttonContainer);
     }
+    
+    // Hide context menus when clicking elsewhere
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.context-menu')) {
+            hideContextMenu();
+            hideCellContextMenu();
+        }
+    });
+    
+    // Prevent context menu on right click for entire document
+    document.addEventListener('contextmenu', function(e) {
+        // Only prevent default if not on our schedule cells
+        if (!e.target.closest('.shift-card') && !e.target.closest('.add-shift-btn')) {
+            // Allow default context menu for other elements
+            return true;
+        }
+    });
+    
+    // Keyboard shortcuts for copy/paste
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'c' && document.querySelector('.shift-card:focus')) {
+                e.preventDefault();
+                // Copy focused shift
+                const focusedShift = document.querySelector('.shift-card:focus');
+                if (focusedShift) {
+                    const onclick = focusedShift.getAttribute('onclick');
+                    const matches = onclick.match(/editShift\((\d+), (\d+), '([^']+)'\)/);
+                    if (matches) {
+                        copyShift(parseInt(matches[1]), parseInt(matches[2]), matches[3]);
+                    }
+                }
+            } else if (e.key === 'v' && copiedShift && document.querySelector('.shift-card:focus, .add-shift-btn:focus')) {
+                e.preventDefault();
+                // Paste to focused cell
+                const focusedElement = document.querySelector('.shift-card:focus, .add-shift-btn:focus');
+                if (focusedElement) {
+                    const onclick = focusedElement.getAttribute('onclick');
+                    const matches = onclick.match(/createShift\((\d+), '([^']+)'\)/);
+                    if (matches) {
+                        pasteShift(parseInt(matches[1]), matches[2]);
+                    }
+                }
+            }
+        }
+    });
 });
 
 // Keyboard shortcuts

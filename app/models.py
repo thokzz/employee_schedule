@@ -12,6 +12,22 @@ class UserRole(Enum):
     MANAGER = "manager"
     ADMINISTRATOR = "administrator"
 
+class EmployeeType(Enum):
+    CONFIDENTIAL = "confidential"
+    RANK_AND_FILE = "rank_and_file"
+    CONTRACTUAL = "contractual"
+
+class ScheduleFormat(Enum):
+    EIGHT_HOUR = "8_hour_shift"
+    NINE_HOUR = "9_hour_shift"
+    OTHERS = "others"
+
+class WorkArrangement(Enum):
+    WFH = "wfh"
+    ONSITE = "onsite"
+    HYBRID = "hybrid"
+    OB = "ob"  # Official Business
+
 class ShiftStatus(Enum):
     SCHEDULED = "scheduled"
     REST_DAY = "rest_day"
@@ -44,13 +60,17 @@ class User(UserMixin, db.Model):
     avatar = db.Column(db.String(200), default='default_avatar.png')
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     
-    # NEW: Additional user profile fields
+    # UPDATED: Additional user profile fields
     personnel_number = db.Column(db.String(50), unique=True, nullable=True, index=True)
     typecode = db.Column(db.String(20), nullable=True)
     id_number = db.Column(db.String(50), nullable=True)
     hiring_date = db.Column(db.Date, nullable=True)
     job_title = db.Column(db.String(100), nullable=True)
     rank = db.Column(db.String(50), nullable=True)
+    
+    # NEW: Employee type and schedule format
+    employee_type = db.Column(db.Enum(EmployeeType, name='employee_type'), default=EmployeeType.RANK_AND_FILE, nullable=True)
+    schedule_format = db.Column(db.Enum(ScheduleFormat, name='schedule_format'), default=ScheduleFormat.EIGHT_HOUR, nullable=True)
     
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -96,6 +116,15 @@ class User(UserMixin, db.Model):
     
     def can_admin(self):
         return self.role == UserRole.ADMINISTRATOR
+    
+    def get_break_duration_minutes(self):
+        """Get break duration in minutes based on schedule format"""
+        if self.schedule_format == ScheduleFormat.EIGHT_HOUR:
+            return 30  # 30 minutes for 8-hour shift
+        elif self.schedule_format == ScheduleFormat.NINE_HOUR:
+            return 60  # 1 hour for 9-hour shift
+        else:
+            return 30  # Default to 30 minutes for 'others'
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -148,13 +177,16 @@ class Shift(db.Model):
     notes = db.Column(db.Text)
     color = db.Column(db.String(7), default='#007bff')
     
-    # NEW: Add sequence/order for multiple shifts per day
+    # NEW: Work arrangement field
+    work_arrangement = db.Column(db.Enum(WorkArrangement, name='work_arrangement'), default=WorkArrangement.ONSITE, nullable=True)
+    
+    # Add sequence/order for multiple shifts per day
     sequence = db.Column(db.Integer, default=1, nullable=False)
     
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # UPDATED: Remove unique constraint, allow multiple shifts per day
+    # Remove unique constraint, allow multiple shifts per day
     __table_args__ = (
         db.Index('idx_shifts_date_employee', 'date', 'employee_id'),
         db.Index('idx_shifts_employee_date_sequence', 'employee_id', 'date', 'sequence'),
@@ -165,6 +197,26 @@ class Shift(db.Model):
         if self.start_time and self.end_time:
             return f"{self.start_time.strftime('%I:%M%p').lower()}-{self.end_time.strftime('%I:%M%p').lower()}"
         return "No time set"
+    
+    @property
+    def duration_hours(self):
+        """Calculate shift duration in hours"""
+        if self.start_time and self.end_time:
+            start_datetime = datetime.combine(date.today(), self.start_time)
+            end_datetime = datetime.combine(date.today(), self.end_time)
+            
+            # Handle shifts that cross midnight
+            if end_datetime < start_datetime:
+                end_datetime += timedelta(days=1)
+            
+            duration = end_datetime - start_datetime
+            return duration.total_seconds() / 3600
+        return 0
+    
+    @property
+    def qualifies_for_break(self):
+        """Check if shift qualifies for a break (minimum 4 hours)"""
+        return self.duration_hours >= 4.0
     
     @property
     def status_color(self):

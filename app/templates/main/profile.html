@@ -57,6 +57,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('main.update_employment_info') }}">
+                    <!-- Basic Employment Details -->
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -74,6 +75,32 @@
                                        value="{{ current_user.typecode or '' }}"
                                        placeholder="e.g., FT, PT, CT">
                                 <small class="text-muted">Employment type code</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- NEW: Employee Type and Schedule Format -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="employee_type" class="form-label">Employee Type</label>
+                                <select class="form-select" id="employee_type" name="employee_type">
+                                    <option value="rank_and_file" {% if current_user.employee_type and current_user.employee_type.value == 'rank_and_file' %}selected{% endif %}>Rank and File</option>
+                                    <option value="confidential" {% if current_user.employee_type and current_user.employee_type.value == 'confidential' %}selected{% endif %}>Confidential</option>
+                                    <option value="contractual" {% if current_user.employee_type and current_user.employee_type.value == 'contractual' %}selected{% endif %}>Contractual</option>
+                                </select>
+                                <small class="text-muted">Employee classification type</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="schedule_format" class="form-label">Regular Schedule Format</label>
+                                <select class="form-select" id="schedule_format" name="schedule_format">
+                                    <option value="8_hour_shift" {% if current_user.schedule_format and current_user.schedule_format.value == '8_hour_shift' %}selected{% endif %}>8-hour shift (30 min break)</option>
+                                    <option value="9_hour_shift" {% if current_user.schedule_format and current_user.schedule_format.value == '9_hour_shift' %}selected{% endif %}>9-hour shift (1 hour break)</option>
+                                    <option value="others" {% if current_user.schedule_format and current_user.schedule_format.value == 'others' %}selected{% endif %}>Others</option>
+                                </select>
+                                <small class="text-muted">Default work schedule format for break calculations</small>
                             </div>
                         </div>
                     </div>
@@ -159,6 +186,40 @@
                     </div>
                     <div class="col-6">
                         {{ current_user.personnel_number or 'Not set' }}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Employee Type:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.employee_type %}
+                            <span class="badge bg-{{ 'warning' if current_user.employee_type.value == 'confidential' else 'info' if current_user.employee_type.value == 'contractual' else 'primary' }}">
+                                {{ current_user.employee_type.value.replace('_', ' ').title() }}
+                            </span>
+                        {% else %}
+                            Not set
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Schedule Format:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.schedule_format %}
+                            <span class="badge bg-{{ 'success' if current_user.schedule_format.value == '8_hour_shift' else 'warning' if current_user.schedule_format.value == '9_hour_shift' else 'secondary' }}">
+                                {% if current_user.schedule_format.value == '8_hour_shift' %}
+                                    8-hour (30min break)
+                                {% elif current_user.schedule_format.value == '9_hour_shift' %}
+                                    9-hour (1hr break)
+                                {% else %}
+                                    Others
+                                {% endif %}
+                            </span>
+                        {% else %}
+                            Not set
+                        {% endif %}
                     </div>
                 </div>
                 <div class="row mb-2">
@@ -320,13 +381,15 @@ function changePassword() {
 }
 
 function downloadProfile() {
-    // Generate a simple profile summary
+    // Generate a comprehensive profile summary
     const profileData = {
         name: '{{ current_user.full_name }}',
         username: '{{ current_user.username }}',
         email: '{{ current_user.email }}',
         role: '{{ current_user.role.value.title() }}',
         personnel_number: '{{ current_user.personnel_number or "" }}',
+        employee_type: '{{ current_user.employee_type.value.replace("_", " ").title() if current_user.employee_type else "" }}',
+        schedule_format: '{{ current_user.schedule_format.value.replace("_", " ").title() if current_user.schedule_format else "" }}',
         typecode: '{{ current_user.typecode or "" }}',
         job_title: '{{ current_user.job_title or "" }}',
         rank: '{{ current_user.rank or "" }}',
@@ -345,6 +408,8 @@ Personal Information:
 
 Employment Information:
 - Role: ${profileData.role}
+- Employee Type: ${profileData.employee_type || 'Not set'}
+- Schedule Format: ${profileData.schedule_format || 'Not set'}
 - Personnel Number: ${profileData.personnel_number || 'Not set'}
 - Type Code: ${profileData.typecode || 'Not set'}
 - Job Title: ${profileData.job_title || 'Not set'}
@@ -427,6 +492,23 @@ document.getElementById('hiring_date')?.addEventListener('change', function() {
         this.classList.add('is-valid');
         this.setCustomValidity('');
     }
+});
+
+// Schedule format info tooltip
+document.getElementById('schedule_format')?.addEventListener('change', function() {
+    const value = this.value;
+    let info = '';
+    
+    if (value === '8_hour_shift') {
+        info = 'Employees with 8-hour shifts get 30-minute paid breaks';
+    } else if (value === '9_hour_shift') {
+        info = 'Employees with 9-hour shifts get 1-hour paid breaks';
+    } else {
+        info = 'Other schedule formats default to 30-minute breaks';
+    }
+    
+    // You could show this info in a tooltip or small text element
+    console.log(info);
 });
 </script>
 {% endblock %}
