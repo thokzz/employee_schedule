@@ -7,7 +7,7 @@ from flask import render_template, request, jsonify, redirect, url_for, flash, m
 from flask_login import login_required, current_user
 from app.schedule import bp
 from app.models import (User, Shift, Section, Unit, ShiftStatus, WorkArrangement, db, 
-                       DateRemark, DateRemarkType)  # <-- ADDED MISSING IMPORTS
+                       DateRemark, DateRemarkType, ScheduleFormat, EmployeeType)  # <-- ADDED MISSING IMPORTS
 from datetime import datetime, date, timedelta, time
 import calendar
 import csv
@@ -683,3 +683,354 @@ def export_worksched():
     response.headers['Content-Disposition'] = f'attachment; filename=worksched_{start_date.strftime("%b_%d")}_to_{end_date.strftime("%b_%d_%Y")}.csv'
     
     return response
+
+# OTND EXPORT DATA
+
+
+@bp.route('/export-otnd')
+@login_required
+def export_otnd():
+    """Export OTND (Overtime & Night Differential) data for payroll processing"""
+    if not current_user.can_edit_schedule():
+        flash('You do not have permission to export OTND data.', 'danger')
+        return redirect(url_for('schedule.view_schedule'))
+    
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    
+    if not start_date_str or not end_date_str:
+        flash('Please provide start and end dates for OTND export.', 'warning')
+        return redirect(url_for('admin.export_data'))
+    
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    
+    # Get team members based on manager's scope - only RANK_AND_FILE employees
+    from app.models import EmployeeType
+    
+    if current_user.section_id:
+        team_members = User.query.filter_by(
+            section_id=current_user.section_id, 
+            is_active=True,
+            employee_type=EmployeeType.RANK_AND_FILE
+        ).all()
+    elif current_user.unit_id:
+        team_members = User.query.filter_by(
+            unit_id=current_user.unit_id, 
+            is_active=True,
+            employee_type=EmployeeType.RANK_AND_FILE
+        ).all()
+    else:
+        team_members = User.query.filter_by(
+            is_active=True,
+            employee_type=EmployeeType.RANK_AND_FILE
+        ).all()
+    
+    # Get all shifts for the date range and team members
+    shifts = Shift.query.filter(
+        Shift.date.between(start_date, end_date),
+        Shift.employee_id.in_([tm.id for tm in team_members]),
+        Shift.status.in_([ShiftStatus.SCHEDULED, ShiftStatus.HOLIDAY_OFF])
+    ).order_by(Shift.employee_id, Shift.date, Shift.sequence).all()
+    
+    # Get date remarks (holidays) for the period
+    date_remarks = DateRemark.query.filter(
+        DateRemark.date.between(start_date, end_date),
+        DateRemark.remark_type == DateRemarkType.HOLIDAY
+    ).all()
+    
+    holiday_dates = {remark.date for remark in date_remarks}
+    
+    # Calculate OTND entries
+    otnd_entries = []
+    
+    for employee in sorted(team_members, key=lambda x: x.last_name):
+        employee_shifts = [s for s in shifts if s.employee_id == employee.id]
+        
+        for shift in employee_shifts:
+            # Skip if no times set or invalid shift
+            if not shift.start_time or not shift.end_time:
+                continue
+                
+            shift_entries = calculate_otnd_for_shift(employee, shift, holiday_dates)
+            otnd_entries.extend(shift_entries)
+    
+    # Sort entries by employee last name, then by date, then by type
+    otnd_entries.sort(key=lambda x: (x['SURNAME'], x['START DATE'], x['TYPE']))
+    
+    # Create CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header exactly as specified
+    writer.writerow([
+        'SURNAME', 'EMPLOYEE NAME', 'TYPE', 'PERSONNEL NUMBER', 'TYPE CODE',
+        'START TIME', 'END TIME', 'START DATE', 'END DATE', '', 'TOTAL HOURS', 
+        'REASON/REMARKS', 'SECTION', 'UNIT'
+    ])
+    
+    # Write OTND data
+    for entry in otnd_entries:
+        writer.writerow([
+            entry['SURNAME'],
+            entry['EMPLOYEE NAME'],
+            entry['TYPE'],
+            entry['PERSONNEL NUMBER'],
+            entry['TYPE CODE'],
+            entry['START TIME'],
+            entry['END TIME'],
+            entry['START DATE'],
+            entry['END DATE'],
+            '',  # BLANK COLUMN
+            entry['TOTAL HOURS'],
+            entry['REASON/REMARKS'],
+            entry['SECTION'],
+            entry['UNIT']
+        ])
+    
+    # Create response
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=OTND_{start_date.strftime("%b_%d")}_to_{end_date.strftime("%b_%d_%Y")}.csv'
+    
+    return response
+
+
+def calculate_otnd_for_shift(employee, shift, holiday_dates):
+    """Calculate OTND entries for a single shift"""
+    entries = []
+    
+    # Get employee details
+    surname = employee.last_name.upper()
+    employee_name = employee.first_name.upper()
+    personnel_number = employee.personnel_number or ''
+    employee_type_code = employee.typecode or ''  # This is employee's actual type code
+    
+    # Get section and unit separately
+    section_name = employee.section.name if employee.section else ''
+    unit_name = employee.unit.name if employee.unit else ''
+    
+    # Convert shift times to datetime objects for easier calculation
+    shift_date = shift.date
+    start_datetime = datetime.combine(shift_date, shift.start_time)
+    end_datetime = datetime.combine(shift_date, shift.end_time)
+    
+    # Handle shifts that cross midnight
+    if end_datetime <= start_datetime:
+        end_datetime += timedelta(days=1)
+    
+    # Get employee-specific night differential hours
+    nd_start_hour = employee.night_differential_start_hour  # 20 for regular, 22 for probationary
+    nd_end_hour = employee.night_differential_end_hour      # 6 for all
+    
+    # Calculate standard work hours based on schedule format
+    standard_hours = 8 if employee.schedule_format == ScheduleFormat.EIGHT_HOUR else 9
+    
+    # Calculate total shift duration
+    total_shift_hours = (end_datetime - start_datetime).total_seconds() / 3600
+    
+    # Process Holiday Duty first (takes priority over EVERYTHING)
+    holiday_entries = []
+    if shift.status == ShiftStatus.HOLIDAY_OFF or shift_date in holiday_dates:
+        holiday_entries = calculate_holiday_hours(
+            start_datetime, end_datetime, shift_date, holiday_dates,
+            surname, employee_name, personnel_number, section_name, unit_name
+        )
+        entries.extend(holiday_entries)
+    
+    # Calculate Overtime (if not holiday duty AND excluding holiday periods)
+    if shift.status != ShiftStatus.HOLIDAY_OFF and total_shift_hours > standard_hours:
+        # Calculate overtime start time
+        ot_start_datetime = start_datetime + timedelta(hours=standard_hours)
+        
+        # If shift extends beyond standard hours
+        if ot_start_datetime < end_datetime:
+            # Calculate OT but exclude holiday periods
+            ot_entries = calculate_overtime_excluding_holidays(
+                ot_start_datetime, end_datetime, holiday_entries,
+                surname, employee_name, personnel_number, section_name, unit_name
+            )
+            entries.extend(ot_entries)
+    
+    # Calculate Night Differential (excluding holiday hours)
+    nd_entries = calculate_night_differential(
+        start_datetime, end_datetime, nd_start_hour, nd_end_hour,
+        holiday_entries, surname, employee_name, personnel_number, 
+        section_name, unit_name
+    )
+    entries.extend(nd_entries)
+    
+    return entries
+
+
+def calculate_overtime_excluding_holidays(ot_start_datetime, end_datetime, holiday_entries,
+                                        surname, employee_name, personnel_number, section_name, unit_name):
+    """Calculate overtime hours excluding holiday periods"""
+    entries = []
+    
+    # Create set of holiday time periods to exclude
+    holiday_periods = []
+    for holiday_entry in holiday_entries:
+        holiday_start = datetime.strptime(f"{holiday_entry['START DATE']} {holiday_entry['START TIME']}", '%m/%d/%Y %H:%M')
+        holiday_end = datetime.strptime(f"{holiday_entry['END DATE']} {holiday_entry['END TIME']}", '%m/%d/%Y %H:%M')
+        holiday_periods.append((holiday_start, holiday_end))
+    
+    # Start with the full OT period
+    ot_segments = [(ot_start_datetime, end_datetime)]
+    
+    # Remove holiday periods from OT calculation
+    for holiday_start, holiday_end in holiday_periods:
+        new_segments = []
+        for seg_start, seg_end in ot_segments:
+            # If holiday overlaps with OT segment
+            if holiday_start < seg_end and holiday_end > seg_start:
+                # Add segment before holiday (if any)
+                if seg_start < holiday_start:
+                    new_segments.append((seg_start, min(seg_end, holiday_start)))
+                # Add segment after holiday (if any)
+                if seg_end > holiday_end:
+                    new_segments.append((max(seg_start, holiday_end), seg_end))
+            else:
+                # No overlap, keep segment
+                new_segments.append((seg_start, seg_end))
+        ot_segments = new_segments
+    
+    # Create OT entries for remaining segments
+    for seg_start, seg_end in ot_segments:
+        ot_hours = (seg_end - seg_start).total_seconds() / 3600
+        if ot_hours > 0:
+            entries.append({
+                'SURNAME': surname,
+                'EMPLOYEE NAME': employee_name,
+                'TYPE': 'OT',  # Always OT for overtime
+                'PERSONNEL NUMBER': personnel_number,
+                'TYPE CODE': '801',  # SAP system reference for OT
+                'START TIME': seg_start.strftime('%H:%M'),
+                'END TIME': seg_end.strftime('%H:%M'),
+                'START DATE': seg_start.strftime('%m/%d/%Y'),
+                'END DATE': seg_end.strftime('%m/%d/%Y'),
+                'TOTAL HOURS': f"{ot_hours:.2f}",
+                'REASON/REMARKS': 'OT PEAKLOAD',
+                'SECTION': section_name,
+                'UNIT': unit_name
+            })
+    
+    return entries
+
+
+def calculate_holiday_hours(start_datetime, end_datetime, shift_date, holiday_dates, 
+                          surname, employee_name, personnel_number, section_name, unit_name):
+    """Calculate holiday hours for a shift"""
+    entries = []
+    
+    current_datetime = start_datetime
+    
+    while current_datetime < end_datetime:
+        current_date = current_datetime.date()
+        
+        if current_date in holiday_dates:
+            # Find the end of holiday period (end of day or end of shift, whichever is earlier)
+            end_of_day = datetime.combine(current_date, time(23, 59, 59))
+            holiday_end = min(end_datetime, end_of_day + timedelta(seconds=1))
+            
+            holiday_hours = (holiday_end - current_datetime).total_seconds() / 3600
+            
+            if holiday_hours > 0:
+                entries.append({
+                    'SURNAME': surname,
+                    'EMPLOYEE NAME': employee_name,
+                    'TYPE': 'OT',  # Holiday is written as OT
+                    'PERSONNEL NUMBER': personnel_number,
+                    'TYPE CODE': '801',  # SAP system reference - Holiday is also OT type
+                    'START TIME': current_datetime.strftime('%H:%M'),
+                    'END TIME': holiday_end.strftime('%H:%M'),
+                    'START DATE': current_datetime.strftime('%m/%d/%Y'),
+                    'END DATE': holiday_end.strftime('%m/%d/%Y'),
+                    'TOTAL HOURS': f"{holiday_hours:.2f}",
+                    'REASON/REMARKS': 'OT HOLIDAY',
+                    'SECTION': section_name,
+                    'UNIT': unit_name
+                })
+            
+            current_datetime = holiday_end
+        else:
+            # Move to next day if current day is not a holiday
+            next_day = datetime.combine(current_date + timedelta(days=1), time(0, 0))
+            current_datetime = min(next_day, end_datetime)
+    
+    return entries
+
+
+def calculate_night_differential(start_datetime, end_datetime, nd_start_hour, nd_end_hour,
+                               holiday_entries, surname, employee_name, personnel_number,
+                               section_name, unit_name):
+    """Calculate night differential hours excluding holiday periods"""
+    entries = []
+    
+    # Create set of holiday time periods to exclude
+    holiday_periods = []
+    for holiday_entry in holiday_entries:
+        holiday_start = datetime.strptime(f"{holiday_entry['START DATE']} {holiday_entry['START TIME']}", '%m/%d/%Y %H:%M')
+        holiday_end = datetime.strptime(f"{holiday_entry['END DATE']} {holiday_entry['END TIME']}", '%m/%d/%Y %H:%M')
+        holiday_periods.append((holiday_start, holiday_end))
+    
+    # Calculate ND periods day by day
+    current_datetime = start_datetime
+    
+    while current_datetime < end_datetime:
+        current_date = current_datetime.date()
+        
+        # Define ND period for current day (8PM/10PM to 6AM next day)
+        nd_start = datetime.combine(current_date, time(nd_start_hour, 0))
+        nd_end = datetime.combine(current_date + timedelta(days=1), time(nd_end_hour, 0))
+        
+        # Find intersection of shift time and ND period
+        nd_period_start = max(current_datetime, nd_start)
+        nd_period_end = min(end_datetime, nd_end)
+        
+        if nd_period_start < nd_period_end:
+            # Remove holiday periods from ND calculation
+            nd_segments = [(nd_period_start, nd_period_end)]
+            
+            for holiday_start, holiday_end in holiday_periods:
+                new_segments = []
+                for seg_start, seg_end in nd_segments:
+                    # If holiday overlaps with ND segment
+                    if holiday_start < seg_end and holiday_end > seg_start:
+                        # Add segment before holiday (if any)
+                        if seg_start < holiday_start:
+                            new_segments.append((seg_start, min(seg_end, holiday_start)))
+                        # Add segment after holiday (if any)
+                        if seg_end > holiday_end:
+                            new_segments.append((max(seg_start, holiday_end), seg_end))
+                    else:
+                        # No overlap, keep segment
+                        new_segments.append((seg_start, seg_end))
+                nd_segments = new_segments
+            
+            # Create ND entries for remaining segments
+            for seg_start, seg_end in nd_segments:
+                nd_hours = (seg_end - seg_start).total_seconds() / 3600
+                if nd_hours > 0:
+                    entries.append({
+                        'SURNAME': surname,
+                        'EMPLOYEE NAME': employee_name,
+                        'TYPE': 'ND',  # Keep as ND for night differential
+                        'PERSONNEL NUMBER': personnel_number,
+                        'TYPE CODE': '803',  # SAP system reference for ND
+                        'START TIME': seg_start.strftime('%H:%M'),
+                        'END TIME': seg_end.strftime('%H:%M'),
+                        'START DATE': seg_start.strftime('%m/%d/%Y'),
+                        'END DATE': seg_end.strftime('%m/%d/%Y'),
+                        'TOTAL HOURS': f"{nd_hours:.2f}",
+                        'REASON/REMARKS': 'ND',
+                        'SECTION': section_name,
+                        'UNIT': unit_name
+                    })
+        
+        # Move to next day
+        current_datetime = datetime.combine(current_date + timedelta(days=1), time(0, 0))
+        if current_datetime >= end_datetime:
+            break
+    
+    return entries

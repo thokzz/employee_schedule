@@ -97,23 +97,23 @@
                 <p class="card-text">Export Overtime, Night Differential, and special pay calculations for payroll processing.</p>
                 
                 <div class="mb-3">
-                    <h6 class="text-muted">Features (Coming Soon):</h6>
+                    <h6 class="text-muted">Features:</h6>
                     <ul class="small">
-                        <li>Overtime hours calculation</li>
-                        <li>Night differential tracking</li>
-                        <li>Holiday and special day rates</li>
-                        <li>Payroll-ready format</li>
-                        <li>Compliance reporting</li>
+                        <li>Overtime hours calculation (8hr/9hr shifts)</li>
+                        <li>Night differential tracking (8PM-6AM/10PM-6AM)</li>
+                        <li>Holiday duty calculations</li>
+                        <li>Payroll-ready CSV format</li>
+                        <li>Rank and File employees only</li>
+                        <li>Excludes Confidential/Contractual staff</li>
                     </ul>
                 </div>
                 
-                <button class="btn btn-warning w-100" onclick="showOTNDExportModal()" disabled>
+                <button class="btn btn-warning w-100" onclick="showOTNDExportModal()">
                     <i class="bi bi-file-earmark-plus"></i> Export OTND
-                    <span class="badge bg-light text-dark ms-2">Coming Soon</span>
                 </button>
             </div>
             <div class="card-footer text-muted">
-                <small>Best for: Payroll processing, overtime tracking</small>
+                <small>Best for: Payroll processing, overtime tracking, compliance</small>
             </div>
         </div>
     </div>
@@ -295,7 +295,7 @@
     </div>
 </div>
 
-<!-- OTND Export Modal -->
+<!-- Updated OTND Export Modal -->
 <div class="modal fade" id="otndExportModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -305,35 +305,61 @@
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning">
-                    <i class="bi bi-construction"></i>
-                    <strong>Coming Soon:</strong> OTND export functionality is currently under development.
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>OTND Export:</strong> This generates overtime and night differential calculations for <strong>Rank and File employees only</strong>. Confidential and Contractual employees are excluded.
                 </div>
                 
-                <div class="mb-3">
-                    <h6>Planned Features:</h6>
-                    <ul class="text-muted">
-                        <li><strong>Overtime Calculation:</strong> Automatic calculation of overtime hours based on standard work hours</li>
-                        <li><strong>Night Differential:</strong> Night shift premium calculations (typically 10% of basic pay)</li>
-                        <li><strong>Holiday Rates:</strong> Special holiday and rest day premium calculations</li>
-                        <li><strong>Payroll Integration:</strong> Export format compatible with payroll systems</li>
-                        <li><strong>Compliance Reporting:</strong> Reports that meet labor law requirements</li>
-                    </ul>
-                </div>
-                
-                <div class="mb-3">
-                    <h6>Expected Timeline:</h6>
-                    <p class="text-muted">This feature is planned for the next major update. It will include comprehensive overtime and night differential calculations based on Philippine labor laws.</p>
-                </div>
+                <form id="otndExportForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportOTNDStartDate" class="form-label">Start Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportOTNDStartDate" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="exportOTNDEndDate" class="form-label">End Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="exportOTNDEndDate" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>OTND Calculation Rules:</h6>
+                        <ul class="small text-muted">
+                            <li><strong>Overtime (OT):</strong> Hours beyond 8 (8-hour shift) or 9 (9-hour shift) standard work hours</li>
+                            <li><strong>Night Differential (ND):</strong> 
+                                <ul>
+                                    <li>Regular employees: 8:00 PM to 6:00 AM</li>
+                                    <li>Probationary employees: 10:00 PM to 6:00 AM</li>
+                                </ul>
+                            </li>
+                            <li><strong>Holiday Duty:</strong> Classified as OT, takes priority over ND for overlapping hours</li>
+                            <li><strong>Employee Filter:</strong> Only Rank and File employees included</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <h6 class="alert-heading">Sample Calculations:</h6>
+                        <ul class="small mb-0">
+                            <li><strong>8-hour employee, 9am-7pm shift:</strong> 2 hours OT (beyond 8 hours)</li>
+                            <li><strong>Night shift 10pm-6am:</strong> 8 hours ND</li>
+                            <li><strong>Holiday shift 10pm-6am on Jan 1:</strong> 2 hours Holiday (10pm-12am), 6 hours ND (12am-6am)</li>
+                        </ul>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-warning" disabled>
-                    <i class="bi bi-hourglass-split"></i> Feature In Development
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="doExportOTND()">
+                    <i class="bi bi-file-earmark-plus"></i> Generate OTND Report
                 </button>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -365,7 +391,54 @@ function showWorkschedExportModal() {
 }
 
 function showOTNDExportModal() {
+    // Set default dates
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    document.getElementById('exportOTNDStartDate').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('exportOTNDEndDate').value = lastDay.toISOString().split('T')[0];
+    
     new bootstrap.Modal(document.getElementById('otndExportModal')).show();
+}
+
+function doExportOTND() {
+    const startDate = document.getElementById('exportOTNDStartDate').value;
+    const endDate = document.getElementById('exportOTNDEndDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date cannot be after end date');
+        return;
+    }
+    
+    // Check if date range is reasonable (not more than 1 month for OTND)
+    const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 31) {
+        if (!confirm('You selected a date range longer than 1 month. OTND calculations may take some time. Continue?')) {
+            return;
+        }
+    }
+    
+    // Show loading state
+    const exportBtn = event.target;
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating OTND...';
+    exportBtn.disabled = true;
+    
+    // Trigger download
+    window.location.href = `{{ url_for('schedule.export_otnd') }}?start_date=${startDate}&end_date=${endDate}`;
+    
+    // Reset button after delay
+    setTimeout(() => {
+        exportBtn.innerHTML = originalText;
+        exportBtn.disabled = false;
+        bootstrap.Modal.getInstance(document.getElementById('otndExportModal')).hide();
+    }, 3000);
 }
 
 function doCSVExport() {

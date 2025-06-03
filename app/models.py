@@ -111,6 +111,36 @@ class User(UserMixin, db.Model):
             return today.year - self.hiring_date.year - ((today.month, today.day) < (self.hiring_date.month, self.hiring_date.day))
         return None
     
+    @property
+    def is_probationary(self):
+        """Check if employee is probationary based on rank or other criteria"""
+        # You can implement this logic based on your business rules
+        # Option 1: Check if rank contains "Probationary"
+        if self.rank and 'probationary' in self.rank.lower():
+            return True
+        
+        # Option 2: Check hiring date (e.g., less than 6 months)
+        if self.hiring_date:
+            months_employed = (date.today() - self.hiring_date).days / 30.44  # Average days per month
+            if months_employed < 6:  # Probationary period is typically 6 months
+                return True
+        
+        # Option 3: Check typecode if it indicates probationary status
+        if self.typecode and 'PROB' in self.typecode.upper():
+            return True
+            
+        return False
+
+    @property 
+    def night_differential_start_hour(self):
+        """Get the start hour for night differential based on employee status"""
+        return 20 if not self.is_probationary else 22  # 8:00 PM for regular, 10:00 PM for probationary
+
+    @property
+    def night_differential_end_hour(self):
+        """Get the end hour for night differential"""
+        return 6  # 6:00 AM for all employees
+
     def can_edit_schedule(self):
         return self.role in [UserRole.MANAGER, UserRole.ADMINISTRATOR]
     

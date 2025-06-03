@@ -68,15 +68,6 @@
                                 <small class="text-muted">Unique employee identification number</small>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="typecode" class="form-label">Type Code</label>
-                                <input type="text" class="form-control" id="typecode" name="typecode" 
-                                       value="{{ current_user.typecode or '' }}"
-                                       placeholder="e.g., Based on Worksched information">
-                                <small class="text-muted">Employment type code</small>
-                            </div>
-                        </div>
                     </div>
                     
                     <!-- NEW: Employee Type and Schedule Format -->
@@ -219,18 +210,6 @@
                                     Others
                                 {% endif %}
                             </span>
-                        {% else %}
-                            Not set
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="row mb-2">
-                    <div class="col-6">
-                        <strong>Type Code:</strong>
-                    </div>
-                    <div class="col-6">
-                        {% if current_user.typecode %}
-                            <span class="badge bg-secondary">{{ current_user.typecode }}</span>
                         {% else %}
                             Not set
                         {% endif %}
@@ -413,7 +392,6 @@ Employment Information:
 - Employee Type: ${profileData.employee_type || 'Not set'}
 - Schedule Format: ${profileData.schedule_format || 'Not set'}
 - Personnel Number: ${profileData.personnel_number || 'Not set'}
-- Type Code: ${profileData.typecode || 'Not set'}
 - Job Title: ${profileData.job_title || 'Not set'}
 - Rank: ${profileData.rank || 'Not set'}
 - Hiring Date: ${profileData.hiring_date || 'Not set'}
@@ -471,12 +449,6 @@ document.getElementById('confirm_password')?.addEventListener('input', function(
 
 // Auto-format personnel number
 document.getElementById('personnel_number')?.addEventListener('input', function() {
-    let value = this.value.toUpperCase();
-    this.value = value;
-});
-
-// Auto-format type code
-document.getElementById('typecode')?.addEventListener('input', function() {
     let value = this.value.toUpperCase();
     this.value = value;
 });
