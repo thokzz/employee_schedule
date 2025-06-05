@@ -1,0 +1,529 @@
+<!-- Create: app/templates/admin/edit_department.html -->
+{% extends "base.html" %}
+
+{% block title %}Edit Department - {{ department.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Edit Department - {{ department.name }}</h1>
+    <a href="{{ url_for('admin.manage_departments') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Departments
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Department Information -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Department Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.edit_department', department_id=department.id) }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Department Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ department.name }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="4">{{ department.description or '' }}</textarea>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('admin.manage_departments') }}" class="btn btn-secondary me-md-2">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Update Department</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Department Members -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Department Members ({{ dept_users|length }})</h5>
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-person-plus"></i> Add User
+                </button>
+            </div>
+            <div class="card-body">
+                {% if dept_users %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Role</th>
+                                    <th>Division</th>
+                                    <th>Section</th>
+                                    <th>Approver Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in dept_users %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="employee-initials me-2" style="width: 30px; height: 30px; font-size: 0.8rem;">
+                                                {{ user.initials }}
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.full_name }}</strong>
+                                                <br><small class="text-muted">{{ user.username }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if user.role.value == 'administrator' else 'warning' if user.role.value == 'manager' else 'primary' }}">
+                                            {{ user.role.value.title() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ user.division.name if user.division else '-' }}</td>
+                                    <td>{{ user.section.name if user.section else '-' }}</td>
+                                    <td>
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            {% if user.is_department_approver %}
+                                                <span class="badge bg-danger">Dept</span>
+                                            {% endif %}
+                                            {% if user.is_division_approver %}
+                                                <span class="badge bg-warning">Div</span>
+                                            {% endif %}
+                                            {% if user.is_section_approver %}
+                                                <span class="badge bg-success">Sec</span>
+                                            {% endif %}
+                                            {% if user.is_unit_approver %}
+                                                <span class="badge bg-info">Unit</span>
+                                            {% endif %}
+                                            {% if user.role.value in ['manager', 'administrator'] %}
+                                                <span class="badge bg-primary">Auto</span>
+                                            {% endif %}
+                                            {% if not user.can_approve_leaves() %}
+                                                <span class="badge bg-light text-dark">None</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="mt-1">
+                                            <small class="text-muted">Scope: {{ user.approver_scope }}</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editUserApproverStatus({{ user.id }}, '{{ user.full_name }}', {{ user.is_department_approver|lower }}, {{ user.is_division_approver|lower }}, {{ user.is_section_approver|lower }}, {{ user.is_unit_approver|lower }})"
+                                                    title="Edit Approver Status">
+                                                <i class="bi bi-person-check"></i>
+                                            </button>
+                                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
+                                               class="btn btn-sm btn-outline-secondary" title="Edit User">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    onclick="removeUserFromDepartment({{ user.id }}, '{{ user.full_name }}')"
+                                                    title="Remove from Department">
+                                                <i class="bi bi-person-dash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-people display-4"></i>
+                        <p class="mt-2">No users assigned to this department</p>
+                        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="bi bi-person-plus"></i> Add First User
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Department Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Department Summary</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Users:</span>
+                    <span class="badge bg-primary">{{ dept_users|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Active Users:</span>
+                    <span class="badge bg-success">{{ dept_users|selectattr('is_active')|list|length }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Divisions:</span>
+                    <span class="badge bg-warning text-dark">{{ department.divisions.count() }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Created:</span>
+                    <span class="text-muted">{{ department.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Department Approvers -->
+        <div class="card mt-3">
+            <div class="card-header bg-danger text-white">
+                <h6 class="card-title mb-0"><i class="bi bi-shield-check"></i> Department Approvers</h6>
+            </div>
+            <div class="card-body">
+                {% set dept_approvers = dept_users|selectattr('is_department_approver')|list %}
+                {% if dept_approvers %}
+                    {% for approver in dept_approvers %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <div class="fw-bold">{{ approver.full_name }}</div>
+                                <small class="text-muted">{{ approver.job_title or approver.role.value.title() }}</small>
+                                <div class="small text-info">Scope: {{ approver.approver_scope }}</div>
+                            </div>
+                        </div>
+                        {% if not loop.last %}<hr class="my-2">{% endif %}
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-2">
+                        <i class="bi bi-shield-exclamation text-warning"></i>
+                        <p class="text-muted mb-0 small">No department approvers assigned</p>
+                        <button class="btn btn-sm btn-outline-danger mt-2" onclick="assignDepartmentApprovers()">
+                            Assign Approvers
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Quick Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.manage_divisions') }}?department={{ department.id }}" 
+                       class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-diagram-2"></i> Manage Divisions
+                    </a>
+                    <button class="btn btn-outline-info btn-sm" onclick="viewDepartmentReport()">
+                        <i class="bi bi-graph-up"></i> View Report
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="exportDepartmentData()">
+                        <i class="bi bi-download"></i> Export Data
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="confirmDeleteDepartment()">
+                        <i class="bi bi-trash"></i> Delete Department
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add User to Department</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('admin.add_user_to_department', department_id=department.id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">Select User</label>
+                        <select class="form-select" id="user_id" name="user_id" required>
+                            <option value="">Choose a user...</option>
+                            {% if unassigned_users %}
+                                <optgroup label="Unassigned Users">
+                                    {% for user in unassigned_users %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.full_name }} ({{ user.username }}) - {{ user.role.value.title() }}
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+                            {% if other_users %}
+                                <optgroup label="Users from Other Departments">
+                                    {% for user in other_users %}
+                                        <option value="{{ user.id }}">
+                                            {{ user.full_name }} ({{ user.department.name if user.department else 'No Department' }})
+                                        </option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endif %}
+                        </select>
+                        <small class="text-muted">
+                            {% if not unassigned_users and not other_users %}
+                                No available users. All users are already assigned to this department.
+                            {% else %}
+                                Users will be moved to this department and assigned to the default division.
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" 
+                            {% if not unassigned_users and not other_users %}disabled{% endif %}>
+                        Add to Department
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Approver Status Modal -->
+<div class="modal fade" id="approverModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Approver Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Configure approval permissions for <strong id="approverUserName"></strong>:</p>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="isDepartmentApprover">
+                    <label class="form-check-label" for="isDepartmentApprover">
+                        <strong>Department Approver</strong>
+                        <br><small class="text-muted">Can approve leave requests for all employees in the department</small>
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="isDivisionApprover">
+                    <label class="form-check-label" for="isDivisionApprover">
+                        <strong>Division Approver</strong>
+                        <br><small class="text-muted">Can approve leave requests for all employees in their division</small>
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="isSectionApprover">
+                    <label class="form-check-label" for="isSectionApprover">
+                        <strong>Section Approver</strong>
+                        <br><small class="text-muted">Can approve leave requests for employees in their section</small>
+                    </label>
+                </div>
+                
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="isUnitApprover">
+                    <label class="form-check-label" for="isUnitApprover">
+                        <strong>Unit Approver</strong>
+                        <br><small class="text-muted">Can approve leave requests for employees in their unit</small>
+                    </label>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Users with Manager or Administrator roles automatically have approval permissions.
+                </div>
+                
+                <input type="hidden" id="approverUserId">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveApproverStatus()">
+                    <i class="bi bi-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Remove User Confirmation Modal -->
+<div class="modal fade" id="removeUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Remove User from Department</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to remove <strong id="removeUserName"></strong> from this department?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> This will also remove them from all divisions, sections, and units in this department and reset their approver status.
+                </div>
+                <input type="hidden" id="removeUserId">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmRemoveUser()">
+                    <i class="bi bi-person-dash"></i> Remove User
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Department Confirmation Modal -->
+<div class="modal fade" id="deleteDepartmentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Department</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete department <strong>{{ department.name }}</strong>?</p>
+                
+                {% if dept_users|length > 0 or department.divisions.count() > 0 %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Cannot Delete:</strong> This department has:
+                    <ul class="mb-0 mt-2">
+                        {% if dept_users|length > 0 %}
+                        <li>{{ dept_users|length }} users assigned</li>
+                        {% endif %}
+                        {% if department.divisions.count() > 0 %}
+                        <li>{{ department.divisions.count() }} divisions</li>
+                        {% endif %}
+                    </ul>
+                    <p class="mt-2 mb-0">Please reassign or remove these before deleting the department.</p>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('admin.delete_department', department_id=department.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger" 
+                            {% if dept_users|length > 0 or department.divisions.count() > 0 %}disabled{% endif %}>
+                        <i class="bi bi-trash"></i> Delete Department
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function editUserApproverStatus(userId, userName, isDepartmentApprover, isDivisionApprover, isSectionApprover, isUnitApprover) {
+    document.getElementById('approverUserId').value = userId;
+    document.getElementById('approverUserName').textContent = userName;
+    document.getElementById('isDepartmentApprover').checked = isDepartmentApprover;
+    document.getElementById('isDivisionApprover').checked = isDivisionApprover;
+    document.getElementById('isSectionApprover').checked = isSectionApprover;
+    document.getElementById('isUnitApprover').checked = isUnitApprover;
+    
+    new bootstrap.Modal(document.getElementById('approverModal')).show();
+}
+
+function saveApproverStatus() {
+    const userId = document.getElementById('approverUserId').value;
+    const isDepartmentApprover = document.getElementById('isDepartmentApprover').checked;
+    const isDivisionApprover = document.getElementById('isDivisionApprover').checked;
+    const isSectionApprover = document.getElementById('isSectionApprover').checked;
+    const isUnitApprover = document.getElementById('isUnitApprover').checked;
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
+    button.disabled = true;
+    
+    fetch(`/admin/users/${userId}/approver-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            is_department_approver: isDepartmentApprover,
+            is_division_approver: isDivisionApprover,
+            is_section_approver: isSectionApprover,
+            is_unit_approver: isUnitApprover
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage('Approver status updated successfully!');
+            bootstrap.Modal.getInstance(document.getElementById('approverModal')).hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            alert('Error updating approver status: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating approver status');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function removeUserFromDepartment(userId, userName) {
+    document.getElementById('removeUserId').value = userId;
+    document.getElementById('removeUserName').textContent = userName;
+    
+    new bootstrap.Modal(document.getElementById('removeUserModal')).show();
+}
+
+function confirmRemoveUser() {
+    const userId = document.getElementById('removeUserId').value;
+    
+    window.location.href = `/admin/departments/{{ department.id }}/remove-user/${userId}`;
+}
+
+function assignDepartmentApprovers() {
+    alert('Bulk department approver assignment feature coming soon!');
+}
+
+function viewDepartmentReport() {
+    alert('Department reporting feature coming soon!');
+}
+
+function exportDepartmentData() {
+    window.location.href = `/admin/departments/{{ department.id }}/export`;
+}
+
+function confirmDeleteDepartment() {
+    new bootstrap.Modal(document.getElementById('deleteDepartmentModal')).show();
+}
+
+function showSuccessMessage(message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+// Auto-focus on user select when modal opens
+document.getElementById('addUserModal').addEventListener('shown.bs.modal', function () {
+    document.getElementById('user_id').focus();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'u' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('addUserModal')).show();
+    }
+});
+</script>
+{% endblock %}

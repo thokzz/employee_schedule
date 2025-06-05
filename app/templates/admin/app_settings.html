@@ -1,0 +1,305 @@
+<!-- Create new file: app/templates/admin/app_settings.html -->
+
+{% extends "base.html" %}
+
+{% block title %}Application Settings{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Application Settings</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-info" id="testUrlBtn">
+            <i class="bi bi-link-45deg"></i> Test URL
+        </button>
+    </div>
+</div>
+
+<form method="POST" action="{{ url_for('admin.update_app_settings') }}">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- External URL Configuration -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4><i class="bi bi-globe"></i> External URL Configuration</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Important:</strong> This URL is used in email notifications and PDF links. 
+                        Make sure it's accessible from outside your network.
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="external_url" class="form-label">External Application URL <span class="text-danger">*</span></label>
+                        <input type="url" class="form-control" id="external_url" name="external_url" 
+                               value="{{ settings.external_url or '' }}" 
+                               placeholder="https://your-app-domain.com">
+                        <small class="form-text text-muted">
+                            Full URL where your application is accessible (include https://)
+                        </small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="app_name" class="form-label">Application Name</label>
+                                <input type="text" class="form-control" id="app_name" name="app_name" 
+                                       value="{{ settings.app_name or 'Employee Scheduling System' }}"
+                                       placeholder="Employee Scheduling System">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="company_name" class="form-label">Company Name</label>
+                                <input type="text" class="form-control" id="company_name" name="company_name" 
+                                       value="{{ settings.company_name or '' }}"
+                                       placeholder="Your Company Name">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="app_description" class="form-label">Application Description</label>
+                        <textarea class="form-control" id="app_description" name="app_description" rows="3"
+                                  placeholder="Brief description of your scheduling system">{{ settings.app_description or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Email Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4><i class="bi bi-envelope"></i> Email Template Settings</h4>
+                </div>
+                <div class="card-body">
+                    <div class="form-group mb-3">
+                        <label for="email_footer_text" class="form-label">Email Footer Text</label>
+                        <textarea class="form-control" id="email_footer_text" name="email_footer_text" rows="3"
+                                  placeholder="Footer text that appears in all system emails">{{ settings.email_footer_text or '' }}</textarea>
+                        <small class="form-text text-muted">This appears at the bottom of all system emails</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="company_logo_url" class="form-label">Company Logo URL</label>
+                        <input type="url" class="form-control" id="company_logo_url" name="company_logo_url" 
+                               value="{{ settings.company_logo_url or '' }}"
+                               placeholder="https://your-company.com/logo.png">
+                        <small class="form-text text-muted">URL to your company logo for emails (optional)</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Security Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4><i class="bi bi-shield-lock"></i> Security Settings</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="session_timeout_minutes" class="form-label">Session Timeout (minutes)</label>
+                                <input type="number" class="form-control" id="session_timeout_minutes" name="session_timeout_minutes" 
+                                       value="{{ settings.session_timeout_minutes or 480 }}" 
+                                       min="30" max="1440">
+                                <small class="form-text text-muted">How long users stay logged in (30-1440 minutes)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="max_login_attempts" class="form-label">Max Login Attempts</label>
+                                <input type="number" class="form-control" id="max_login_attempts" name="max_login_attempts" 
+                                       value="{{ settings.max_login_attempts or 5 }}" 
+                                       min="3" max="10">
+                                <small class="form-text text-muted">Failed attempts before account lockout</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Feature Toggles -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4><i class="bi bi-toggles"></i> Feature Controls</h4>
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="enable_leave_requests" name="enable_leave_requests"
+                               {{ 'checked' if settings.enable_leave_requests }}>
+                        <label class="form-check-label" for="enable_leave_requests">
+                            <strong>Enable Leave Requests</strong>
+                        </label>
+                        <small class="form-text text-muted d-block">Allow employees to submit leave requests</small>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="enable_schedule_export" name="enable_schedule_export"
+                               {{ 'checked' if settings.enable_schedule_export }}>
+                        <label class="form-check-label" for="enable_schedule_export">
+                            <strong>Enable Schedule Export</strong>
+                        </label>
+                        <small class="form-text text-muted d-block">Allow schedule data export</small>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="enable_user_registration" name="enable_user_registration"
+                               {{ 'checked' if settings.enable_user_registration }}>
+                        <label class="form-check-label" for="enable_user_registration">
+                            <strong>Enable User Registration</strong>
+                        </label>
+                        <small class="form-text text-muted d-block">Allow users to register accounts</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Current Configuration Preview -->
+            <div class="card">
+                <div class="card-header">
+                    <h4><i class="bi bi-eye"></i> Current Configuration</h4>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>External URL:</strong><br>
+                        <span class="text-muted" id="current-url">{{ settings.external_url or 'Not configured' }}</span>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <strong>Example Email Link:</strong><br>
+                        <small class="text-muted" id="example-link">
+                            {% if settings.external_url %}
+                                {{ settings.external_url }}/leave/management
+                            {% else %}
+                                Not available - configure URL first
+                            {% endif %}
+                        </small>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <strong>Last Updated:</strong><br>
+                        <small class="text-muted">{{ settings.updated_at.strftime('%B %d, %Y at %I:%M %p') if settings.updated_at else 'Never' }}</small>
+                    </div>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <small><i class="bi bi-exclamation-triangle"></i> Changes take effect immediately for new emails and links.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-circle"></i> Save Application Settings
+        </button>
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<!-- Test URL Modal -->
+<div class="modal fade" id="testUrlModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Test External URL</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>This will test if your external URL is accessible and properly configured.</p>
+                
+                <div class="form-group mb-3">
+                    <label class="form-label">URL to Test:</label>
+                    <input type="text" class="form-control" id="test_url_display" readonly>
+                </div>
+                
+                <div id="testUrlResult" class="alert" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-info" id="performTestBtn">
+                    <span class="spinner-border spinner-border-sm d-none" id="testUrlSpinner"></span>
+                    <i class="bi bi-link-45deg"></i> Test URL
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const testUrlBtn = document.getElementById('testUrlBtn');
+    const testUrlModal = new bootstrap.Modal(document.getElementById('testUrlModal'));
+    const performTestBtn = document.getElementById('performTestBtn');
+    const testUrlResult = document.getElementById('testUrlResult');
+    const testUrlSpinner = document.getElementById('testUrlSpinner');
+    const externalUrlInput = document.getElementById('external_url');
+    
+    // Update preview when URL changes
+    externalUrlInput.addEventListener('input', function() {
+        const url = this.value;
+        document.getElementById('current-url').textContent = url || 'Not configured';
+        document.getElementById('example-link').textContent = url ? 
+            url + '/leave/management' : 'Not available - configure URL first';
+    });
+    
+    // Show test URL modal
+    testUrlBtn.addEventListener('click', function() {
+        const url = document.getElementById('external_url').value;
+        if (!url) {
+            alert('Please enter an external URL first.');
+            return;
+        }
+        document.getElementById('test_url_display').value = url;
+        testUrlModal.show();
+    });
+    
+    // Perform URL test
+    performTestBtn.addEventListener('click', function() {
+        const url = document.getElementById('test_url_display').value;
+        
+        if (!url) {
+            showTestResult('No URL to test.', 'danger');
+            return;
+        }
+        
+        // Show loading state
+        testUrlSpinner.classList.remove('d-none');
+        performTestBtn.disabled = true;
+        
+        // Test the URL by trying to fetch it
+        fetch(url, { 
+            method: 'HEAD',
+            mode: 'no-cors' // This will work for basic connectivity test
+        })
+        .then(() => {
+            showTestResult('✅ URL appears to be accessible! The external URL should work for email links.', 'success');
+        })
+        .catch(error => {
+            // For no-cors mode, we can't really tell much from the error
+            showTestResult('⚠️ Could not verify URL accessibility. This may be due to CORS policy, but the URL might still work for email links. Test by sending an actual email notification.', 'warning');
+        })
+        .finally(() => {
+            // Hide loading state
+            testUrlSpinner.classList.add('d-none');
+            performTestBtn.disabled = false;
+        });
+    });
+    
+    function showTestResult(message, type) {
+        testUrlResult.className = `alert alert-${type}`;
+        testUrlResult.innerHTML = message;
+        testUrlResult.style.display = 'block';
+    }
+    
+    // Clear result when modal is hidden
+    document.getElementById('testUrlModal').addEventListener('hidden.bs.modal', function() {
+        testUrlResult.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}

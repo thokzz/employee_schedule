@@ -1,0 +1,263 @@
+<!-- Create new file: app/templates/leave/my_applications.html -->
+
+{% extends "base.html" %}
+
+{% block title %}My Leave Applications{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">My Leave Applications</h1>
+    <div class="btn-toolbar">
+        <a href="{{ url_for('leave.request_leave') }}" class="btn btn-primary me-2">
+            <i class="bi bi-plus-circle"></i> Request New Leave
+        </a>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+{% if applications %}
+    <div class="row">
+        {% for app in applications %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card border-{{ 'warning' if app.status.value == 'pending' else 'success' if app.status.value == 'approved' else 'danger' }}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>{{ app.reference_code }}</strong>
+                    <span class="badge" style="background-color: {{ app.status_color }};">
+                        {{ app.status.value.title() }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-calendar-event"></i> {{ app.leave_type.value }}
+                    </h6>
+                    <p class="card-text">
+                        <strong>Filed:</strong> {{ app.date_filed.strftime('%b %d, %Y') }}<br>
+                        {% if app.total_days %}
+                            <strong>Duration:</strong> 
+                            {% if app.is_hours_based %}
+                                {{ app.total_days }} hours
+                            {% else %}
+                                {{ app.total_days|int }} day{% if app.total_days|int != 1 %}s{% endif %}
+                            {% endif %}<br>
+                        {% endif %}
+                        <strong>Approver:</strong> {{ app.approver_name }}<br>
+                        {% if app.date_reviewed %}
+                            <strong>Reviewed:</strong> {{ app.date_reviewed.strftime('%b %d, %Y') }}
+                        {% elif app.status.value == 'pending' %}
+                            <strong>Pending for:</strong> {{ app.days_pending }} day{% if app.days_pending != 1 %}s{% endif %}
+                        {% endif %}
+                    </p>
+                    <p class="card-text">
+                        <small class="text-muted">{{ app.reason[:100] }}{% if app.reason|length > 100 %}...{% endif %}</small>
+                    </p>
+                    
+                    {% if app.reviewer_comments %}
+                        <div class="alert alert-info py-2">
+                            <small><strong>Reviewer Comments:</strong><br>{{ app.reviewer_comments }}</small>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-transparent">
+                    <button class="btn btn-sm btn-outline-info w-100" onclick="viewMyApplication({{ app.id }})">
+                        <i class="bi bi-eye"></i> View Details
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Applications Summary -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Applications Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h4 class="text-warning">{{ applications|selectattr('status.value', 'equalto', 'pending')|list|length }}</h4>
+                            <p class="text-muted">Pending</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-success">{{ applications|selectattr('status.value', 'equalto', 'approved')|list|length }}</h4>
+                            <p class="text-muted">Approved</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-danger">{{ applications|selectattr('status.value', 'equalto', 'disapproved')|list|length }}</h4>
+                            <p class="text-muted">Disapproved</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ applications|length }}</h4>
+                            <p class="text-muted">Total</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-x display-4 text-muted"></i>
+            <h4 class="mt-3">No Leave Applications</h4>
+            <p class="text-muted">You haven't submitted any leave applications yet.</p>
+            <a href="{{ url_for('leave.request_leave') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Request Your First Leave
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+<!-- Application Detail Modal -->
+<div class="modal fade" id="myApplicationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Leave Application Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="myApplicationDetails">
+                <!-- Application details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function viewMyApplication(applicationId) {
+    fetch(`/leave/api/application/${applicationId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayMyApplicationDetails(data.application);
+                new bootstrap.Modal(document.getElementById('myApplicationModal')).show();
+            } else {
+                alert('Error loading application: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading application details');
+        });
+}
+
+function displayMyApplicationDetails(app) {
+    const detailsContainer = document.getElementById('myApplicationDetails');
+    
+    const statusBadge = `<span class="badge" style="background-color: ${app.status_color}; font-size: 0.9rem;">${app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>`;
+    
+    detailsContainer.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="text-primary"><i class="bi bi-file-text"></i> Application Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Reference Code:</strong></td><td><code>${app.reference_code}</code></td></tr>
+                    <tr><td><strong>Status:</strong></td><td>${statusBadge}</td></tr>
+                    <tr><td><strong>Filed Date:</strong></td><td>${new Date(app.date_filed).toLocaleDateString()}</td></tr>
+                    ${app.date_reviewed ? `<tr><td><strong>Decision Date:</strong></td><td>${new Date(app.date_reviewed).toLocaleDateString()}</td></tr>` : ''}
+                    ${app.days_pending !== null ? `<tr><td><strong>Days Pending:</strong></td><td>${app.days_pending} day${app.days_pending !== 1 ? 's' : ''}</td></tr>` : ''}
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-success"><i class="bi bi-calendar-event"></i> Leave Details</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Type:</strong></td><td>${app.leave_type}</td></tr>
+                    <tr><td><strong>Duration:</strong></td><td>${app.total_days} ${app.is_hours_based ? 'hours' : 'days'}</td></tr>
+                    <tr><td><strong>Approver:</strong></td><td>${app.approver_name}</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6 class="text-info"><i class="bi bi-calendar2-range"></i> Leave Schedule</h6>
+                <div class="alert alert-light">
+                    <code>${app.start_date}</code>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6 class="text-warning"><i class="bi bi-chat-quote"></i> Reason for Leave</h6>
+                <div class="alert alert-light">
+                    ${app.reason}
+                </div>
+            </div>
+        </div>
+        
+        ${app.reviewer_comments ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6 class="text-secondary"><i class="bi bi-chat-left-text"></i> Reviewer Comments</h6>
+                    <div class="alert alert-info">
+                        ${app.reviewer_comments}
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        ${app.status === 'pending' ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-clock-history"></i> <strong>Status:</strong> Your leave application is pending approval. 
+                        You will be notified once a decision is made.
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        ${app.status === 'approved' ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i> <strong>Approved:</strong> Your leave application has been approved. 
+                        The leave dates have been added to your schedule.
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        ${app.status === 'disapproved' ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i> <strong>Disapproved:</strong> Your leave application has been disapproved. 
+                        Please review the comments above and contact your approver if needed.
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+    `;
+}
+
+// Auto-refresh for pending applications every 2 minutes
+setInterval(function() {
+    const pendingApplications = document.querySelectorAll('.border-warning');
+    if (pendingApplications.length > 0 && document.visibilityState === 'visible') {
+        // Only refresh if there are pending applications and page is visible
+        fetch('/leave/my-applications')
+            .then(response => {
+                if (response.ok) {
+                    // Soft refresh
+                    location.reload();
+                }
+            })
+            .catch(() => {
+                // Ignore errors for auto-refresh
+            });
+    }
+}, 120000); // 2 minutes
+</script>
+{% endblock %}

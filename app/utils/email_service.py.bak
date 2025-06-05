@@ -1,0 +1,403 @@
+# Update your existing app/utils/email_service.py file
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from flask import current_app
+from app.models import EmailSettings, AppSettings  # Add AppSettings import
+import logging
+
+class EmailService:
+    """Simple email service for sending notifications"""
+    
+    @staticmethod
+    def get_smtp_config():
+        """Get SMTP configuration from database"""
+        settings = EmailSettings.get_settings()
+        
+        if not settings.mail_server or not settings.mail_username:
+            return None
+            
+        return {
+            'server': settings.mail_server,
+            'port': settings.mail_port,
+            'use_tls': settings.mail_use_tls,
+            'username': settings.mail_username,
+            'password': settings.mail_password,
+            'default_sender': settings.mail_default_sender or settings.mail_username
+        }
+    
+    @staticmethod
+    def get_app_settings():
+        """Get application settings including external URL"""
+        try:
+            return AppSettings.get_settings()
+        except:
+            # Fallback if AppSettings doesn't exist yet
+            class FallbackSettings:
+                external_url = None
+                app_name = 'Employee Scheduling System'
+                company_name = None
+                email_footer_text = None
+                
+                def get_full_url(self, path=''):
+                    base = self.external_url or 'http://localhost:5000'
+                    if path and not path.startswith('/'):
+                        path = '/' + path
+                    return base.rstrip('/') + path
+            
+            return FallbackSettings()
+    
+    @staticmethod
+    def send_email(to_email, subject, body, html_body=None):
+        """
+        Send an email using configured SMTP settings
+        
+        Args:
+            to_email (str): Recipient email address
+            subject (str): Email subject
+            body (str): Plain text body
+            html_body (str, optional): HTML body
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        try:
+            config = EmailService.get_smtp_config()
+            if not config:
+                current_app.logger.warning("Email not configured - skipping email notification")
+                return False
+            
+            # Create message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = config['default_sender']
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            
+            # Add plain text part
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Add HTML part if provided
+            if html_body:
+                msg.attach(MIMEText(html_body, 'html'))
+            
+            # Connect and send
+            if config['use_tls']:
+                server = smtplib.SMTP(config['server'], config['port'])
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+            else:
+                server = smtplib.SMTP(config['server'], config['port'])
+                server.ehlo()
+            
+            if config['password']:
+                server.login(config['username'], config['password'])
+            
+            server.sendmail(config['default_sender'], to_email, msg.as_string())
+            server.quit()
+            
+            current_app.logger.info(f"Email sent successfully to {to_email}")
+            return True
+            
+        except Exception as e:
+            current_app.logger.error(f"Failed to send email to {to_email}: {str(e)}")
+            return False
+    
+    @staticmethod
+    def send_leave_request_notification(leave_application):
+        """
+        Send leave request notification to approver
+        
+        Args:
+            leave_application (LeaveApplication): The leave application object
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        try:
+            # Check if leave request notifications are enabled
+            settings = EmailSettings.get_settings()
+            if not settings.notify_leave_requests:
+                current_app.logger.info("Leave request notifications are disabled")
+                return False
+            
+            approver_email = leave_application.approver_email
+            if not approver_email:
+                current_app.logger.warning(f"No approver email for leave request {leave_application.reference_code}")
+                return False
+            
+            # Get app settings for URL generation
+            app_settings = EmailService.get_app_settings()
+            management_url = app_settings.get_full_url('/leave/management')
+            
+            # Create email content
+            subject = f"New Leave Request - {leave_application.reference_code}"
+            
+            # Plain text body
+            body = f"""
+New Leave Request Submitted
+
+Reference Code: {leave_application.reference_code}
+Employee: {leave_application.employee_name}
+Leave Type: {leave_application.leave_type.value}
+Dates: {leave_application.start_date}
+Total Days: {leave_application.total_days or 'N/A'}
+Reason: {leave_application.reason}
+Date Filed: {leave_application.date_filed.strftime('%B %d, %Y')}
+
+To review and approve this request, please visit:
+{management_url}
+
+---
+{app_settings.app_name}
+Automated Notification
+{app_settings.email_footer_text if app_settings.email_footer_text else ''}
+            """.strip()
+            
+            # HTML body with external URL support
+            html_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    {f'<div style="text-align: center; margin-bottom: 20px;"><img src="{app_settings.company_logo_url}" alt="Company Logo" style="max-height: 60px;"></div>' if app_settings.company_logo_url else ''}
+                    
+                    <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">
+                        New Leave Request Submitted
+                    </h2>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold; width: 30%;">Reference Code:</td>
+                                <td style="padding: 8px 0;">{leave_application.reference_code}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Employee:</td>
+                                <td style="padding: 8px 0;">{leave_application.employee_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Leave Type:</td>
+                                <td style="padding: 8px 0;">{leave_application.leave_type.value}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Dates:</td>
+                                <td style="padding: 8px 0;">{leave_application.start_date}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Total Days:</td>
+                                <td style="padding: 8px 0;">{leave_application.total_days or 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Date Filed:</td>
+                                <td style="padding: 8px 0;">{leave_application.date_filed.strftime('%B %d, %Y')}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="margin: 20px 0;">
+                        <h3 style="color: #2c3e50;">Reason:</h3>
+                        <p style="background: #fff; padding: 15px; border-left: 4px solid #3498db; margin: 0;">
+                            {leave_application.reason}
+                        </p>
+                    </div>
+                    
+                    <div style="margin: 30px 0; padding: 20px; background: #e8f4fd; border-radius: 5px; text-align: center;">
+                        <p style="margin: 0 0 15px 0; font-weight: bold; color: #2c3e50;">
+                            Click the button below to review and approve this request:
+                        </p>
+                        <a href="{management_url}" style="display: inline-block; padding: 12px 30px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                            Review Leave Request
+                        </a>
+                    </div>
+                    
+                    <div style="margin: 20px 0; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px;">
+                        <p style="margin: 0; font-size: 14px; color: #856404;">
+                            <strong>Direct Link:</strong> <a href="{management_url}" style="color: #856404;">{management_url}</a>
+                        </p>
+                    </div>
+                    
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+                    <p style="font-size: 12px; color: #666; text-align: center; margin: 0;">
+                        {app_settings.app_name} - Automated Notification
+                        {f'<br>{app_settings.email_footer_text}' if app_settings.email_footer_text else ''}
+                        {f'<br>{app_settings.company_name}' if app_settings.company_name else ''}
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+            
+            return EmailService.send_email(approver_email, subject, body, html_body)
+            
+        except Exception as e:
+            current_app.logger.error(f"Error sending leave request notification: {str(e)}")
+            return False
+    
+    @staticmethod
+    def send_leave_status_notification(leave_application, new_status):
+        """
+        Send notification to employee when leave status changes
+        
+        Args:
+            leave_application (LeaveApplication): The leave application object
+            new_status (str): 'approved' or 'disapproved'
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        try:
+            settings = EmailSettings.get_settings()
+            if not settings.notify_leave_requests:
+                return False
+            
+            employee_email = leave_application.employee_email
+            if not employee_email:
+                return False
+            
+            # Get app settings for URL generation
+            app_settings = EmailService.get_app_settings()
+            my_applications_url = app_settings.get_full_url('/leave/my-applications')
+            
+            status_word = "Approved" if new_status == "approved" else "Disapproved"
+            subject = f"Leave Request {status_word} - {leave_application.reference_code}"
+            
+            # Plain text body
+            body = f"""
+Your Leave Request Has Been {status_word}
+
+Reference Code: {leave_application.reference_code}
+Leave Type: {leave_application.leave_type.value}
+Dates: {leave_application.start_date}
+Status: {status_word}
+Reviewed By: {leave_application.approver_name}
+Review Date: {leave_application.date_reviewed.strftime('%B %d, %Y %I:%M %p') if leave_application.date_reviewed else 'N/A'}
+
+{f'Comments: {leave_application.reviewer_comments}' if leave_application.reviewer_comments else ''}
+
+To view your leave application details, please visit:
+{my_applications_url}
+
+---
+{app_settings.app_name}
+Automated Notification
+{app_settings.email_footer_text if app_settings.email_footer_text else ''}
+            """.strip()
+            
+            # HTML body for status notification
+            status_color = "#28a745" if new_status == "approved" else "#dc3545"
+            status_bg = "#d4edda" if new_status == "approved" else "#f8d7da"
+            
+            html_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    {f'<div style="text-align: center; margin-bottom: 20px;"><img src="{app_settings.company_logo_url}" alt="Company Logo" style="max-height: 60px;"></div>' if app_settings.company_logo_url else ''}
+                    
+                    <h2 style="color: #2c3e50; border-bottom: 2px solid {status_color}; padding-bottom: 10px;">
+                        Leave Request {status_word}
+                    </h2>
+                    
+                    <div style="background: {status_bg}; padding: 20px; border-radius: 5px; margin: 20px 0; border-left: 4px solid {status_color};">
+                        <h3 style="margin: 0 0 10px 0; color: {status_color};">
+                            Your leave request has been {status_word.lower()}!
+                        </h3>
+                        <p style="margin: 0; font-size: 16px;">
+                            Reference Code: <strong>{leave_application.reference_code}</strong>
+                        </p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold; width: 30%;">Leave Type:</td>
+                                <td style="padding: 8px 0;">{leave_application.leave_type.value}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Dates:</td>
+                                <td style="padding: 8px 0;">{leave_application.start_date}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Reviewed By:</td>
+                                <td style="padding: 8px 0;">{leave_application.approver_name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 8px 0; font-weight: bold;">Review Date:</td>
+                                <td style="padding: 8px 0;">{leave_application.date_reviewed.strftime('%B %d, %Y %I:%M %p') if leave_application.date_reviewed else 'N/A'}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    {f'''
+                    <div style="margin: 20px 0;">
+                        <h3 style="color: #2c3e50;">Reviewer Comments:</h3>
+                        <p style="background: #fff; padding: 15px; border-left: 4px solid {status_color}; margin: 0;">
+                            {leave_application.reviewer_comments}
+                        </p>
+                    </div>
+                    ''' if leave_application.reviewer_comments else ''}
+                    
+                    <div style="margin: 30px 0; padding: 20px; background: #e8f4fd; border-radius: 5px; text-align: center;">
+                        <p style="margin: 0 0 15px 0; font-weight: bold; color: #2c3e50;">
+                            View your complete leave history:
+                        </p>
+                        <a href="{my_applications_url}" style="display: inline-block; padding: 12px 30px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                            My Leave Applications
+                        </a>
+                    </div>
+                    
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+                    <p style="font-size: 12px; color: #666; text-align: center; margin: 0;">
+                        {app_settings.app_name} - Automated Notification
+                        {f'<br>{app_settings.email_footer_text}' if app_settings.email_footer_text else ''}
+                        {f'<br>{app_settings.company_name}' if app_settings.company_name else ''}
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+            
+            return EmailService.send_email(employee_email, subject, body, html_body)
+            
+        except Exception as e:
+            current_app.logger.error(f"Error sending leave status notification: {str(e)}")
+            return False
+    
+    @staticmethod
+    def send_test_email(to_email, app_url=None):
+        """
+        Send a test email to verify configuration
+        
+        Args:
+            to_email (str): Email address to send test to
+            app_url (str, optional): Override app URL for testing
+            
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
+        try:
+            app_settings = EmailService.get_app_settings()
+            test_url = app_url or app_settings.get_full_url()
+            
+            subject = f"Test Email from {app_settings.app_name}"
+            
+            body = f"""
+Test Email from {app_settings.app_name}
+
+This is a test email to verify that your email configuration is working correctly.
+
+Application URL: {test_url}
+Sent at: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+
+If you received this email, your SMTP settings are configured properly!
+
+---
+{app_settings.app_name}
+Email Configuration Test
+            """.strip()
+            
+            return EmailService.send_email(to_email, subject, body)
+            
+        except Exception as e:
+            current_app.logger.error(f"Error sending test email: {str(e)}")
+            return False

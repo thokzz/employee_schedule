@@ -39,10 +39,37 @@
                                value="{{ current_user.email }}" required>
                     </div>
                     
+                    <!-- NEW: Contact Number Field -->
+                    <div class="mb-3">
+                        <label for="contact_number" class="form-label">Contact Number</label>
+                        <input type="tel" class="form-control" id="contact_number" name="contact_number" 
+                               value="{{ current_user.contact_number or '' }}" 
+                               placeholder="+1234567890 or 0912-345-6789">
+                        <small class="text-muted">Your contact number for emergency or work-related communications</small>
+                    </div>
+                    
                     <div class="mb-3">
                         <label for="avatar" class="form-label">Avatar</label>
                         <input type="file" class="form-control" id="avatar" name="avatar" accept="image/*">
                         <small class="text-muted">Upload a new avatar image (optional)</small>
+                    </div>
+                    
+                    <!-- Digital Signature Upload -->
+                    <div class="mb-3">
+                        <label for="signature" class="form-label">Digital Signature</label>
+                        <input type="file" class="form-control" id="signature" name="signature" accept="image/png">
+                        <small class="text-muted">Upload your signature in PNG format (for PDF documents)</small>
+                        {% if current_user.signature %}
+                        <div class="mt-2">
+                            <div class="alert alert-info d-flex align-items-center">
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span>Current signature uploaded: {{ current_user.signature }}</span>
+                                <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" onclick="viewSignature()">
+                                    <i class="bi bi-eye"></i> Preview
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                     
                     <button type="submit" class="btn btn-primary">Update Personal Information</button>
@@ -50,101 +77,126 @@
             </div>
         </div>
 
-        <!-- Employment Information -->
+        <!-- Employment Information - READ ONLY -->
         <div class="card mt-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">Employment Information</h5>
+                <span class="badge bg-info">Read Only</span>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('main.update_employment_info') }}">
-                    <!-- Basic Employment Details -->
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="personnel_number" class="form-label">Personnel Number</label>
-                                <input type="text" class="form-control" id="personnel_number" name="personnel_number" 
-                                       value="{{ current_user.personnel_number or '' }}"
-                                       placeholder="e.g., Based on Worksched information">
-                                <small class="text-muted">Unique employee identification number</small>
-                            </div>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Note:</strong> Employment information is managed by administrators and cannot be edited by users. 
+                    Please contact your administrator if any information needs to be updated.
+                </div>
+                
+                <!-- Basic Employment Details -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="personnel_number_readonly" class="form-label">Personnel Number</label>
+                            <input type="text" class="form-control" id="personnel_number_readonly" 
+                                   value="{{ current_user.personnel_number or 'Not set' }}" readonly>
+                            <small class="text-muted">Unique employee identification number</small>
                         </div>
                     </div>
-                    
-                    <!-- NEW: Employee Type and Schedule Format -->
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="employee_type" class="form-label">Employee Type</label>
-                                <select class="form-select" id="employee_type" name="employee_type">
-                                    <option value="rank_and_file" {% if current_user.employee_type and current_user.employee_type.value == 'rank_and_file' %}selected{% endif %}>Rank and File</option>
-                                    <option value="rank_and_file_probationary" {% if current_user.employee_type and current_user.employee_type.value == 'rank_and_file_probationary' %}selected{% endif %}>Rank and File Probationary</option>
-                                    <option value="confidential" {% if current_user.employee_type and current_user.employee_type.value == 'confidential' %}selected{% endif %}>Confidential</option>
-                                    <option value="confidential_probationary" {% if current_user.employee_type and current_user.employee_type.value == 'confidential_probationary' %}selected{% endif %}>Confidential Probationary</option>
-                                    <option value="contractual" {% if current_user.employee_type and current_user.employee_type.value == 'contractual' %}selected{% endif %}>Contractual</option>
-                                </select>
-                                <small class="text-muted">Employee classification type</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="schedule_format" class="form-label">Regular Schedule Format</label>
-                                <select class="form-select" id="schedule_format" name="schedule_format">
-                                    <option value="8_hour_shift" {% if current_user.schedule_format and current_user.schedule_format.value == '8_hour_shift' %}selected{% endif %}>8-hour shift (30 min break)</option>
-                                    <option value="9_hour_shift" {% if current_user.schedule_format and current_user.schedule_format.value == '9_hour_shift' %}selected{% endif %}>9-hour shift (1 hour break)</option>
-                                    <option value="others" {% if current_user.schedule_format and current_user.schedule_format.value == 'others' %}selected{% endif %}>Others</option>
-                                </select>
-                                <small class="text-muted">Default work schedule format for break calculations</small>
-                            </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="div_department_readonly" class="form-label">Div./Department</label>
+                            <input type="text" class="form-control" id="div_department_readonly" 
+                                   value="{{ current_user.div_department or 'Not set' }}" readonly>
+                            <small class="text-muted">Division or Department assignment</small>
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="id_number" class="form-label">ID Number</label>
-                                <input type="text" class="form-control" id="id_number" name="id_number" 
-                                       value="{{ current_user.id_number or '' }}"
-                                       placeholder="e.g., Employee ID Number">
-                                <small class="text-muted">Government or company issued ID</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="hiring_date" class="form-label">Hiring Date</label>
-                                <input type="date" class="form-control" id="hiring_date" name="hiring_date" 
-                                       value="{{ current_user.hiring_date.isoformat() if current_user.hiring_date else '' }}">
-                                <small class="text-muted">Date when employment started</small>
-                            </div>
+                </div>
+                
+                <!-- Employee Type and Schedule Format -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="employee_type_readonly" class="form-label">Employee Type</label>
+                            <input type="text" class="form-control" id="employee_type_readonly" 
+                                   value="{% if current_user.employee_type %}{{ current_user.employee_type.value.replace('_', ' ').title() }}{% else %}Not set{% endif %}" readonly>
+                            <small class="text-muted">Employee classification type</small>
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="job_title" class="form-label">Job Title</label>
-                                <input type="text" class="form-control" id="job_title" name="job_title" 
-                                       value="{{ current_user.job_title or '' }}"
-                                       placeholder="e.g., Senior Developer">
-                                <small class="text-muted">Current position or job title</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="rank" class="form-label">Rank</label>
-                                <input type="text" class="form-control" id="rank" name="rank" 
-                                       value="{{ current_user.rank or '' }}"
-                                       placeholder="e.g., RF3, CONFI B">
-                                <small class="text-muted">Employee rank or level</small>
-                            </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="schedule_format_readonly" class="form-label">Regular Schedule Format</label>
+                            <input type="text" class="form-control" id="schedule_format_readonly" 
+                                   value="{% if current_user.schedule_format %}{% if current_user.schedule_format.value == '8_hour_shift' %}8-hour shift (30 min break){% elif current_user.schedule_format.value == '9_hour_shift' %}9-hour shift (1 hour break){% else %}Others{% endif %}{% else %}Not set{% endif %}" readonly>
+                            <small class="text-muted">Default work schedule format for break calculations</small>
                         </div>
                     </div>
-                    
-                    <button type="submit" class="btn btn-success">Update Employment Information</button>
-                </form>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="id_number_readonly" class="form-label">ID Number</label>
+                            <input type="text" class="form-control" id="id_number_readonly" 
+                                   value="{{ current_user.id_number or 'Not set' }}" readonly>
+                            <small class="text-muted">Government or company issued ID</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="hiring_date_readonly" class="form-label">Hiring Date</label>
+                            <input type="text" class="form-control" id="hiring_date_readonly" 
+                                   value="{% if current_user.hiring_date %}{{ current_user.hiring_date.strftime('%B %d, %Y') }}{% else %}Not set{% endif %}" readonly>
+                            <small class="text-muted">Date when employment started</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="job_title_readonly" class="form-label">Job Title</label>
+                            <input type="text" class="form-control" id="job_title_readonly" 
+                                   value="{{ current_user.job_title or 'Not set' }}" readonly>
+                            <small class="text-muted">Current position or job title</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="rank_readonly" class="form-label">Rank</label>
+                            <input type="text" class="form-control" id="rank_readonly" 
+                                   value="{{ current_user.rank or 'Not set' }}" readonly>
+                            <small class="text-muted">Employee rank or level</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="section_readonly" class="form-label">Section</label>
+                            <input type="text" class="form-control" id="section_readonly" 
+                                   value="{{ current_user.section.name if current_user.section else 'Not assigned' }}" readonly>
+                            <small class="text-muted">Section assignment</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="unit_readonly" class="form-label">Unit</label>
+                            <input type="text" class="form-control" id="unit_readonly" 
+                                   value="{{ current_user.unit.name if current_user.unit else 'Not assigned' }}" readonly>
+                            <small class="text-muted">Unit assignment</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Need Changes?</strong> Contact your administrator to update employment information.
+                </div>
             </div>
         </div>
     </div>
     
+<!-- Update the Profile Summary section in profile.html -->
+
     <div class="col-md-4">
         <!-- Profile Summary -->
         <div class="card">
@@ -157,11 +209,43 @@
                 {% if current_user.job_title %}
                     <p class="card-text"><small class="text-primary">{{ current_user.job_title }}</small></p>
                 {% endif %}
+                
+                <!-- 4-Level Hierarchy Display -->
+                {% if current_user.department %}
+                    <p class="card-text">
+                        <small class="text-danger">
+                            <i class="bi bi-building"></i> {{ current_user.department.name }}
+                        </small>
+                    </p>
+                {% endif %}
+                {% if current_user.division %}
+                    <p class="card-text">
+                        <small class="text-warning">
+                            <i class="bi bi-diagram-2"></i> {{ current_user.division.name }}
+                        </small>
+                    </p>
+                {% endif %}
                 {% if current_user.section %}
-                    <p class="card-text"><small class="text-muted">{{ current_user.section.name }}</small></p>
+                    <p class="card-text">
+                        <small class="text-success">
+                            <i class="bi bi-diagram-3"></i> {{ current_user.section.name }}
+                        </small>
+                    </p>
                 {% endif %}
                 {% if current_user.unit %}
-                    <p class="card-text"><small class="text-muted">{{ current_user.unit.name }}</small></p>
+                    <p class="card-text">
+                        <small class="text-info">
+                            <i class="bi bi-collection"></i> {{ current_user.unit.name }}
+                        </small>
+                    </p>
+                {% endif %}
+                
+                {% if current_user.contact_number %}
+                    <p class="card-text">
+                        <small class="text-success">
+                            <i class="bi bi-telephone"></i> {{ current_user.contact_number }}
+                        </small>
+                    </p>
                 {% endif %}
                 <p class="card-text"><small class="text-muted">Member since {{ current_user.created_at.strftime('%B %Y') }}</small></p>
             </div>
@@ -173,12 +257,80 @@
                 <h6 class="card-title mb-0">Employment Details</h6>
             </div>
             <div class="card-body">
+                <!-- 4-Level Hierarchy Summary -->
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Department:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.department %}
+                            <span class="badge bg-danger">{{ current_user.department.name }}</span>
+                        {% else %}
+                            <span class="text-muted">Not assigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Division:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.division %}
+                            <span class="badge bg-warning text-dark">{{ current_user.division.name }}</span>
+                        {% else %}
+                            <span class="text-muted">Not assigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Section:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.section %}
+                            <span class="badge bg-success">{{ current_user.section.name }}</span>
+                        {% else %}
+                            <span class="text-muted">Not assigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Unit:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.unit %}
+                            <span class="badge bg-info">{{ current_user.unit.name }}</span>
+                        {% else %}
+                            <span class="text-muted">Not assigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <hr>
+                
                 <div class="row mb-2">
                     <div class="col-6">
                         <strong>Personnel #:</strong>
                     </div>
                     <div class="col-6">
                         {{ current_user.personnel_number or 'Not set' }}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Contact:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.contact_number %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-telephone"></i> Provided
+                            </span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">
+                                <i class="bi bi-telephone-x"></i> Not provided
+                            </span>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="row mb-2">
@@ -261,6 +413,60 @@
                         {% endif %}
                     </div>
                 </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Signature:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if current_user.signature %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Uploaded
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">Not uploaded</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Approver Status Card -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Approval Authority</h6>
+            </div>
+            <div class="card-body">
+                {% if current_user.can_approve_leaves() %}
+                    <div class="alert alert-success p-2">
+                        <i class="bi bi-check-circle"></i> <strong>Can Approve Leaves</strong>
+                    </div>
+                    
+                    <div class="d-flex flex-wrap gap-1 mb-2">
+                        {% if current_user.is_department_approver %}
+                            <span class="badge bg-danger">Dept</span>
+                        {% endif %}
+                        {% if current_user.is_division_approver %}
+                            <span class="badge bg-warning">Div</span>
+                        {% endif %}
+                        {% if current_user.is_section_approver %}
+                            <span class="badge bg-success">Sec</span>
+                        {% endif %}
+                        {% if current_user.is_unit_approver %}
+                            <span class="badge bg-info">Unit</span>
+                        {% endif %}
+                        {% if current_user.role.value in ['manager', 'administrator'] %}
+                            <span class="badge bg-primary">{{ current_user.role.value.title() }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <small class="text-muted">
+                        <strong>Scope:</strong> {{ current_user.approver_scope }}
+                    </small>
+                {% else %}
+                    <div class="alert alert-light p-2">
+                        <i class="bi bi-info-circle"></i> No approval authority assigned
+                    </div>
+                {% endif %}
             </div>
         </div>
         
@@ -320,7 +526,6 @@
         </div>
     </div>
 </div>
-
 <!-- Change Password Modal -->
 <div class="modal fade" id="changePasswordModal" tabindex="-1">
     <div class="modal-dialog">
@@ -353,12 +558,40 @@
         </div>
     </div>
 </div>
+
+<!-- Signature Preview Modal -->
+<div class="modal fade" id="signatureModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Digital Signature Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                {% if current_user.signature %}
+                    <img src="{{ url_for('main.uploaded_signature', filename=current_user.signature) }}" 
+                         alt="Digital Signature" class="img-fluid border" style="max-height: 200px;">
+                    <p class="mt-2 text-muted">Signature file: {{ current_user.signature }}</p>
+                {% else %}
+                    <p>No signature uploaded yet.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 function changePassword() {
     new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+}
+
+function viewSignature() {
+    new bootstrap.Modal(document.getElementById('signatureModal')).show();
 }
 
 function downloadProfile() {
@@ -368,7 +601,9 @@ function downloadProfile() {
         username: '{{ current_user.username }}',
         email: '{{ current_user.email }}',
         role: '{{ current_user.role.value.title() }}',
+        contact_number: '{{ current_user.contact_number or "" }}',
         personnel_number: '{{ current_user.personnel_number or "" }}',
+        div_department: '{{ current_user.div_department or "" }}',
         employee_type: '{{ current_user.employee_type.value.replace("_", " ").title() if current_user.employee_type else "" }}',
         schedule_format: '{{ current_user.schedule_format.value.replace("_", " ").title() if current_user.schedule_format else "" }}',
         typecode: '{{ current_user.typecode or "" }}',
@@ -376,7 +611,8 @@ function downloadProfile() {
         rank: '{{ current_user.rank or "" }}',
         hiring_date: '{{ current_user.hiring_date.strftime("%Y-%m-%d") if current_user.hiring_date else "" }}',
         section: '{{ current_user.section.name if current_user.section else "" }}',
-        unit: '{{ current_user.unit.name if current_user.unit else "" }}'
+        unit: '{{ current_user.unit.name if current_user.unit else "" }}',
+        signature_status: '{{ "Uploaded" if current_user.signature else "Not uploaded" }}'
     };
     
     const content = `Employee Profile Summary
@@ -386,9 +622,11 @@ Personal Information:
 - Name: ${profileData.name}
 - Username: ${profileData.username}
 - Email: ${profileData.email}
+- Contact Number: ${profileData.contact_number || 'Not provided'}
 
 Employment Information:
 - Role: ${profileData.role}
+- Div./Department: ${profileData.div_department || 'Not set'}
 - Employee Type: ${profileData.employee_type || 'Not set'}
 - Schedule Format: ${profileData.schedule_format || 'Not set'}
 - Personnel Number: ${profileData.personnel_number || 'Not set'}
@@ -397,6 +635,7 @@ Employment Information:
 - Hiring Date: ${profileData.hiring_date || 'Not set'}
 - Section: ${profileData.section || 'Not assigned'}
 - Unit: ${profileData.unit || 'Not assigned'}
+- Digital Signature: ${profileData.signature_status}
 
 Generated on: ${new Date().toLocaleString()}
 `;
@@ -411,6 +650,25 @@ Generated on: ${new Date().toLocaleString()}
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
 }
+
+// Contact number validation
+document.getElementById('contact_number')?.addEventListener('input', function() {
+    const contactNumber = this.value.trim();
+    
+    if (contactNumber.length > 0) {
+        // Basic phone number validation (allows various formats)
+        const phoneRegex = /^[\+]?[\s\-\(\)]*([0-9][\s\-\(\)]*){10,15}$/;
+        if (phoneRegex.test(contactNumber)) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        } else {
+            this.classList.remove('is-valid');
+            this.classList.add('is-invalid');
+        }
+    } else {
+        this.classList.remove('is-valid', 'is-invalid');
+    }
+});
 
 // Password validation
 document.getElementById('new_password')?.addEventListener('input', function() {
@@ -447,42 +705,27 @@ document.getElementById('confirm_password')?.addEventListener('input', function(
     }
 });
 
-// Auto-format personnel number
-document.getElementById('personnel_number')?.addEventListener('input', function() {
-    let value = this.value.toUpperCase();
-    this.value = value;
-});
-
-// Hiring date validation
-document.getElementById('hiring_date')?.addEventListener('change', function() {
-    const hiringDate = new Date(this.value);
-    const today = new Date();
-    
-    if (hiringDate > today) {
-        this.classList.add('is-invalid');
-        this.setCustomValidity('Hiring date cannot be in the future');
-    } else {
-        this.classList.remove('is-invalid');
-        this.classList.add('is-valid');
-        this.setCustomValidity('');
+// Signature file validation
+document.getElementById('signature')?.addEventListener('change', function() {
+    const file = this.files[0];
+    if (file) {
+        // Check file type
+        if (file.type !== 'image/png') {
+            this.classList.add('is-invalid');
+            this.setCustomValidity('Please upload a PNG file only');
+            alert('Please upload a PNG file only.');
+            this.value = '';
+        } else if (file.size > 2 * 1024 * 1024) { // 2MB limit
+            this.classList.add('is-invalid');
+            this.setCustomValidity('File size should be less than 2MB');
+            alert('File size should be less than 2MB.');
+            this.value = '';
+        } else {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+            this.setCustomValidity('');
+        }
     }
-});
-
-// Schedule format info tooltip
-document.getElementById('schedule_format')?.addEventListener('change', function() {
-    const value = this.value;
-    let info = '';
-    
-    if (value === '8_hour_shift') {
-        info = 'Employees with 8-hour shifts get 30-minute paid breaks';
-    } else if (value === '9_hour_shift') {
-        info = 'Employees with 9-hour shifts get 1-hour paid breaks';
-    } else {
-        info = 'Other schedule formats default to 30-minute breaks';
-    }
-    
-    // You could show this info in a tooltip or small text element
-    console.log(info);
 });
 </script>
 {% endblock %}

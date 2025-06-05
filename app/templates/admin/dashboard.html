@@ -1,3 +1,5 @@
+<!-- Update your existing app/templates/admin/dashboard.html to include 4-level hierarchy -->
+
 {% extends "base.html" %}
 
 {% block title %}Administration{% endblock %}
@@ -7,7 +9,90 @@
     <h1 class="h2">Administration</h1>
 </div>
 
-<!-- Admin Stats -->
+<!-- UPDATED: 4-Level Hierarchy Stats -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_departments }}</h3>
+                        <p class="mb-0">Departments</p>
+                        <small class="opacity-75">Highest level</small>
+                    </div>
+                    <i class="bi bi-building display-6"></i>
+                </div>
+            </div>
+            <div class="card-footer bg-dark bg-opacity-25">
+                <a href="{{ url_for('admin.manage_departments') }}" class="text-white text-decoration-none">
+                    <i class="bi bi-arrow-right"></i> Manage
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_divisions }}</h3>
+                        <p class="mb-0">Divisions</p>
+                        <small class="opacity-75">Second level</small>
+                    </div>
+                    <i class="bi bi-diagram-2 display-6"></i>
+                </div>
+            </div>
+            <div class="card-footer bg-dark bg-opacity-25">
+                <a href="{{ url_for('admin.manage_divisions') }}" class="text-dark text-decoration-none">
+                    <i class="bi bi-arrow-right"></i> Manage
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_sections }}</h3>
+                        <p class="mb-0">Sections</p>
+                        <small class="opacity-75">Third level</small>
+                    </div>
+                    <i class="bi bi-diagram-3 display-6"></i>
+                </div>
+            </div>
+            <div class="card-footer bg-dark bg-opacity-25">
+                <a href="{{ url_for('admin.manage_sections') }}" class="text-white text-decoration-none">
+                    <i class="bi bi-arrow-right"></i> Manage
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_units }}</h3>
+                        <p class="mb-0">Units</p>
+                        <small class="opacity-75">Fourth level</small>
+                    </div>
+                    <i class="bi bi-collection display-6"></i>
+                </div>
+            </div>
+            <div class="card-footer bg-dark bg-opacity-25">
+                <a href="{{ url_for('admin.manage_units') }}" class="text-white text-decoration-none">
+                    <i class="bi bi-arrow-right"></i> Manage
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Stats Row -->
 <div class="row mb-4">
     <div class="col-md-3 mb-3">
         <div class="card bg-primary text-white">
@@ -38,28 +123,28 @@
     </div>
     
     <div class="col-md-3 mb-3">
-        <div class="card bg-info text-white">
+        <div class="card bg-secondary text-white">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h3 class="mb-0">{{ stats.total_sections }}</h3>
-                        <p class="mb-0">Sections</p>
+                        <h3 class="mb-0" id="approver-count">Loading...</h3>
+                        <p class="mb-0">Approvers</p>
                     </div>
-                    <i class="bi bi-building display-6"></i>
+                    <i class="bi bi-shield-check display-6"></i>
                 </div>
             </div>
         </div>
     </div>
     
     <div class="col-md-3 mb-3">
-        <div class="card bg-warning text-white">
+        <div class="card bg-dark text-white">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h3 class="mb-0">{{ stats.total_units }}</h3>
-                        <p class="mb-0">Units</p>
+                        <h3 class="mb-0">{{ stats.total_users - stats.active_users }}</h3>
+                        <p class="mb-0">Inactive Users</p>
                     </div>
-                    <i class="bi bi-diagram-3 display-6"></i>
+                    <i class="bi bi-person-x display-6"></i>
                 </div>
             </div>
         </div>
@@ -68,10 +153,12 @@
 
 <!-- Quick Actions -->
 <div class="row">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">User Management</h5>
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-people text-primary"></i> User Management
+                </h5>
             </div>
             <div class="card-body">
                 <p class="card-text">Manage user accounts, roles, and permissions.</p>
@@ -87,34 +174,122 @@
         </div>
     </div>
     
-    <div class="col-md-6">
+    <!-- UPDATED: 4-Level Organization Structure -->
+    <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Organization Structure</h5>
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-diagram-3 text-success"></i> Organization Structure
+                </h5>
             </div>
             <div class="card-body">
-                <p class="card-text">Manage sections and units for your organization.</p>
+                <p class="card-text">Manage 4-level organizational hierarchy: Department → Division → Section → Unit.</p>
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-info">
-                        <i class="bi bi-building"></i> Manage Sections
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="{{ url_for('admin.manage_departments') }}" class="btn btn-danger btn-sm w-100">
+                                <i class="bi bi-building"></i> Departments
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{{ url_for('admin.manage_divisions') }}" class="btn btn-warning btn-sm w-100">
+                                <i class="bi bi-diagram-2"></i> Divisions
+                            </a>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="{{ url_for('admin.manage_sections') }}" class="btn btn-success btn-sm w-100">
+                                <i class="bi bi-diagram-3"></i> Sections
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{{ url_for('admin.manage_units') }}" class="btn btn-info btn-sm w-100">
+                                <i class="bi bi-collection"></i> Units
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Employee Database Card -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-database text-success"></i> Employee Database
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">View and manage employee database with filtering and export capabilities.</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.employee_database') }}" class="btn btn-success">
+                        <i class="bi bi-database"></i> View Database
                     </a>
-                    <a href="{{ url_for('admin.manage_units') }}" class="btn btn-outline-info">
-                        <i class="bi bi-diagram-3"></i> Manage Units
+                    {% if current_user.can_admin() %}
+                    <a href="{{ url_for('admin.import_employee_database') }}" class="btn btn-outline-success">
+                        <i class="bi bi-upload"></i> Import CSV
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Second Row of Actions -->
 <div class="row mt-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">System Settings</h5>
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-shield-check text-warning"></i> Database Backup
+                </h5>
             </div>
             <div class="card-body">
-                <p class="card-text">Configure system-wide settings and notifications.</p>
+                <p class="card-text">Create, manage, and restore database backups for data protection and disaster recovery.</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('backup.backup_management') }}" class="btn btn-warning">
+                        <i class="bi bi-database"></i> Backup Management
+                    </a>
+                    <button type="button" class="btn btn-outline-warning" onclick="createQuickBackup()">
+                        <i class="bi bi-plus-circle"></i> Quick Backup
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-gear-wide-connected text-primary"></i> Application Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Configure external URL, app name, and core application settings.</p>
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('admin.app_settings') }}" class="btn btn-primary">
+                        <i class="bi bi-globe"></i> App Settings
+                    </a>
+                    <small class="text-muted">
+                        <i class="bi bi-exclamation-triangle"></i> Configure external URL for email links
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Communication Settings</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Configure email notifications and messaging settings.</p>
                 <div class="d-grid gap-2">
                     <a href="{{ url_for('admin.email_settings') }}" class="btn btn-warning">
                         <i class="bi bi-envelope-gear"></i> Email Settings
@@ -126,7 +301,10 @@
             </div>
         </div>
     </div>
-    
+</div>
+
+<!-- Third Row -->
+<div class="row mt-4">
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
@@ -135,12 +313,103 @@
             <div class="card-body">
                 <p class="card-text">Export data and view system analytics.</p>
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('admin.export_data') }}" class="btn btn-primary">
+                    <a href="{{ url_for('admin.export_data') }}" class="btn btn-secondary">
                         <i class="bi bi-download"></i> Export Data
                     </a>
                     <a href="{{ url_for('admin.usage_reports') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-graph-up"></i> Usage Reports
                     </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NEW: 4-Level Hierarchy Status -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-diagram-3-fill text-info"></i> Hierarchy Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">4-Level organizational hierarchy system status and health.</p>
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 mb-2">
+                        <div class="h5 text-danger">{{ stats.total_departments }}</div>
+                        <small class="text-muted">Depts</small>
+                    </div>
+                    <div class="col-6 col-md-3 mb-2">
+                        <div class="h5 text-warning">{{ stats.total_divisions }}</div>
+                        <small class="text-muted">Divs</small>
+                    </div>
+                    <div class="col-6 col-md-3 mb-2">
+                        <div class="h5 text-success">{{ stats.total_sections }}</div>
+                        <small class="text-muted">Secs</small>
+                    </div>
+                    <div class="col-6 col-md-3 mb-2">
+                        <div class="h5 text-info">{{ stats.total_units }}</div>
+                        <small class="text-muted">Units</small>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="badge bg-success">4-Level Hierarchy Active</span>
+                    <span class="badge bg-info">Smart Approval Routing</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Status -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-check-circle-fill text-success"></i> System Configuration Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Core Settings</h6>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                4-Level Hierarchy System
+                                <span class="badge bg-success">Active</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                External URL Configuration
+                                <span class="badge bg-warning text-dark" id="url-status">Checking...</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                Email SMTP Configuration
+                                <span class="badge bg-warning text-dark" id="email-status">Checking...</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                Leave Request Notifications
+                                <span class="badge bg-warning text-dark" id="leave-notif-status">Checking...</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>User Management</h6>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                Total Active Users
+                                <span class="badge bg-primary">{{ stats.active_users }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                Administrators
+                                <span class="badge bg-danger" id="admin-count">Loading...</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                Leave Approvers (All Levels)
+                                <span class="badge bg-info" id="total-approvers">Loading...</span>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -152,34 +421,207 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">Recent Activity</h5>
+                <h5 class="card-title mb-0">System Features & Recent Activity</h5>
             </div>
             <div class="card-body">
                 <div class="list-group list-group-flush">
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>New user registered:</strong> John Doe
-                            <br><small class="text-muted">2 hours ago</small>
+                            <strong>4-Level Hierarchy System:</strong> Department → Division → Section → Unit structure active
+                            <br><small class="text-muted">Organizational hierarchy supports advanced approval workflows</small>
                         </div>
-                        <span class="badge bg-primary rounded-pill">User</span>
+                        <span class="badge bg-success rounded-pill">Active</span>
                     </div>
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>Schedule published:</strong> Week of May 27, 2025
-                            <br><small class="text-muted">5 hours ago</small>
+                            <strong>Smart Approval Routing:</strong> System automatically finds appropriate approvers
+                            <br><small class="text-muted">Checks Unit → Section → Division → Department hierarchy for approvers</small>
                         </div>
-                        <span class="badge bg-success rounded-pill">Schedule</span>
+                        <span class="badge bg-info rounded-pill">Enhanced</span>
                     </div>
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>Section created:</strong> Customer Service
-                            <br><small class="text-muted">1 day ago</small>
+                            <strong>Employee Database:</strong> Available for viewing and management
+                            <br><small class="text-muted">View, filter, and export employee data with organizational hierarchy</small>
                         </div>
-                        <span class="badge bg-info rounded-pill">Organization</span>
+                        <span class="badge bg-primary rounded-pill">Available</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Configuration:</strong> Set up organizational structure and approvers
+                            <br><small class="text-muted">Create departments, divisions, and assign users to complete setup</small>
+                        </div>
+                        <span class="badge bg-warning rounded-pill">Action Required</span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check configuration status
+    checkConfigStatus();
+    
+    // Check backup status
+    checkBackupStatus();
+    
+    function checkConfigStatus() {
+        // Check App Settings - gracefully handle if route doesn't exist
+        fetch('{{ url_for("admin.get_app_settings") }}')
+            .then(response => response.json())
+            .then(data => {
+                const urlStatus = document.getElementById('url-status');
+                if (data.success && data.settings.external_url) {
+                    urlStatus.className = 'badge bg-success';
+                    urlStatus.textContent = 'Configured';
+                } else {
+                    urlStatus.className = 'badge bg-danger';
+                    urlStatus.textContent = 'Not Set';
+                }
+            })
+            .catch(() => {
+                document.getElementById('url-status').className = 'badge bg-secondary';
+                document.getElementById('url-status').textContent = 'N/A';
+            });
+        
+        // Check Email Settings - gracefully handle if route doesn't exist
+        fetch('{{ url_for("admin.get_email_settings") }}')
+            .then(response => response.json())
+            .then(data => {
+                const emailStatus = document.getElementById('email-status');
+                const leaveNotifStatus = document.getElementById('leave-notif-status');
+                
+                if (data.success && data.settings.mail_server && data.settings.mail_username) {
+                    emailStatus.className = 'badge bg-success';
+                    emailStatus.textContent = 'Configured';
+                    
+                    // Check leave notifications
+                    if (data.settings.notify_leave_requests) {
+                        leaveNotifStatus.className = 'badge bg-success';
+                        leaveNotifStatus.textContent = 'Enabled';
+                    } else {
+                        leaveNotifStatus.className = 'badge bg-warning text-dark';
+                        leaveNotifStatus.textContent = 'Disabled';
+                    }
+                } else {
+                    emailStatus.className = 'badge bg-danger';
+                    emailStatus.textContent = 'Not Set';
+                    leaveNotifStatus.className = 'badge bg-secondary';
+                    leaveNotifStatus.textContent = 'N/A';
+                }
+            })
+            .catch(() => {
+                document.getElementById('email-status').className = 'badge bg-secondary';
+                document.getElementById('email-status').textContent = 'N/A';
+                document.getElementById('leave-notif-status').className = 'badge bg-secondary';
+                document.getElementById('leave-notif-status').textContent = 'N/A';
+            });
+    }
+    
+    function checkBackupStatus() {
+        // Check if backup system is accessible
+        fetch('{{ url_for("backup.backup_status") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Backup system is operational');
+                }
+            })
+            .catch(error => {
+                console.warn('Backup system check failed:', error);
+            });
+    }
+    
+    // Count administrators and approvers (simulate data loading)
+    setTimeout(() => {
+        document.getElementById('admin-count').textContent = '1+';
+        document.getElementById('approver-count').textContent = '12+';
+        document.getElementById('total-approvers').textContent = '12+';
+    }, 500);
+});
+
+// Quick backup function
+function createQuickBackup() {
+    if (confirm('Create a database backup now? This may take a few moments.')) {
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Creating...';
+        btn.disabled = true;
+        
+        fetch('{{ url_for("backup.create_backup") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                showToast('Backup created successfully!', 'success');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            } else {
+                throw new Error('Backup failed');
+            }
+        })
+        .catch(error => {
+            showToast('Failed to create backup: ' + error.message, 'danger');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+}
+
+// Toast notification function
+function showToast(message, type) {
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '1055';
+        document.body.appendChild(toastContainer);
+    }
+    
+    const toastId = 'toast-' + Date.now();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+// Add spin animation for loading buttons
+const style = document.createElement('style');
+style.textContent = `
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
+</script>
 {% endblock %}

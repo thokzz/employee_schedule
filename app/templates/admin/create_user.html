@@ -1,206 +1,358 @@
-{% extends "base.html" %}
+<!-- Update the Organizational Assignment section in create_user.html -->
 
-{% block title %}Create New User{% endblock %}
+<hr>
+<h6 class="text-muted mb-3">Organizational Assignment (4-Level Hierarchy)</h6>
 
-{% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Create New User</h1>
-    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Back to Users
-    </a>
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    <strong>4-Level Hierarchy:</strong> Department → Division → Section → Unit
 </div>
 
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">User Information</h5>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('admin.create_user') }}">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="first_name" class="form-label">First Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="first_name" name="first_name" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="last_name" name="last_name" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="username" class="form-label">Username <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="username" name="username" required>
-                                <small class="text-muted">Used for login</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" id="email" name="email" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                        <small class="text-muted">Minimum 6 characters</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="role" class="form-label">Role <span class="text-danger">*</span></label>
-                        <select class="form-select" id="role" name="role" required>
-                            <option value="">Select Role</option>
-                            <option value="employee">Employee</option>
-                            <option value="manager">Manager</option>
-                            <option value="administrator">Administrator</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Employment Information Section -->
-                    <hr>
-                    <h6 class="text-muted mb-3">Employment Information (Optional)</h6>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="personnel_number" class="form-label">Personnel Number</label>
-                                <input type="text" class="form-control" id="personnel_number" name="personnel_number" 
-                                       placeholder="e.g., Based on Worksched information">
-                                <small class="text-muted">Unique employee identification number</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="id_number" class="form-label">ID Number</label>
-                                <input type="text" class="form-control" id="id_number" name="id_number" 
-                                       placeholder="e.g., Employee ID Number">
-                                <small class="text-muted">Government or company issued ID</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="hiring_date" class="form-label">Hiring Date</label>
-                                <input type="date" class="form-control" id="hiring_date" name="hiring_date">
-                                <small class="text-muted">Date when employment started</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="job_title" class="form-label">Job Title</label>
-                                <input type="text" class="form-control" id="job_title" name="job_title" 
-                                       placeholder="e.g., Senior Developer">
-                                <small class="text-muted">Current position or job title</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="rank" class="form-label">Rank</label>
-                                <input type="text" class="form-control" id="rank" name="rank" 
-                                       placeholder="e.g., RF3, CONFIB">
-                                <small class="text-muted">Employee rank or level</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <hr>
-                    <h6 class="text-muted mb-3">Organizational Assignment</h6>
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="section_id" class="form-label">Section</label>
-                                <select class="form-select" id="section_id" name="section_id">
-                                    <option value="">No Section</option>
-                                    {% for section in sections %}
-                                        <option value="{{ section.id }}">{{ section.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="unit_id" class="form-label">Unit</label>
-                                <select class="form-select" id="unit_id" name="unit_id">
-                                    <option value="">No Unit</option>
-                                    {% for unit in units %}
-                                        <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
-                                            {{ unit.name }} ({{ unit.section.name }})
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <a href="{{ url_for('admin.manage_users') }}" class="btn btn-secondary me-md-2">Cancel</a>
-                        <button type="submit" class="btn btn-primary">Create User</button>
-                    </div>
-                </form>
-            </div>
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="department_id" class="form-label">Department</label>
+            <select class="form-select" id="department_id" name="department_id">
+                <option value="">Select Department</option>
+                {% for department in departments %}
+                    <option value="{{ department.id }}">{{ department.name }}</option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Top-level organizational unit</small>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="division_id" class="form-label">Division</label>
+            <select class="form-select" id="division_id" name="division_id">
+                <option value="">Select Division</option>
+                {% for division in divisions %}
+                    <option value="{{ division.id }}" data-department="{{ division.department_id }}">
+                        {{ division.name }} ({{ division.department.name }})
+                    </option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Sub-department organizational unit</small>
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="section_id" class="form-label">Section</label>
+            <select class="form-select" id="section_id" name="section_id">
+                <option value="">Select Section</option>
+                {% for section in sections %}
+                    <option value="{{ section.id }}" 
+                            data-division="{{ section.division_id if section.division else '' }}">
+                        {{ section.name }}
+                        {% if section.division %} ({{ section.division.name }}){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Work group assignment</small>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="unit_id" class="form-label">Unit</label>
+            <select class="form-select" id="unit_id" name="unit_id">
+                <option value="">Select Unit</option>
+                {% for unit in units %}
+                    <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
+                        {{ unit.name }} ({{ unit.section.name }})
+                    </option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Team assignment</small>
+        </div>
+    </div>
+</div>
+
+<hr>
+<h6 class="text-muted mb-3">Approver Permissions</h6>
+
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i>
+    <strong>Note:</strong> Users must be assigned to the corresponding organizational level before being granted approver status.
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="is_department_approver" name="is_department_approver">
+            <label class="form-check-label" for="is_department_approver">
+                <strong>Department Approver</strong>
+                <br><small class="text-muted">Can approve leaves for all employees in the department</small>
+            </label>
+        </div>
+        
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="is_division_approver" name="is_division_approver">
+            <label class="form-check-label" for="is_division_approver">
+                <strong>Division Approver</strong>
+                <br><small class="text-muted">Can approve leaves for all employees in the division</small>
+            </label>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="is_section_approver" name="is_section_approver">
+            <label class="form-check-label" for="is_section_approver">
+                <strong>Section Approver</strong>
+                <br><small class="text-muted">Can approve leaves for employees in their section</small>
+            </label>
+        </div>
+        
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="is_unit_approver" name="is_unit_approver">
+            <label class="form-check-label" for="is_unit_approver">
+                <strong>Unit Approver</strong>
+                <br><small class="text-muted">Can approve leaves for employees in their unit</small>
+            </label>
+        </div>
+    </div>
+</div>
+
 <script>
-// Filter units based on selected section
-document.getElementById('section_id').addEventListener('change', function() {
-    const selectedSection = this.value;
+// Enhanced filtering for 4-level hierarchy
+document.addEventListener('DOMContentLoaded', function() {
+    const departmentSelect = document.getElementById('department_id');
+    const divisionSelect = document.getElementById('division_id');
+    const sectionSelect = document.getElementById('section_id');
     const unitSelect = document.getElementById('unit_id');
-    const unitOptions = unitSelect.querySelectorAll('option');
     
-    unitOptions.forEach(option => {
-        if (option.value === '') {
-            option.style.display = 'block';
-        } else {
-            const unitSection = option.getAttribute('data-section');
-            option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+    // Filter divisions based on selected department
+    departmentSelect.addEventListener('change', function() {
+        const selectedDepartment = this.value;
+        const divisionOptions = divisionSelect.querySelectorAll('option');
+        
+        divisionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const divisionDepartment = option.getAttribute('data-department');
+                option.style.display = (selectedDepartment === '' || divisionDepartment === selectedDepartment) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset lower level selections
+        divisionSelect.value = '';
+        sectionSelect.value = '';
+        unitSelect.value = '';
+        
+        // Filter sections and units
+        filterSections();
+        filterUnits();
+    });
+    
+    // Filter sections based on selected division
+    divisionSelect.addEventListener('change', function() {
+        filterSections();
+        // Reset unit selection
+        unitSelect.value = '';
+        filterUnits();
+    });
+    
+    // Filter units based on selected section
+    sectionSelect.addEventListener('change', function() {
+        filterUnits();
+    });
+    
+    function filterSections() {
+        const selectedDivision = divisionSelect.value;
+        const sectionOptions = sectionSelect.querySelectorAll('option');
+        
+        sectionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const sectionDivision = option.getAttribute('data-division');
+                option.style.display = (selectedDivision === '' || sectionDivision === selectedDivision) ? 'block' : 'none';
+            }
+        });
+    }
+    
+    function filterUnits() {
+        const selectedSection = sectionSelect.value;
+        const unitOptions = unitSelect.querySelectorAll('option');
+        
+        unitOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const unitSection = option.getAttribute('data-section');
+                option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+            }
+        });
+    }
+    
+    // Validate approver permissions
+    const approverCheckboxes = document.querySelectorAll('input[type="checkbox"][id*="approver"]');
+    
+    approverCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            validateApproverPermissions();
+        });
+    });
+    
+    function validateApproverPermissions() {
+        const isDeptApprover = document.getElementById('is_department_approver').checked;
+        const isDivApprover = document.getElementById('is_division_approver').checked;
+        const isSectApprover = document.getElementById('is_section_approver').checked;
+        const isUnitApprover = document.getElementById('is_unit_approver').checked;
+        
+        const deptId = departmentSelect.value;
+        const divId = divisionSelect.value;
+        const sectId = sectionSelect.value;
+        const unitId = unitSelect.value;
+        
+        // Show warnings if approver status is selected but no assignment
+        if (isDeptApprover && !deptId) {
+            showApproverWarning('department', 'Department approver requires department assignment');
+        }
+        if (isDivApprover && !divId) {
+            showApproverWarning('division', 'Division approver requires division assignment');
+        }
+        if (isSectApprover && !sectId) {
+            showApproverWarning('section', 'Section approver requires section assignment');
+        }
+        if (isUnitApprover && !unitId) {
+            showApproverWarning('unit', 'Unit approver requires unit assignment');
+        }
+    }
+    
+    function showApproverWarning(level, message) {
+        // Remove existing warnings
+        const existingWarning = document.querySelector(`#${level}_approver_warning`);
+        if (existingWarning) {
+            existingWarning.remove();
+        }
+        
+        // Create new warning
+        const warning = document.createElement('div');
+        warning.id = `${level}_approver_warning`;
+        warning.className = 'alert alert-warning alert-sm mt-2';
+        warning.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${message}`;
+        
+        // Insert after the checkbox
+        const checkbox = document.getElementById(`is_${level}_approver`);
+        checkbox.closest('.form-check').appendChild(warning);
+    }
+    
+    // Auto-check approver status based on assignments
+    function autoSuggestApprover() {
+        const role = document.getElementById('role').value;
+        
+        if (role === 'manager' || role === 'administrator') {
+            // Suggest approver permissions for managers and admins
+            if (departmentSelect.value && !document.getElementById('is_department_approver').checked) {
+                document.getElementById('is_department_approver').checked = true;
+            }
+            if (divisionSelect.value && !document.getElementById('is_division_approver').checked) {
+                document.getElementById('is_division_approver').checked = true;
+            }
+            if (sectionSelect.value && !document.getElementById('is_section_approver').checked) {
+                document.getElementById('is_section_approver').checked = true;
+            }
+            if (unitSelect.value && !document.getElementById('is_unit_approver').checked) {
+                document.getElementById('is_unit_approver').checked = true;
+            }
+        }
+    }
+    
+    // Listen for role changes
+    document.getElementById('role')?.addEventListener('change', autoSuggestApprover);
+    
+    // Form validation before submit
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const errors = [];
+        
+        // Check if any approver permission is set without corresponding assignment
+        if (document.getElementById('is_department_approver').checked && !departmentSelect.value) {
+            errors.push('Department approver requires department assignment');
+        }
+        if (document.getElementById('is_division_approver').checked && !divisionSelect.value) {
+            errors.push('Division approver requires division assignment');
+        }
+        if (document.getElementById('is_section_approver').checked && !sectionSelect.value) {
+            errors.push('Section approver requires section assignment');
+        }
+        if (document.getElementById('is_unit_approver').checked && !unitSelect.value) {
+            errors.push('Unit approver requires unit assignment');
+        }
+        
+        if (errors.length > 0) {
+            e.preventDefault();
+            alert('Please fix the following issues:\n\n' + errors.join('\n'));
         }
     });
     
-    // Reset unit selection if it's no longer valid
-    const selectedUnit = unitSelect.value;
-    if (selectedUnit && selectedSection) {
-        const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
-        if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
-            unitSelect.value = '';
+    // Visual hierarchy indicator
+    function updateHierarchyIndicator() {
+        const indicator = document.getElementById('hierarchy_indicator') || createHierarchyIndicator();
+        const dept = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
+        const div = divisionSelect.options[divisionSelect.selectedIndex]?.text || '';
+        const sect = sectionSelect.options[sectionSelect.selectedIndex]?.text || '';
+        const unit = unitSelect.options[unitSelect.selectedIndex]?.text || '';
+        
+        let hierarchy = [];
+        if (dept && dept !== 'Select Department') hierarchy.push(`<span class="badge bg-danger">${dept}</span>`);
+        if (div && div !== 'Select Division') hierarchy.push(`<span class="badge bg-warning text-dark">${div.split(' (')[0]}</span>`);
+        if (sect && sect !== 'Select Section') hierarchy.push(`<span class="badge bg-success">${sect.split(' (')[0]}</span>`);
+        if (unit && unit !== 'Select Unit') hierarchy.push(`<span class="badge bg-info">${unit.split(' (')[0]}</span>`);
+        
+        if (hierarchy.length > 0) {
+            indicator.innerHTML = `<strong>Selected Hierarchy:</strong> ${hierarchy.join(' → ')}`;
+            indicator.style.display = 'block';
+        } else {
+            indicator.style.display = 'none';
         }
     }
+    
+    function createHierarchyIndicator() {
+        const indicator = document.createElement('div');
+        indicator.id = 'hierarchy_indicator';
+        indicator.className = 'alert alert-info mt-3';
+        indicator.style.display = 'none';
+        
+        // Insert after the organizational assignment section
+        const orgSection = document.querySelector('h6:contains("Organizational Assignment")');
+        if (orgSection) {
+            orgSection.parentNode.insertBefore(indicator, orgSection.nextSibling.nextSibling);
+        }
+        
+        return indicator;
+    }
+    
+    // Update indicator when selections change
+    [departmentSelect, divisionSelect, sectionSelect, unitSelect].forEach(select => {
+        select.addEventListener('change', updateHierarchyIndicator);
+    });
 });
 
-// Password strength indicator (optional enhancement)
-document.getElementById('password').addEventListener('input', function() {
-    const password = this.value;
-    const minLength = password.length >= 6;
-    
-    if (password.length > 0) {
-        if (minLength) {
-            this.classList.remove('is-invalid');
-            this.classList.add('is-valid');
-        } else {
-            this.classList.remove('is-valid');
-            this.classList.add('is-invalid');
+// Keyboard shortcuts for quick navigation
+document.addEventListener('keydown', function(e) {
+    if (e.altKey) {
+        switch(e.key) {
+            case 'd':
+                e.preventDefault();
+                document.getElementById('department_id').focus();
+                break;
+            case 'v':
+                e.preventDefault();
+                document.getElementById('division_id').focus();
+                break;
+            case 's':
+                e.preventDefault();
+                document.getElementById('section_id').focus();
+                break;
+            case 'u':
+                e.preventDefault();
+                document.getElementById('unit_id').focus();
+                break;
         }
-    } else {
-        this.classList.remove('is-valid', 'is-invalid');
     }
 });
 </script>
-{% endblock %}

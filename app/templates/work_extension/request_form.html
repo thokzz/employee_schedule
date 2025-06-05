@@ -1,0 +1,328 @@
+<!-- Create new file: app/templates/work_extension/request_form.html -->
+
+{% extends "base.html" %}
+
+{% block title %}Request Work Extension{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Request Work Extension</h1>
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle"></i> 
+    <strong>Work Extension Request:</strong> This form is for Confidential employees to request approval for overtime work. 
+    Use this when you need to work beyond your scheduled hours.
+</div>
+
+<form action="{{ url_for('work_extension.submit_work_extension') }}" method="POST" class="work-extension-form">
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4><i class="bi bi-person-circle"></i> Employee Information</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Employee Name</label>
+                        <input type="text" class="form-control" value="{{ current_user.full_name }}" readonly>
+                        <input type="hidden" name="employee_id" value="{{ current_user.id }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Section</label>
+                        <input type="text" class="form-control" 
+                               value="{{ current_user.section.name if current_user.section else 'Not Assigned' }}" readonly>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label for="contact" class="form-label">Contact Number <span class="text-danger">*</span></label>
+                        <input type="tel" id="contact" name="contact" class="form-control" required 
+                               value="{{ current_user.contact_number or '' }}"
+                               placeholder="Contact number during extended work">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h4><i class="bi bi-clock"></i> Work Extension Details</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="extension_date" class="form-label">Date of Extended Work <span class="text-danger">*</span></label>
+                        <input type="date" id="extension_date" name="extension_date" class="form-control" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Regular Shift Schedule</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="shift_start" class="form-label">Shift Start Time</label>
+                                <input type="time" id="shift_start" name="shift_start" class="form-control">
+                                <small class="text-muted">Your regular scheduled start time</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="shift_end" class="form-label">Shift End Time</label>
+                                <input type="time" id="shift_end" name="shift_end" class="form-control">
+                                <small class="text-muted">Your regular scheduled end time</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>Actual Time</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="actual_time_in" class="form-label">Actual Time In</label>
+                                <input type="time" id="actual_time_in" name="actual_time_in" class="form-control">
+                                <small class="text-muted">When you actually started work</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="actual_time_out" class="form-label">Actual Time Out</label>
+                                <input type="time" id="actual_time_out" name="actual_time_out" class="form-control">
+                                <small class="text-muted">When you actually finished work</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Extended Time Period <span class="text-danger">*</span></h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="extended_from" class="form-label">Extended From <span class="text-danger">*</span></label>
+                                <input type="time" id="extended_from" name="extended_from" class="form-control" required>
+                                <small class="text-muted">Start of overtime period</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="extended_to" class="form-label">Extended To <span class="text-danger">*</span></label>
+                                <input type="time" id="extended_to" name="extended_to" class="form-control" required>
+                                <small class="text-muted">End of overtime period</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>Extension Summary</h5>
+                    <div class="form-group mb-3">
+                        <label for="extension_hours" class="form-label">Total Extension Hours</label>
+                        <input type="text" id="extension_hours" name="extension_hours" class="form-control" readonly>
+                        <small class="text-muted">Automatically calculated</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="form-group mb-3">
+                        <label for="reason" class="form-label">Reason for Extended Work <span class="text-danger">*</span></label>
+                        <textarea id="reason" name="reason" rows="4" class="form-control" required 
+                                  placeholder="Please provide detailed reason for the need to extend work hours..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Approver Information Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-white">
+            <h4><i class="bi bi-person-check"></i> Approver Information</h4>
+        </div>
+        <div class="card-body">
+            {% if approver %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Your work extension request will be automatically sent to your designated approver.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label">Approver Name</label>
+                            <input type="text" class="form-control" value="{{ approver.full_name }}" readonly>
+                            {% if approver.job_title %}
+                                <small class="text-muted">{{ approver.job_title }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label">Approval Authority</label>
+                            <input type="text" class="form-control" value="{{ approver.approver_scope }}" readonly>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hidden fields for approver info -->
+                <input type="hidden" name="approver_id" value="{{ approver.id }}">
+                
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>No Approver Assigned:</strong> You don't have a designated approver for your section/unit. 
+                    Please contact your administrator to assign an approver before submitting work extension requests.
+                </div>
+                
+                <!-- Manual approver selection -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="form-group mb-3">
+                            <label for="approver_id" class="form-label">Select Available Approver <span class="text-danger">*</span></label>
+                            <select id="approver_id" name="approver_id" required class="form-select">
+                                <option value="" disabled selected>Select approver</option>
+                                {% for manager in available_approvers %}
+                                    {% if manager.is_active %}
+                                    <option value="{{ manager.id }}">
+                                        {{ manager.full_name }}
+                                        {% if manager.job_title %} - {{ manager.job_title }}{% endif %}
+                                        ({{ manager.approver_scope }})
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="form-actions text-center mb-4">
+        <button type="submit" class="btn btn-primary btn-lg me-3" {{ 'disabled' if not approver and not available_approvers }}>
+            <i class="bi bi-send"></i> Submit Work Extension Request
+        </button>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary btn-lg">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set minimum date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('extension_date').setAttribute('min', today);
+    
+    // Calculate extension hours automatically
+    function calculateExtensionHours() {
+        const extendedFrom = document.getElementById('extended_from').value;
+        const extendedTo = document.getElementById('extended_to').value;
+        
+        if (extendedFrom && extendedTo) {
+            const start = new Date(`2023-01-01T${extendedFrom}:00`);
+            let end = new Date(`2023-01-01T${extendedTo}:00`);
+            
+            // Handle next day extension
+            if (end <= start) {
+                end = new Date(`2023-01-02T${extendedTo}:00`);
+            }
+            
+            const diff = (end - start) / (1000 * 60 * 60);
+            document.getElementById('extension_hours').value = diff.toFixed(2) + ' hours';
+        } else {
+            document.getElementById('extension_hours').value = '';
+        }
+    }
+    
+    // Add event listeners for time calculations
+    document.getElementById('extended_from').addEventListener('change', calculateExtensionHours);
+    document.getElementById('extended_to').addEventListener('change', calculateExtensionHours);
+    
+    // Auto-populate shift times based on common schedules
+    document.getElementById('shift_start').addEventListener('change', function() {
+        const startTime = this.value;
+        if (startTime && !document.getElementById('actual_time_in').value) {
+            document.getElementById('actual_time_in').value = startTime;
+        }
+    });
+    
+    document.getElementById('shift_end').addEventListener('change', function() {
+        const endTime = this.value;
+        if (endTime && !document.getElementById('extended_from').value) {
+            document.getElementById('extended_from').value = endTime;
+        }
+    });
+    
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        let isValid = true;
+        let errorMessage = '';
+        
+        if (!document.getElementById('extension_date').value) {
+            isValid = false;
+            errorMessage = 'Please select the date of extended work';
+        }
+        
+        if (!document.getElementById('extended_from').value || !document.getElementById('extended_to').value) {
+            isValid = false;
+            errorMessage = 'Please specify the extended time period';
+        }
+        
+        if (!document.getElementById('reason').value.trim()) {
+            isValid = false;
+            errorMessage = 'Please provide a reason for the work extension';
+        }
+        
+        if (!document.getElementById('contact').value.trim()) {
+            isValid = false;
+            errorMessage = 'Please provide a contact number';
+        }
+        
+        // Check if approver is selected (for manual selection case)
+        const approverSelect = document.getElementById('approver_id');
+        if (approverSelect && !approverSelect.value) {
+            isValid = false;
+            errorMessage = 'Please select an approver';
+        }
+        
+        if (!isValid) {
+            alert(errorMessage);
+            e.preventDefault();
+        }
+    });
+    
+    // Show helpful tooltips
+    const tooltips = {
+        'extension_date': 'Select the specific date when you worked extended hours',
+        'extended_from': 'The time when your overtime period started',
+        'extended_to': 'The time when your overtime period ended',
+        'reason': 'Explain why the extended work was necessary (project deadline, urgent task, etc.)'
+    };
+    
+    Object.keys(tooltips).forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.setAttribute('title', tooltips[fieldId]);
+        }
+    });
+});
+</script>
+{% endblock %}

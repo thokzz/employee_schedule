@@ -1,3 +1,5 @@
+<!-- Update your existing app/templates/base.html - Fixed version -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -147,6 +149,24 @@
             border-color: var(--primary-color);
             box-shadow: 0 0 0 0.2rem rgba(111, 66, 193, 0.25);
         }
+
+        /* Leave notification badges */
+        .leave-notification {
+            position: relative;
+        }
+
+        .leave-notification .badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            font-size: 0.6rem;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         
         @media (max-width: 768px) {
             .sidebar {
@@ -219,6 +239,62 @@
                                 Schedule
                             </a>
                         </li>
+
+                        <!-- LEAVE MANAGEMENT SECTION -->
+                        <hr class="text-white-50">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'leave.request_leave' %}active{% endif %}" 
+                               href="{{ url_for('leave.request_leave') }}">
+                                <i class="bi bi-calendar-plus"></i>
+                                Request Leave
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'leave.my_applications' %}active{% endif %}" 
+                               href="{{ url_for('leave.my_applications') }}">
+                                <i class="bi bi-file-text"></i>
+                                My Applications
+                            </a>
+                        </li>
+
+                        {% if current_user.can_file_work_extension() %}
+                        <hr class="text-white-50">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'work_extension.request_work_extension' %}active{% endif %}" 
+                               href="{{ url_for('work_extension.request_work_extension') }}">
+                                <i class="bi bi-clock-history"></i>
+                                Request Work Extension
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'work_extension.my_work_extensions' %}active{% endif %}" 
+                               href="{{ url_for('work_extension.my_work_extensions') }}">
+                                <i class="bi bi-file-text"></i>
+                                My Work Extensions
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if current_user.can_approve_leaves() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'work_extension.work_extension_management' %}active{% endif %}" 
+                               href="{{ url_for('work_extension.work_extension_management') }}">
+                                <i class="bi bi-check2-square"></i>
+                                Work Extension Management
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if current_user.can_approve_leaves() %}
+                        <li class="nav-item">
+                            <a class="nav-link leave-notification {% if request.endpoint == 'leave.alaf_management' %}active{% endif %}" 
+                               href="{{ url_for('leave.alaf_management') }}">
+                                <i class="bi bi-check-circle"></i>
+                                ALAF Management
+                            </a>
+                        </li>
+                        {% endif %}
+
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'main.profile' %}active{% endif %}" 
                                href="{{ url_for('main.profile') }}">
@@ -240,14 +316,31 @@
                         
                         {% if current_user.can_admin() %}
                         <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint.startswith('admin.') and request.endpoint != 'admin.export_data' %}active{% endif %}" 
+                            <a class="nav-link {% if request.endpoint.startswith('admin.') and request.endpoint not in ['admin.export_data', 'admin.employee_database'] %}active{% endif %}" 
                                href="{{ url_for('admin.admin_dashboard') }}">
                                 <i class="bi bi-gear"></i>
                                 Administration
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint.startswith('backup.') %}active{% endif %}" 
+                               href="{{ url_for('backup.backup_management') }}">
+                                <i class="bi bi-shield-check"></i>
+                                Database Backup
+                            </a>
+                        </li>
                         {% endif %}
-                        
+
+                        {% if current_user.can_approve_leaves() or current_user.can_edit_schedule() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'admin.employee_database' %}active{% endif %}" 
+                               href="{{ url_for('admin.employee_database') }}">
+                                <i class="bi bi-database"></i>
+                                Employee Database
+                            </a>
+                        </li>
+                        {% endif %}
+
                         <hr class="text-white-50">
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('auth.logout') }}">
@@ -294,7 +387,7 @@
             alerts.forEach(function(alert) {
                 var bsAlert = new bootstrap.Alert(alert);
                 bsAlert.close();
-            });
+            });  // ← FIXED: Proper closing
         }, 5000);
     </script>
     

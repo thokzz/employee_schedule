@@ -1,0 +1,654 @@
+<!-- Replace your entire employee_database.html with this fixed version -->
+
+{% extends "base.html" %}
+
+{% block title %}Employee Database{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .employee-table {
+        font-size: 0.9rem;
+    }
+    
+    .employee-table th {
+        background-color: #f8f9fa;
+        border-top: none;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .employee-table td {
+        vertical-align: middle;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .table-responsive {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .years-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Loading overlay removed - not needed */
+    
+    .export-actions {
+        gap: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-people"></i> Employee Database
+        <small class="text-muted">{{ scope }}</small>
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2 export-actions">
+            <button type="button" class="btn btn-success" id="export-csv-button">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+            {% if current_user.can_admin() %}
+            <button type="button" class="btn btn-primary" onclick="window.location.href='{{ url_for('admin.import_employee_database') }}'">
+                <i class="bi bi-upload"></i> Import CSV
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="download-template-button">
+                <i class="bi bi-file-earmark-text"></i> Download Template
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="card filter-card">
+    <div class="card-body">
+        <h6 class="card-title mb-3">
+            <i class="bi bi-funnel"></i> Filter Employees
+        </h6>
+        <form id="filter-form">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="section-filter" class="form-label">Section</label>
+                    <select class="form-select" id="section-filter" name="section_id">
+                        <option value="">All Sections</option>
+                        {% for section in sections %}
+                        <option value="{{ section.id }}">{{ section.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="unit-filter" class="form-label">Unit</label>
+                    <select class="form-select" id="unit-filter" name="unit_id">
+                        <option value="">All Units</option>
+                        {% for unit in units %}
+                        <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.section.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="employee-type-filter" class="form-label">Employee Type</label>
+                    <select class="form-select" id="employee-type-filter" name="employee_type">
+                        <option value="">All Types</option>
+                        <option value="rank_and_file">Rank and File</option>
+                        <option value="rank_and_file_probationary">Rank and File (Probationary)</option>
+                        <option value="confidential">Confidential</option>
+                        <option value="confidential_probationary">Confidential (Probationary)</option>
+                        <option value="contractual">Contractual</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="search-filter" class="form-label">Search</label>
+                    <input type="text" class="form-control" id="search-filter" name="search" 
+                           placeholder="Name, Email, Job Title...">
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-12">
+                    <button type="button" class="btn btn-light me-2" id="filter-button">
+                        <i class="bi bi-search"></i> Apply Filters
+                    </button>
+                    <button type="button" class="btn btn-outline-light" id="clear-button">
+                        <i class="bi bi-x-circle"></i> Clear Filters
+                    </button>
+                    <span class="ms-3 text-light" id="result-count">
+                        <i class="bi bi-people-fill"></i> Total: {{ employees|length }} employees
+                    </span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Employee Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover employee-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Date Hired</th>
+                        <th>Section</th>
+                        <th>Unit</th>
+                        <th>Job Title</th>
+                        <th>Rank</th>
+                        <th>Employee Type</th>
+                        <th>ID Number</th>
+                        <th>Service</th>
+                        <th>Contact</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody id="employee-table-body">
+                    {% for employee in employees %}
+                    <tr>
+                        <td>
+                            <strong>{{ employee.last_name }}, {{ employee.first_name }}</strong>
+                            {% if employee.personnel_number %}
+                            <br><small class="text-muted">{{ employee.personnel_number }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if employee.hiring_date %}
+                                {{ employee.hiring_date.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                <span class="text-muted">Not set</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if employee.section %}
+                                <span class="badge bg-primary">{{ employee.section.name }}</span>
+                            {% else %}
+                                <span class="text-muted">Not assigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if employee.unit %}
+                                <span class="badge bg-info">{{ employee.unit.name }}</span>
+                            {% else %}
+                                <span class="text-muted">Not assigned</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ employee.job_title or '-' }}</td>
+                        <td>{{ employee.rank or '-' }}</td>
+                        <td>
+                            {% if employee.employee_type %}
+                                <span class="badge bg-secondary">
+                                    {{ employee.employee_type.value.replace('_', ' ').title() }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">Not set</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ employee.id_number or '-' }}</td>
+                        <td>
+                            {% if employee.years_of_service is not none %}
+                                <span class="badge years-badge 
+                                    {% if employee.years_of_service < 1 %}bg-warning text-dark
+                                    {% elif employee.years_of_service < 5 %}bg-info
+                                    {% elif employee.years_of_service < 10 %}bg-success
+                                    {% else %}bg-dark{% endif %}">
+                                    {{ employee.years_of_service }} {{ 'year' if employee.years_of_service == 1 else 'years' }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if employee.contact_number %}
+                                <a href="tel:{{ employee.contact_number }}" class="text-decoration-none">
+                                    {{ employee.contact_number }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted">Not provided</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="mailto:{{ employee.email }}" class="text-decoration-none">
+                                {{ employee.email }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if not employees %}
+        <div class="text-center py-5">
+            <i class="bi bi-people display-4 text-muted"></i>
+            <p class="text-muted mt-3">No employees found matching your criteria.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Employee Count Summary -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Summary Statistics</h6>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="h4 text-primary" id="total-employees">{{ employees|length }}</div>
+                        <small class="text-muted">Total Employees</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h4 text-success" id="with-contact">
+                            {% set contact_count = 0 %}
+                            {% for emp in employees %}
+                                {% if emp.contact_number and emp.contact_number.strip() %}
+                                    {% set contact_count = contact_count + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ contact_count }}
+                        </div>
+                        <small class="text-muted">With Contact</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h4 text-info" id="assigned-units">
+                            {{ employees|selectattr('unit')|list|length }}
+                        </div>
+                        <small class="text-muted">Assigned to Units</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title">Quick Actions</h6>
+                <div class="d-grid gap-2">
+                    {% if current_user.can_admin() %}
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-person-gear"></i> Manage Users
+                    </a>
+                    {% endif %}
+                    <button class="btn btn-outline-success" id="export-button">
+                        <i class="bi bi-download"></i> Export Current View
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentEmployees = [];
+
+// Simple status indicator instead of spinner
+function showStatus(message) {
+    const statusElement = document.getElementById('result-count');
+    if (statusElement && message) {
+        statusElement.innerHTML = `<i class="bi bi-clock"></i> ${message}`;
+        setTimeout(() => {
+            updateResultCount(currentEmployees.length);
+        }, 1000);
+    }
+}
+
+function filterEmployees() {
+    console.log('🔍 Starting filter request...');
+    const form = document.getElementById('filter-form');
+    
+    if (!form) {
+        console.error('❌ Filter form not found!');
+        alert('Error: Filter form not found');
+        return;
+    }
+    
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+    
+    for (let [key, value] of formData.entries()) {
+        if (value && value.trim() !== '') {
+            params.append(key, value.trim());
+        }
+    }
+    
+    // FIXED: Use direct URL path
+    const filterUrl = '/admin/api/employees/filter' + (params.toString() ? '?' + params.toString() : '');
+    console.log('🌐 Filter URL:', filterUrl);
+    
+    // Show a simple status message instead of spinner
+    showStatus('Filtering...');
+    
+    fetch(filterUrl, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => {
+        console.log('📡 Response received:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url,
+            redirected: response.redirected
+        });
+        
+        if (response.redirected && response.url.includes('login')) {
+            console.warn('🔐 Redirected to login page');
+            alert('Session expired. Please log in again.');
+            window.location.href = '/login';
+            return Promise.reject('Authentication required');
+        }
+        
+        if (!response.ok) {
+            return response.text().then(text => {
+                console.error('❌ HTTP Error Response:', text.substring(0, 500));
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            });
+        }
+        
+        const contentType = response.headers.get('content-type') || '';
+        console.log('📄 Content-Type:', contentType);
+        
+        if (!contentType.includes('application/json')) {
+            return response.text().then(text => {
+                console.error('❌ Non-JSON response:', text.substring(0, 500));
+                throw new Error(`Expected JSON but received: ${contentType}`);
+            });
+        }
+        
+        return response.json();
+    })
+    .then(data => {
+        if (!data) return;
+        
+        console.log('✅ Data received:', data);
+        
+        if (data.success) {
+            console.log('📊 Updating table with', data.employees.length, 'employees');
+            updateEmployeeTable(data.employees);
+            updateResultCount(data.total_count);
+            updateSummaryStats(data.employees);
+            currentEmployees = data.employees;
+        } else {
+            const errorMsg = data.error || 'Unknown error';
+            console.error('❌ API Error:', errorMsg);
+            alert(`Error filtering employees: ${errorMsg}`);
+        }
+    })
+    .catch(error => {
+        console.error('💥 Filter request failed:', error);
+        
+        let userMessage = 'Failed to filter employees. ';
+        if (error.message.includes('JSON')) {
+            userMessage += 'Server returned invalid data. Please try refreshing the page.';
+        } else if (error.message.includes('NetworkError')) {
+            userMessage += 'Network connection issue.';
+        } else {
+            userMessage += error.message;
+        }
+        
+        alert(userMessage);
+    })
+    .finally(() => {
+        console.log('🏁 Filter request completed');
+        // Status will auto-update after the timeout in showStatus()
+    });
+}
+
+function updateEmployeeTable(employees) {
+    console.log('Updating table with', employees.length, 'employees');
+    const tbody = document.getElementById('employee-table-body');
+    
+    if (!tbody) {
+        console.error('Table body not found!');
+        return;
+    }
+    
+    if (employees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11" class="text-center py-4">
+                    <i class="bi bi-search display-4 text-muted"></i>
+                    <p class="text-muted mt-2">No employees found matching your criteria.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    try {
+        tbody.innerHTML = employees.map(emp => `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(emp.last_name)}, ${escapeHtml(emp.first_name)}</strong>
+                    ${emp.personnel_number ? `<br><small class="text-muted">${escapeHtml(emp.personnel_number)}</small>` : ''}
+                </td>
+                <td>
+                    ${emp.hiring_date ? escapeHtml(emp.hiring_date) : '<span class="text-muted">Not set</span>'}
+                </td>
+                <td>
+                    ${emp.section ? `<span class="badge bg-primary">${escapeHtml(emp.section)}</span>` : '<span class="text-muted">Not assigned</span>'}
+                </td>
+                <td>
+                    ${emp.unit ? `<span class="badge bg-info">${escapeHtml(emp.unit)}</span>` : '<span class="text-muted">Not assigned</span>'}
+                </td>
+                <td>${escapeHtml(emp.job_title) || '-'}</td>
+                <td>${escapeHtml(emp.rank) || '-'}</td>
+                <td>
+                    ${emp.employee_type ? `<span class="badge bg-secondary">${escapeHtml(emp.employee_type)}</span>` : '<span class="text-muted">Not set</span>'}
+                </td>
+                <td>${escapeHtml(emp.id_number) || '-'}</td>
+                <td>
+                    ${emp.years_of_service !== 'N/A' && emp.years_of_service !== null ? 
+                        `<span class="badge years-badge ${getServiceBadgeClass(emp.years_of_service)}">${emp.years_of_service} ${emp.years_of_service == 1 ? 'year' : 'years'}</span>` :
+                        '<span class="text-muted">N/A</span>'
+                    }
+                </td>
+                <td>
+                    ${emp.contact_number ? 
+                        `<a href="tel:${escapeHtml(emp.contact_number)}" class="text-decoration-none">${escapeHtml(emp.contact_number)}</a>` :
+                        '<span class="text-muted">Not provided</span>'
+                    }
+                </td>
+                <td>
+                    <a href="mailto:${escapeHtml(emp.email)}" class="text-decoration-none">${escapeHtml(emp.email)}</a>
+                </td>
+            </tr>
+        `).join('');
+        
+        console.log('Table updated successfully');
+    } catch (error) {
+        console.error('Error updating table:', error);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="11" class="text-center py-4 text-danger">
+                    <i class="bi bi-exclamation-triangle display-4"></i>
+                    <p class="mt-2">Error updating table: ${error.message}</p>
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return unsafe
+         .toString()
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+function getServiceBadgeClass(years) {
+    if (years < 1) return 'bg-warning text-dark';
+    if (years < 5) return 'bg-info';
+    if (years < 10) return 'bg-success';
+    return 'bg-dark';
+}
+
+function updateResultCount(count) {
+    const element = document.getElementById('result-count');
+    if (element) {
+        element.innerHTML = `<i class="bi bi-people-fill"></i> Total: ${count} employees`;
+    }
+}
+
+function updateSummaryStats(employees) {
+    try {
+        console.log('Updating summary stats for', employees.length, 'employees');
+        
+        const totalElement = document.getElementById('total-employees');
+        const contactElement = document.getElementById('with-contact');
+        const unitsElement = document.getElementById('assigned-units');
+        
+        if (totalElement) totalElement.textContent = employees.length;
+        
+        if (contactElement) {
+            const withContact = employees.filter(emp => emp.contact_number && emp.contact_number.trim() !== '').length;
+            contactElement.textContent = withContact;
+        }
+        
+        if (unitsElement) {
+            const assignedUnits = employees.filter(emp => emp.unit && emp.unit.trim() !== '').length;
+            unitsElement.textContent = assignedUnits;
+        }
+        
+        console.log('Summary stats updated successfully');
+    } catch (error) {
+        console.error('Error updating summary stats:', error);
+    }
+}
+
+function clearFilters() {
+    const form = document.getElementById('filter-form');
+    if (form) {
+        form.reset();
+        // Trigger a filter to show all employees again
+        filterEmployees();
+    }
+}
+
+function exportEmployees() {
+    const form = document.getElementById('filter-form');
+    const formData = new FormData(form);
+    const params = new URLSearchParams();
+    
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    
+    // FIXED: Use direct URL path
+    const exportUrl = '/admin/employees/export?' + params.toString();
+    window.location.href = exportUrl;
+}
+
+function downloadTemplate() {
+    // FIXED: Use direct URL path
+    window.location.href = '/admin/employees/template';
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Employee Database loaded, initializing...');
+    
+    // Set up event listeners - FIXED to prevent double-firing
+    const filterButton = document.getElementById('filter-button');
+    if (filterButton) {
+        filterButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            filterEmployees();
+        });
+    }
+    
+    const clearButton = document.getElementById('clear-button');
+    if (clearButton) {
+        clearButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearFilters();
+        });
+    }
+    
+    const exportButton = document.getElementById('export-button');
+    if (exportButton) {
+        exportButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            exportEmployees();
+        });
+    }
+    
+    const exportCsvButton = document.getElementById('export-csv-button');
+    if (exportCsvButton) {
+        exportCsvButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            exportEmployees();
+        });
+    }
+    
+    const downloadTemplateButton = document.getElementById('download-template-button');
+    if (downloadTemplateButton) {
+        downloadTemplateButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            downloadTemplate();
+        });
+    }
+    
+    const searchInput = document.getElementById('search-filter');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                filterEmployees();
+            }
+        });
+    }
+    
+    // Add dropdown change listeners for real-time filtering (but throttled to prevent double calls)
+    let filterTimeout;
+    function throttledFilter() {
+        clearTimeout(filterTimeout);
+        filterTimeout = setTimeout(filterEmployees, 300); // Wait 300ms before filtering
+    }
+    
+    const sectionFilter = document.getElementById('section-filter');
+    const unitFilter = document.getElementById('unit-filter');
+    const typeFilter = document.getElementById('employee-type-filter');
+    
+    if (sectionFilter) {
+        sectionFilter.addEventListener('change', throttledFilter);
+    }
+    
+    if (unitFilter) {
+        unitFilter.addEventListener('change', throttledFilter);
+    }
+    
+    if (typeFilter) {
+        typeFilter.addEventListener('change', throttledFilter);
+    }
+    
+    console.log('✅ Employee Database ready to filter.');
+});
+</script>
+{% endblock %}

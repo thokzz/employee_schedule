@@ -1,0 +1,767 @@
+<!-- Update app/templates/leave/request_form.html - Add work extension integration -->
+
+{% extends "base.html" %}
+
+{% block title %}Request Leave{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Request Leave</h1>
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<form action="{{ url_for('leave.submit_leave') }}" method="POST" class="leave-form">
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4><i class="bi bi-person-circle"></i> Employee Information</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Employee Name</label>
+                        <input type="text" class="form-control" value="{{ current_user.full_name }}" readonly>
+                        <input type="hidden" id="employee_id" name="employee_id" value="{{ current_user.id }}">
+                        <input type="hidden" id="employee_name" name="employee_name" value="{{ current_user.full_name }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label class="form-label">ID Number</label>
+                        <input type="text" id="employee_idno" name="id_no" class="form-control" 
+                               value="{{ current_user.id_number or 'Not Set' }}" readonly>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Div./Department</label>
+                        <input type="text" id="employee_unit" name="dept" class="form-control" 
+                               value="{{ current_user.section.name if current_user.section else 'Not Assigned' }}" readonly>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Date Filed</label>
+                        <input type="text" id="date_filed" name="date_filed" class="form-control" readonly>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group mb-3">
+                        <label class="form-label">Reference Code</label>
+                        <input type="text" id="unique_code" name="unique_code" class="form-control" readonly>
+                        <small class="text-muted">Auto-generated</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="contact" class="form-label">Contact Number <span class="text-danger">*</span></label>
+                        <input type="tel" id="contact" name="contact" class="form-control" required 
+                               value="{{ current_user.contact_number or '' }}"
+                               placeholder="Where you can be contacted during leave">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Hidden fields for employee info -->
+            <input type="hidden" id="employee_email" name="employee_email" value="{{ current_user.email }}">
+            <input type="hidden" id="employee_signature_path" name="employee_signature_path" value="{{ current_user.signature_path or '' }}">
+            <input type="hidden" id="signature" name="signature" value="{{ current_user.signature_path or '' }}">
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h4><i class="bi bi-calendar-event"></i> Leave Details</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="leave_type" class="form-label">Type of Leave <span class="text-danger">*</span></label>
+                        <select id="leave_type" name="leave_type" required class="form-select">
+                            <option value="" disabled selected>Select leave type</option>
+                            {% for leave_type in leave_types %}
+                                {% if leave_type.value == 'Other' %}
+                                    {% if current_user.can_file_work_extension() %}
+                                        <option value="{{ leave_type.value }}" data-requires-extensions="true">{{ leave_type.value }} (Offset for Work Extension)</option>
+                                    {% endif %}
+                                {% else %}
+                                    <option value="{{ leave_type.value }}">{{ leave_type.value }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        {% if current_user.can_file_work_extension() %}
+                            <small class="text-muted">"Other" is for offsetting approved work extensions</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Work Extension Selection Section (only for "Other" leave type) -->
+            {% if current_user.can_file_work_extension() and approved_work_extensions %}
+            <div id="work_extensions_section" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>"Other" Leave Type:</strong> Select the approved work extensions you want to offset with this leave request.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <h5>Select Approved Work Extensions to Attach:</h5>
+                        <div class="border rounded p-3 mb-3" style="max-height: 300px; overflow-y: auto;">
+                            {% for extension in approved_work_extensions %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input work-extension-checkbox" type="checkbox" 
+                                       name="work_extensions" value="{{ extension.id }}" 
+                                       id="extension_{{ extension.id }}"
+                                       data-hours="{{ extension.extension_hours or 0 }}"
+                                       data-date="{{ extension.extension_date.strftime('%m/%d/%Y') }}">
+                                <label class="form-check-label" for="extension_{{ extension.id }}">
+                                    <strong>{{ extension.reference_code }}</strong> - 
+                                    {{ extension.extension_date.strftime('%b %d, %Y') }}
+                                    {% if extension.extension_hours %}
+                                        ({{ extension.extension_hours }} hours)
+                                    {% endif %}
+                                    <br>
+                                    <small class="text-muted">{{ extension.reason[:100] }}{% if extension.reason|length > 100 %}...{% endif %}</small>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="form-label">Selected Extensions Summary</label>
+                                    <div id="selected_extensions_summary" class="form-control" readonly style="min-height: 60px; background-color: #f8f9fa;">
+                                        <small class="text-muted">No extensions selected</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="form-label">Total Extension Hours</label>
+                                    <input type="text" id="total_extension_hours" class="form-control" readonly value="0 hours">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% elif current_user.can_file_work_extension() and not approved_work_extensions %}
+            <div id="no_extensions_warning" style="display: none;">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>No Approved Work Extensions:</strong> You don't have any approved work extensions to offset. 
+                    Please submit and get approval for work extensions first before filing an "Other" leave type.
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="form-group mb-3">
+                        <label for="reason" class="form-label">Detail/Reason <span class="text-danger">*</span></label>
+                        <textarea id="reason" name="reason" rows="3" class="form-control" required 
+                                  placeholder="Please provide detailed reason for your leave request..."></textarea>
+                        <small class="text-muted" id="reason_help_text">Provide the reason for your leave request</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="hours_based" name="is_hours_based">
+                        <label class="form-check-label" for="hours_based">
+                            <strong>This leave is for specific hours (not full day)</strong>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="multiple_dates" name="multiple_dates">
+                        <label class="form-check-label" for="multiple_dates">
+                            <strong>Leave dates are not consecutive</strong>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Single Date Section (default - consecutive dates) -->
+            <div id="single_date_section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="leave_date_single" class="form-label">Leave Date <span class="text-danger">*</span></label>
+                            <input type="date" id="leave_date_single" name="leave_date_single" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="total_days" class="form-label">Total Days <span class="text-danger">*</span></label>
+                            <input type="number" id="total_days" name="total_days" class="form-control" 
+                                   value="1" min="1" step="1" required>
+                            <small class="text-muted">Number of consecutive days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Time Range (for hour-based leave) -->
+            <div id="time_range_section" style="display: none;">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="leave_date_hours" class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" id="leave_date_hours" name="leave_date_hours" class="form-control">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group mb-3">
+                            <label for="start_time" class="form-label">Start Time <span class="text-danger">*</span></label>
+                            <input type="time" id="start_time" name="start_time" class="form-control">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group mb-3">
+                            <label for="end_time" class="form-label">End Time <span class="text-danger">*</span></label>
+                            <input type="time" id="end_time" name="end_time" class="form-control">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="form-group mb-3">
+                            <label for="hours" class="form-label">Hours</label>
+                            <input type="text" id="hours" name="hours" class="form-control" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Multiple Dates Section (for non-consecutive dates) -->
+            <div id="multiple_dates_section" style="display: none;">
+                <div class="row mb-2">
+                    <div class="col-md-12">
+                        <h5>Add Multiple Leave Dates</h5>
+                        <p class="text-muted">Add each date separately for non-consecutive leave days.</p>
+                    </div>
+                </div>
+                
+                <div id="dates_container">
+                    <div class="row date-row mb-2">
+                        <div class="col-md-4">
+                            <input type="date" name="leave_dates[]" class="form-control leave-date">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-danger btn-sm remove-date">Remove</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <button type="button" id="add_date" class="btn btn-info btn-sm">
+                            <i class="bi bi-plus"></i> Add Another Date
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="multiple_total_days" class="form-label">Total Leave Days</label>
+                            <input type="number" id="multiple_total_days" name="multiple_total_days" class="form-control" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden fields for database storage -->
+            <input type="hidden" id="start_date" name="start_date">
+            <input type="hidden" id="end_date" name="end_date">
+        </div>
+    </div>
+    
+    <!-- Approver Information Section -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-white">
+            <h4><i class="bi bi-person-check"></i> Approver Information</h4>
+        </div>
+        <div class="card-body">
+            {% if approver %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Your leave request will be automatically sent to your designated approver.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label">Approver Name</label>
+                            <input type="text" class="form-control" value="{{ approver.full_name }}" readonly>
+                            {% if approver.job_title %}
+                                <small class="text-muted">{{ approver.job_title }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label class="form-label">Approval Authority</label>
+                            <input type="text" class="form-control" value="{{ approver.approver_scope }}" readonly>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hidden fields for approver info -->
+                <input type="hidden" id="manager_id" name="manager_id" value="{{ approver.id }}">
+                <input type="hidden" id="approver_email" name="approver_email" value="{{ approver.email }}">
+                <input type="hidden" id="approver_name" name="approver_name" value="{{ approver.full_name }}">
+                <input type="hidden" id="approver_id" name="approver_id" value="{{ approver.id }}">
+                <input type="hidden" id="appr_sign" name="appr_sign" value="{{ approver.signature_path or '' }}">
+                
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>No Approver Assigned:</strong> You don't have a designated approver for your section/unit. 
+                    Please contact your administrator to assign an approver before submitting leave requests.
+                </div>
+                
+                <!-- If no auto-approver, show manual selection -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="form-group mb-3">
+                            <label for="manager_id" class="form-label">Select Available Approver <span class="text-danger">*</span></label>
+                            <select id="manager_id" name="manager_id" required class="form-select">
+                                <option value="" disabled selected>Select approver</option>
+                                {% for manager in available_approvers %}
+                                    {% if manager.is_active %}
+                                    <option value="{{ manager.id }}"
+                                        data-email="{{ manager.email }}"
+                                        data-signature="{{ manager.signature_path or '' }}">
+                                        {{ manager.full_name }}
+                                        {% if manager.job_title %} - {{ manager.job_title }}{% endif %}
+                                        ({{ manager.approver_scope }})
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            
+                            <!-- Hidden fields for manual approver selection -->
+                            <input type="hidden" id="approver_email" name="approver_email">
+                            <input type="hidden" id="approver_name" name="approver_name">
+                            <input type="hidden" id="approver_id" name="approver_id">
+                            <input type="hidden" id="appr_sign" name="appr_sign">
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="form-actions text-center mb-4">
+        <button type="submit" class="btn btn-primary btn-lg me-3" {{ 'disabled' if not approver and not available_approvers }}>
+            <i class="bi bi-send"></i> Submit Leave Request
+        </button>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary btn-lg">
+            <i class="bi bi-x-circle"></i> Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Format and set current date
+    const today = new Date();
+    const formattedDate = (today.getMonth() + 1).toString().padStart(2, '0') + '/' +
+                           today.getDate().toString().padStart(2, '0') + '/' +
+                           today.getFullYear();
+    document.getElementById('date_filed').value = formattedDate;
+    
+    // Generate placeholder reference code
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const numbers = '0123456789';
+    let code = 'LV-';
+    for (let i = 0; i < 10; i++) {
+        const chars = letters + numbers;
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    document.getElementById('unique_code').value = code;
+    
+    // Handle leave type change
+    document.getElementById('leave_type').addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const requiresExtensions = selectedOption.dataset.requiresExtensions === 'true';
+        
+        // Show/hide work extensions section
+        const extensionsSection = document.getElementById('work_extensions_section');
+        const noExtensionsWarning = document.getElementById('no_extensions_warning');
+        const reasonHelpText = document.getElementById('reason_help_text');
+        
+        if (requiresExtensions) {
+            if (extensionsSection) {
+                extensionsSection.style.display = 'block';
+                reasonHelpText.textContent = 'Explain why you need to offset the selected work extensions';
+            } else if (noExtensionsWarning) {
+                noExtensionsWarning.style.display = 'block';
+                reasonHelpText.textContent = 'You need approved work extensions to file "Other" leave type';
+            }
+        } else {
+            if (extensionsSection) extensionsSection.style.display = 'none';
+            if (noExtensionsWarning) noExtensionsWarning.style.display = 'none';
+            reasonHelpText.textContent = 'Provide the reason for your leave request';
+            
+            // Clear selected work extensions
+            document.querySelectorAll('.work-extension-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateExtensionsSummary();
+        }
+    });
+    
+    // Handle work extension selection
+    document.querySelectorAll('.work-extension-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateExtensionsSummary);
+    });
+    
+    function updateExtensionsSummary() {
+        const selectedCheckboxes = document.querySelectorAll('.work-extension-checkbox:checked');
+        const summaryDiv = document.getElementById('selected_extensions_summary');
+        const totalHoursInput = document.getElementById('total_extension_hours');
+        
+        if (selectedCheckboxes.length === 0) {
+            summaryDiv.innerHTML = '<small class="text-muted">No extensions selected</small>';
+            totalHoursInput.value = '0 hours';
+            return;
+        }
+        
+        let summaryHTML = '';
+        let totalHours = 0;
+        
+        selectedCheckboxes.forEach(checkbox => {
+            const label = document.querySelector(`label[for="${checkbox.id}"]`);
+            const hours = parseFloat(checkbox.dataset.hours) || 0;
+            const date = checkbox.dataset.date;
+            const refCode = label.textContent.split(' - ')[0];
+            
+            summaryHTML += `<small class="d-block"><strong>${refCode}</strong> - ${date} (${hours}hrs)</small>`;
+            totalHours += hours;
+        });
+        
+        summaryDiv.innerHTML = summaryHTML;
+        totalHoursInput.value = `${totalHours.toFixed(1)} hours`;
+    }
+    
+    // Initialize toggle sections based on checkboxes
+    function updateToggleSections() {
+        const hoursBasedChecked = document.getElementById('hours_based').checked;
+        const multipleDatesChecked = document.getElementById('multiple_dates').checked;
+
+        // Sections
+        const singleDateSection = document.getElementById('single_date_section');
+        const timeRangeSection = document.getElementById('time_range_section');
+        const multipleDatesSection = document.getElementById('multiple_dates_section');
+
+        // Required inputs
+        const totalDaysInput = document.getElementById('total_days');
+        const singleDateInput = document.getElementById('leave_date_single');
+
+        // Hide all sections and remove required attributes
+        singleDateSection.style.display = 'none';
+        timeRangeSection.style.display = 'none';
+        multipleDatesSection.style.display = 'none';
+        
+        totalDaysInput.removeAttribute('required');
+        singleDateInput.removeAttribute('required');
+
+        if (hoursBasedChecked) {
+            timeRangeSection.style.display = 'block';
+        } else if (multipleDatesChecked) {
+            multipleDatesSection.style.display = 'block';
+        } else {
+            singleDateSection.style.display = 'block';
+            totalDaysInput.setAttribute('required', 'required');
+            singleDateInput.setAttribute('required', 'required');
+        }
+        
+        updateDatabaseFields();
+        updateTotalDaysForSubmission();
+    }
+
+    function formatDateMMDDYYYY(dateString) {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '';
+        
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const year = date.getFullYear();
+        
+        return `${month}/${day}/${year}`;
+    }
+
+    function formatTime(timeString) {
+        if (!timeString) return '';
+        return timeString;
+    }
+    
+    // Update the correct total days for form submission
+    function updateTotalDaysForSubmission() {
+        const hoursBasedChecked = document.getElementById('hours_based').checked;
+        const multipleDatesChecked = document.getElementById('multiple_dates').checked;
+        
+        // Create hidden inputs for backend if they don't exist
+        let multipleTotalDaysInput = document.getElementById('multiple_total_days_hidden');
+        let hoursInput = document.getElementById('hours_hidden');
+        
+        if (!multipleTotalDaysInput) {
+            multipleTotalDaysInput = document.createElement('input');
+            multipleTotalDaysInput.type = 'hidden';
+            multipleTotalDaysInput.id = 'multiple_total_days_hidden';
+            multipleTotalDaysInput.name = 'multiple_total_days';
+            document.querySelector('form').appendChild(multipleTotalDaysInput);
+        }
+        
+        if (!hoursInput) {
+            hoursInput = document.createElement('input');
+            hoursInput.type = 'hidden';
+            hoursInput.id = 'hours_hidden';
+            hoursInput.name = 'hours';
+            document.querySelector('form').appendChild(hoursInput);
+        }
+        
+        if (hoursBasedChecked) {
+            const calculatedHours = document.getElementById('hours').value;
+            hoursInput.value = calculatedHours || '0';
+            multipleTotalDaysInput.value = '';
+        } else if (multipleDatesChecked) {
+            const dateInputs = document.querySelectorAll('.leave-date');
+            const validDates = Array.from(dateInputs).filter(input => input.value !== '');
+            multipleTotalDaysInput.value = validDates.length;
+            hoursInput.value = '';
+        } else {
+            multipleTotalDaysInput.value = '';
+            hoursInput.value = '';
+        }
+    }
+    
+    function updateDatabaseFields() {
+        const hoursBasedChecked = document.getElementById('hours_based').checked;
+        const multipleDatesChecked = document.getElementById('multiple_dates').checked;
+        
+        const startDateField = document.getElementById('start_date');
+        const endDateField = document.getElementById('end_date');
+        
+        if (hoursBasedChecked) {
+            const leaveDate = document.getElementById('leave_date_hours').value;
+            const startTime = document.getElementById('start_time').value;
+            const endTime = document.getElementById('end_time').value;
+            
+            if (leaveDate && startTime && endTime) {
+                const formattedDate = formatDateMMDDYYYY(leaveDate);
+                const formattedStartTime = formatTime(startTime);
+                const formattedEndTime = formatTime(endTime);
+                
+                const concatenatedValue = `${formattedDate} ${formattedStartTime} - ${formattedEndTime}`;
+                startDateField.value = concatenatedValue;
+            } else {
+                startDateField.value = '';
+            }
+            endDateField.value = '';
+            
+        } else if (multipleDatesChecked) {
+            const dateInputs = document.querySelectorAll('.leave-date');
+            const validDates = Array.from(dateInputs)
+                .map(input => input.value)
+                .filter(date => date !== '')
+                .map(date => formatDateMMDDYYYY(date));
+            
+            if (validDates.length > 0) {
+                const concatenatedDates = validDates.join(',');
+                startDateField.value = concatenatedDates;
+            } else {
+                startDateField.value = '';
+            }
+            endDateField.value = '';
+            
+        } else {
+            const singleDate = document.getElementById('leave_date_single').value;
+            if (singleDate) {
+                startDateField.value = formatDateMMDDYYYY(singleDate);
+            } else {
+                startDateField.value = '';
+            }
+            endDateField.value = '';
+        }
+        
+        updateTotalDaysForSubmission();
+    }
+    
+    // Run once when page loads
+    updateToggleSections();
+    
+    // Add event listeners for checkbox changes
+    document.getElementById('hours_based').addEventListener('change', function() {
+        if (this.checked) {
+            document.getElementById('multiple_dates').checked = false;
+        }
+        updateToggleSections();
+    });
+    
+    document.getElementById('multiple_dates').addEventListener('change', function() {
+        if (this.checked) {
+            document.getElementById('hours_based').checked = false;
+        }
+        updateToggleSections();
+    });
+    
+    // Add event listeners for date/time changes
+    document.getElementById('leave_date_single').addEventListener('change', updateDatabaseFields);
+    document.getElementById('leave_date_hours').addEventListener('change', updateDatabaseFields);
+    document.getElementById('start_time').addEventListener('change', function() {
+        calculateHours();
+        updateDatabaseFields();
+    });
+    document.getElementById('end_time').addEventListener('change', function() {
+        calculateHours();
+        updateDatabaseFields();
+    });
+    
+    // Update total days when single date total_days changes
+    document.getElementById('total_days').addEventListener('change', updateTotalDaysForSubmission);
+    
+    // Update approver info when manually selected (only if no auto-approver)
+    const managerSelect = document.getElementById('manager_id');
+    if (managerSelect && managerSelect.tagName === 'SELECT') {
+        managerSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            
+            if (selectedOption && selectedOption.value) {
+                const approverEmail = selectedOption.dataset.email || '';
+                const approverName = selectedOption.textContent.trim();
+                const approverId = selectedOption.value;
+                const approverSignature = selectedOption.dataset.signature || '';
+                
+                document.getElementById('approver_email').value = approverEmail;
+                document.getElementById('approver_name').value = approverName;
+                document.getElementById('approver_id').value = approverId;
+                document.getElementById('appr_sign').value = approverSignature;
+            }
+        });
+    }
+    
+    // Calculate hours for time-based leave
+    function calculateHours() {
+        const startTime = document.getElementById('start_time').value;
+        const endTime = document.getElementById('end_time').value;
+        
+        if (startTime && endTime) {
+            const start = new Date(`2023-01-01T${startTime}:00`);
+            const end = new Date(`2023-01-01T${endTime}:00`);
+            
+            if (end > start) {
+                const diff = (end - start) / (1000 * 60 * 60);
+                document.getElementById('hours').value = diff.toFixed(1);
+            } else {
+                document.getElementById('hours').value = '0';
+            }
+        }
+        updateTotalDaysForSubmission();
+    }
+    
+    // Handle multiple dates
+    document.getElementById('add_date').addEventListener('click', function() {
+        const container = document.getElementById('dates_container');
+        const newRow = document.createElement('div');
+        newRow.className = 'row date-row mb-2';
+        newRow.innerHTML = `
+            <div class="col-md-4">
+                <input type="date" name="leave_dates[]" class="form-control leave-date">
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger btn-sm remove-date">Remove</button>
+            </div>
+        `;
+        
+        container.appendChild(newRow);
+        
+        newRow.querySelector('.remove-date').addEventListener('click', function() {
+            container.removeChild(newRow);
+            updateMultipleDaysCount();
+        });
+        
+        newRow.querySelector('.leave-date').addEventListener('change', function() {
+            updateMultipleDaysCount();
+            updateDatabaseFields();
+        });
+    });
+    
+    // Event delegation for remove buttons
+    document.getElementById('dates_container').addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-date')) {
+            const row = e.target.closest('.date-row');
+            row.parentNode.removeChild(row);
+            updateMultipleDaysCount();
+            updateDatabaseFields();
+        }
+    });
+    
+    function updateMultipleDaysCount() {
+        const dateInputs = document.querySelectorAll('.leave-date');
+        const validDates = Array.from(dateInputs).filter(input => input.value !== '');
+        document.getElementById('multiple_total_days').value = validDates.length;
+        updateDatabaseFields();
+    }
+    
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        updateDatabaseFields();
+        updateTotalDaysForSubmission();
+        
+        let isValid = true;
+        let errorMessage = '';
+        
+        if (!document.getElementById('leave_type').value) {
+            isValid = false;
+            errorMessage = 'Please select a leave type';
+        }
+        
+        // Special validation for "Other" leave type
+        const leaveType = document.getElementById('leave_type').value;
+        if (leaveType === 'Other') {
+            const selectedExtensions = document.querySelectorAll('.work-extension-checkbox:checked');
+            if (selectedExtensions.length === 0) {
+                isValid = false;
+                errorMessage = 'Please select at least one approved work extension for "Other" leave type';
+            }
+        }
+        
+        if (!document.getElementById('reason').value.trim()) {
+            isValid = false;
+            errorMessage = 'Please provide a reason for your leave';
+        }
+        
+        if (!document.getElementById('contact').value.trim()) {
+            isValid = false;
+            errorMessage = 'Please provide a contact number';
+        }
+        
+        // Check if approver is selected (for manual selection case)
+        const managerSelect = document.getElementById('manager_id');
+        if (managerSelect && managerSelect.tagName === 'SELECT' && !managerSelect.value) {
+            isValid = false;
+            errorMessage = 'Please select an approver';
+        }
+        
+        if (!isValid) {
+            alert(errorMessage);
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,650 @@
+<!-- Enhanced app/templates/leave/alaf_management.html with Work Extension Downloads -->
+
+{% extends "base.html" %}
+
+{% block title %}ALAF Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">ALAF Management</h1>
+    <div class="btn-toolbar">
+        <button class="btn btn-primary me-2" onclick="refreshApplications()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.pending_count }}</h3>
+                        <p class="mb-0">Pending Applications</p>
+                    </div>
+                    <i class="bi bi-clock-history display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h3 class="mb-0">{{ stats.total_employees }}</h3>
+                        <p class="mb-0">Team Members</p>
+                    </div>
+                    <i class="bi bi-people display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="mb-0">Approval Authority</h5>
+                        <p class="mb-0">{{ stats.approver_scope }}</p>
+                    </div>
+                    <i class="bi bi-shield-check display-6"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Applications -->
+<div class="card mb-4">
+    <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Pending Applications</h5>
+        <span class="badge bg-light text-dark">{{ pending_applications|length }}</span>
+    </div>
+    <div class="card-body">
+        {% if pending_applications %}
+            <div class="row">
+                {% for app in pending_applications %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card border-warning">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong>{{ app.reference_code }}</strong>
+                            <span class="badge bg-warning text-dark">
+                                {% if app.days_pending == 0 %}
+                                    Today
+                                {% elif app.days_pending == 1 %}
+                                    1 day ago
+                                {% else %}
+                                    {{ app.days_pending }} days ago
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <i class="bi bi-person-circle"></i> {{ app.employee_name }}
+                            </h6>
+                            <p class="card-text">
+                                <strong>Type:</strong> 
+                                {% if app.leave_type.value == 'Other' %}
+                                    <span class="badge bg-info">{{ app.leave_type.value }}</span>
+                                    <small class="text-muted"><i class="bi bi-paperclip"></i> With Extensions</small>
+                                {% else %}
+                                    {{ app.leave_type.value }}
+                                {% endif %}
+                                <br>
+                                <strong>Filed:</strong> {{ app.date_filed.strftime('%b %d, %Y') }}<br>
+                                {% if app.total_days %}
+                                    <strong>Duration:</strong> 
+                                    {% if app.is_hours_based %}
+                                        {{ app.total_days }} hours
+                                    {% else %}
+                                        {{ app.total_days|int }} day{% if app.total_days|int != 1 %}s{% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            </p>
+                            <p class="card-text">
+                                <small class="text-muted">{{ app.reason[:100] }}{% if app.reason|length > 100 %}...{% endif %}</small>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <div class="btn-group-vertical w-100" role="group">
+                                <!-- First row of buttons -->
+                                <div class="btn-group w-100 mb-2" role="group">
+                                    <button class="btn btn-sm btn-outline-info" onclick="viewApplication({{ app.id }})">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="downloadForm({{ app.id }})">
+                                        <i class="bi bi-image"></i> Form
+                                    </button>
+                                </div>
+                                <!-- Second row of buttons -->
+                                <div class="btn-group w-100" role="group">
+                                    <button class="btn btn-sm btn-success" onclick="approveApplication({{ app.id }})">
+                                        <i class="bi bi-check-circle"></i> Approve
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="disapproveApplication({{ app.id }})">
+                                        <i class="bi bi-x-circle"></i> Disapprove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-4">
+                <i class="bi bi-check-circle display-4 text-success"></i>
+                <h5 class="mt-3">No Pending Applications</h5>
+                <p class="text-muted">All leave applications have been reviewed.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recent Applications -->
+<div class="card">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Decisions</h5>
+    </div>
+    <div class="card-body">
+        {% if recent_applications %}
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Reference</th>
+                            <th>Employee</th>
+                            <th>Leave Type</th>
+                            <th>Filed Date</th>
+                            <th>Status</th>
+                            <th>Decision Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for app in recent_applications %}
+                        <tr>
+                            <td><strong>{{ app.reference_code }}</strong></td>
+                            <td>{{ app.employee_name }}</td>
+                            <td>
+                                {% if app.leave_type.value == 'Other' %}
+                                    <span class="badge bg-info">{{ app.leave_type.value }}</span>
+                                {% else %}
+                                    {{ app.leave_type.value }}
+                                {% endif %}
+                            </td>
+                            <td>{{ app.date_filed.strftime('%b %d') }}</td>
+                            <td>
+                                <span class="badge" style="background-color: {{ app.status_color }};">
+                                    {{ app.status.value.title() }}
+                                </span>
+                            </td>
+                            <td>{{ app.date_reviewed.strftime('%b %d, %Y') if app.date_reviewed else '-' }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-info" onclick="viewApplication({{ app.id }})">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="downloadForm({{ app.id }})">
+                                        <i class="bi bi-image"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-4">
+                <i class="bi bi-inbox display-4 text-muted"></i>
+                <h5 class="mt-3">No Recent Decisions</h5>
+                <p class="text-muted">Recent approved/disapproved applications will appear here.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Application Detail Modal -->
+<div class="modal fade" id="applicationModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Leave Application Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="applicationDetails">
+                <!-- Application details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="downloadFormFromModal()">
+                    <i class="bi bi-image"></i> Download Form
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approval Modal -->
+<div class="modal fade" id="approvalModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Approve Leave Application</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to <strong>approve</strong> this leave application?</p>
+                <div class="mb-3">
+                    <label for="approvalComments" class="form-label">Comments (Optional)</label>
+                    <textarea class="form-control" id="approvalComments" rows="3" 
+                              placeholder="Add any comments or conditions for approval..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="confirmApproval()">
+                    <i class="bi bi-check-circle"></i> Approve Leave
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Disapproval Modal -->
+<div class="modal fade" id="disapprovalModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Disapprove Leave Application</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to <strong>disapprove</strong> this leave application?</p>
+                <div class="mb-3">
+                    <label for="disapprovalComments" class="form-label">Reason for Disapproval <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="disapprovalComments" rows="3" required
+                              placeholder="Please provide a detailed reason for disapproval..."></textarea>
+                    <small class="text-muted">This reason will be shared with the employee.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDisapproval()">
+                    <i class="bi bi-x-circle"></i> Disapprove Leave
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentApplicationId = null;
+
+function viewApplication(applicationId) {
+    currentApplicationId = applicationId; // Store for form download from modal
+    fetch(`/leave/api/application/${applicationId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayApplicationDetails(data.application);
+                new bootstrap.Modal(document.getElementById('applicationModal')).show();
+            } else {
+                alert('Error loading application: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading application details');
+        });
+}
+
+function downloadForm(applicationId) {
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+    button.disabled = true;
+    
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = `/leave/api/application/${applicationId}/download-pdf`;
+    link.download = `ALAF_${applicationId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Reset button state after a short delay
+    setTimeout(() => {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+    }, 2000);
+}
+
+function downloadFormFromModal() {
+    if (currentApplicationId) {
+        downloadForm(currentApplicationId);
+    }
+}
+
+// Enhanced function to display application details with work extension downloads
+function displayApplicationDetails(app) {
+    const detailsContainer = document.getElementById('applicationDetails');
+    
+    const statusBadge = `<span class="badge" style="background-color: ${app.status_color};">${app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>`;
+    
+    // Check if this is an "Other" leave type that might have work extensions
+    let workExtensionSection = '';
+    if (app.leave_type === 'Other' && app.reason.includes('Work Extension:')) {
+        workExtensionSection = `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6 class="text-warning"><i class="bi bi-paperclip"></i> Attached Work Extensions</h6>
+                    <div id="workExtensionsList">
+                        <div class="d-flex align-items-center">
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            Loading work extensions...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    detailsContainer.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="text-primary"><i class="bi bi-person-circle"></i> Employee Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Name:</strong></td><td>${app.employee_name}</td></tr>
+                    <tr><td><strong>Email:</strong></td><td>${app.employee_email || 'N/A'}</td></tr>
+                    <tr><td><strong>Reference:</strong></td><td><code>${app.reference_code}</code></td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-success"><i class="bi bi-calendar-check"></i> Leave Details</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Type:</strong></td><td>${app.leave_type}</td></tr>
+                    <tr><td><strong>Duration:</strong></td><td>${app.total_days} ${app.is_hours_based ? 'hours' : 'days'}</td></tr>
+                    <tr><td><strong>Status:</strong></td><td>${statusBadge}</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6 class="text-info"><i class="bi bi-calendar3"></i> Leave Dates/Times</h6>
+                <div class="alert alert-light">
+                    <code>${app.start_date}</code>
+                </div>
+            </div>
+        </div>
+        
+        ${workExtensionSection}
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6 class="text-warning"><i class="bi bi-chat-text"></i> Reason</h6>
+                <div class="alert alert-light">
+                    ${app.reason.replace(/Work Extension: WE-[A-Z0-9]+/g, '<span class="badge bg-info">Work Extension Reference</span>')}
+                </div>
+            </div>
+        </div>
+        
+        ${app.reviewer_comments ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6 class="text-secondary"><i class="bi bi-chat-square-text"></i> Reviewer Comments</h6>
+                    <div class="alert alert-info">
+                        ${app.reviewer_comments}
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <small class="text-muted">
+                    <strong>Filed:</strong> ${new Date(app.date_filed).toLocaleDateString()}
+                </small>
+            </div>
+            <div class="col-md-6 text-end">
+                <small class="text-muted">
+                    <strong>Approver:</strong> ${app.approver_name}
+                </small>
+            </div>
+        </div>
+    `;
+    
+    // Load work extensions if this is an "Other" leave type
+    if (app.leave_type === 'Other' && app.reason.includes('Work Extension:')) {
+        loadWorkExtensions(app.id);
+    }
+}
+
+function loadWorkExtensions(applicationId) {
+    fetch(`/leave/api/leave-application/${applicationId}/work-extensions`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('workExtensionsList');
+            if (data.success && data.work_extensions.length > 0) {
+                let html = '<div class="list-group">';
+                data.work_extensions.forEach(ext => {
+                    html += `
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">
+                                        <code>${ext.reference_code}</code>
+                                        <span class="badge bg-primary ms-2">${ext.extension_hours} hours</span>
+                                    </h6>
+                                    <p class="mb-1">
+                                        <strong>Date:</strong> ${ext.extension_date}<br>
+                                        <strong>Reason:</strong> ${ext.reason}
+                                    </p>
+                                </div>
+                                <div class="btn-group-vertical" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="downloadWorkExtension(${ext.id})">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                    ${ext.has_document ? 
+                                        '<small class="text-success mt-1"><i class="bi bi-file-earmark-pdf"></i> Has Document</small>' : 
+                                        '<small class="text-muted mt-1"><i class="bi bi-file-earmark-text"></i> Summary Only</small>'
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="alert alert-warning">No work extensions found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading work extensions:', error);
+            document.getElementById('workExtensionsList').innerHTML = 
+                '<div class="alert alert-danger">Error loading work extensions.</div>';
+        });
+}
+
+function downloadWorkExtension(extensionId) {
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+    button.disabled = true;
+    
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = `/leave/api/work-extension/${extensionId}/download`;
+    link.download = `WorkExtension_${extensionId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Reset button state after a short delay
+    setTimeout(() => {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+    }, 2000);
+}
+
+function approveApplication(applicationId) {
+    currentApplicationId = applicationId;
+    document.getElementById('approvalComments').value = '';
+    new bootstrap.Modal(document.getElementById('approvalModal')).show();
+}
+
+function disapproveApplication(applicationId) {
+    currentApplicationId = applicationId;
+    document.getElementById('disapprovalComments').value = '';
+    new bootstrap.Modal(document.getElementById('disapprovalModal')).show();
+}
+
+function confirmApproval() {
+    if (!currentApplicationId) return;
+    
+    const comments = document.getElementById('approvalComments').value.trim();
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+    button.disabled = true;
+    
+    fetch(`/leave/api/approve/${currentApplicationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            comments: comments
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage(data.message);
+            bootstrap.Modal.getInstance(document.getElementById('approvalModal')).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Error approving application: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error processing approval');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function confirmDisapproval() {
+    if (!currentApplicationId) return;
+    
+    const comments = document.getElementById('disapprovalComments').value.trim();
+    
+    if (!comments) {
+        alert('Please provide a reason for disapproval.');
+        return;
+    }
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+    button.disabled = true;
+    
+    fetch(`/leave/api/disapprove/${currentApplicationId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            comments: comments
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage(data.message);
+            bootstrap.Modal.getInstance(document.getElementById('disapprovalModal')).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Error disapproving application: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error processing disapproval');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function refreshApplications() {
+    location.reload();
+}
+
+function showSuccessMessage(message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 4000);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        refreshApplications();
+    }
+});
+
+// Auto-refresh every 5 minutes
+setInterval(function() {
+    if (document.visibilityState === 'visible') {
+        const pendingCount = {{ stats.pending_count }};
+        if (pendingCount > 0) {
+            // Only auto-refresh if there are pending applications
+            fetch('/leave/management')
+                .then(response => {
+                    if (response.ok) {
+                        // Soft refresh - just update the page if new applications arrived
+                        location.reload();
+                    }
+                })
+                .catch(() => {
+                    // Ignore errors for auto-refresh
+                });
+        }
+    }
+}, 300000); // 5 minutes
+</script>
+{% endblock %}

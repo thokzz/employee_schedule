@@ -82,6 +82,45 @@
                                 <small class="text-muted">Unique employee identification number</small>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="div_department" class="form-label">Div./Department</label>
+                                <input type="text" class="form-control" id="div_department" name="div_department" 
+                                       value="{{ user.div_department or '' }}"
+                                       placeholder="e.g., Information Technology Division">
+                                <small class="text-muted">Division or Department assignment</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Employee Type and Schedule Format -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="employee_type" class="form-label">Employee Type</label>
+                                <select class="form-select" id="employee_type" name="employee_type">
+                                    <option value="">Select Employee Type</option>
+                                    <option value="rank_and_file" {% if user.employee_type and user.employee_type.value == 'rank_and_file' %}selected{% endif %}>Rank and File</option>
+                                    <option value="rank_and_file_probationary" {% if user.employee_type and user.employee_type.value == 'rank_and_file_probationary' %}selected{% endif %}>Rank and File Probationary</option>
+                                    <option value="confidential" {% if user.employee_type and user.employee_type.value == 'confidential' %}selected{% endif %}>Confidential</option>
+                                    <option value="confidential_probationary" {% if user.employee_type and user.employee_type.value == 'confidential_probationary' %}selected{% endif %}>Confidential Probationary</option>
+                                    <option value="contractual" {% if user.employee_type and user.employee_type.value == 'contractual' %}selected{% endif %}>Contractual</option>
+                                </select>
+                                <small class="text-muted">Employee classification type</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="schedule_format" class="form-label">Regular Schedule Format</label>
+                                <select class="form-select" id="schedule_format" name="schedule_format">
+                                    <option value="">Select Schedule Format</option>
+                                    <option value="8_hour_shift" {% if user.schedule_format and user.schedule_format.value == '8_hour_shift' %}selected{% endif %}>8-hour shift (30 min break)</option>
+                                    <option value="9_hour_shift" {% if user.schedule_format and user.schedule_format.value == '9_hour_shift' %}selected{% endif %}>9-hour shift (1 hour break)</option>
+                                    <option value="others" {% if user.schedule_format and user.schedule_format.value == 'others' %}selected{% endif %}>Others</option>
+                                </select>
+                                <small class="text-muted">Default work schedule format for break calculations</small>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="row">
@@ -177,6 +216,9 @@
                 </div>
                 <h5 class="card-title">{{ user.full_name }}</h5>
                 <p class="card-text text-muted">{{ user.role.value.title() }}</p>
+                {% if user.div_department %}
+                    <p class="card-text"><small class="text-info">{{ user.div_department }}</small></p>
+                {% endif %}
                 {% if user.section %}
                     <p class="card-text"><small class="text-muted">{{ user.section.name }}</small></p>
                 {% endif %}
@@ -189,6 +231,83 @@
                     </span>
                 </p>
                 <p class="card-text"><small class="text-muted">Member since {{ user.created_at.strftime('%B %Y') }}</small></p>
+            </div>
+        </div>
+
+        <!-- Employment Summary -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Employment Summary</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Personnel #:</strong>
+                    </div>
+                    <div class="col-6">
+                        {{ user.personnel_number or 'Not set' }}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Div./Department:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if user.div_department %}
+                            <span class="badge bg-secondary">{{ user.div_department[:15] }}{% if user.div_department|length > 15 %}...{% endif %}</span>
+                        {% else %}
+                            Not set
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Employee Type:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if user.employee_type %}
+                            <span class="badge bg-{{ 'warning' if user.employee_type.value == 'confidential' else 'info' if user.employee_type.value == 'contractual' else 'primary' }}">
+                                {{ user.employee_type.value.replace('_', ' ').title() }}
+                            </span>
+                        {% else %}
+                            Not set
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Schedule Format:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if user.schedule_format %}
+                            <span class="badge bg-{{ 'success' if user.schedule_format.value == '8_hour_shift' else 'warning' if user.schedule_format.value == '9_hour_shift' else 'secondary' }}">
+                                {% if user.schedule_format.value == '8_hour_shift' %}
+                                    8-hour
+                                {% elif user.schedule_format.value == '9_hour_shift' %}
+                                    9-hour
+                                {% else %}
+                                    Others
+                                {% endif %}
+                            </span>
+                        {% else %}
+                            Not set
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Signature:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if user.signature %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Uploaded
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">Not uploaded</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -327,6 +446,24 @@ document.getElementById('password').addEventListener('input', function() {
         }
     } else {
         this.classList.remove('is-valid', 'is-invalid');
+    }
+});
+
+// Schedule format info
+document.getElementById('schedule_format')?.addEventListener('change', function() {
+    const value = this.value;
+    let info = '';
+    
+    if (value === '8_hour_shift') {
+        info = 'Employees with 8-hour shifts get 30-minute paid breaks';
+    } else if (value === '9_hour_shift') {
+        info = 'Employees with 9-hour shifts get 1-hour paid breaks';
+    } else if (value === 'others') {
+        info = 'Other schedule formats default to 30-minute breaks';
+    }
+    
+    if (info) {
+        console.log(info);
     }
 });
 </script>

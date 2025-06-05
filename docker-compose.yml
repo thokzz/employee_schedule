@@ -1,3 +1,4 @@
+# Updated docker-compose.yml - PRESERVING all existing volumes and adding backup support
 services:
   web:
     build: .
@@ -8,7 +9,11 @@ services:
       - SECRET_KEY=your-production-secret-key-change-this
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/scheduling_db
     volumes:
+      # PRESERVING EXISTING UPLOAD VOLUMES
       - uploads:/app/app/static/uploads
+      - instance_uploads:/app/instance/uploads
+      # NEW: Adding backup volume for database backups
+      - backup_data:/app/backups
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +42,13 @@ services:
     restart: unless-stopped
 
 volumes:
+  # PRESERVING ALL EXISTING VOLUMES
   postgres_data:
     driver: local
   uploads:
+    driver: local
+  instance_uploads:
+    driver: local
+  # NEW: Adding backup volume
+  backup_data:
     driver: local
