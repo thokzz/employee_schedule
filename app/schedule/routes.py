@@ -7,7 +7,7 @@ from flask import render_template, request, jsonify, redirect, url_for, flash, m
 from flask_login import login_required, current_user
 from app.schedule import bp
 from app.models import (User, Shift, Section, Unit, ShiftStatus, WorkArrangement, db, 
-                       DateRemark, DateRemarkType, ScheduleFormat, EmployeeType)  # <-- ADDED MISSING IMPORTS
+                       DateRemark, DateRemarkType, ScheduleFormat, EmployeeType, ScheduleTemplateV2, TemplateType)  
 from datetime import datetime, date, timedelta, time
 import calendar
 import csv
@@ -35,8 +35,9 @@ def view_schedule():
         start_date = end_date = selected_date
         dates = [selected_date]
     
-    # Get team members based on user role and permissions
+    # UPDATED: Get team members based on user role and permissions
     if current_user.can_edit_schedule():
+        # Managers and Admins see their organizational scope
         if current_user.section_id:
             team_members = User.query.filter_by(section_id=current_user.section_id, is_active=True).all()
         elif current_user.unit_id:
@@ -44,7 +45,23 @@ def view_schedule():
         else:
             team_members = User.query.filter_by(is_active=True).all()
     else:
-        team_members = [current_user]
+        # UPDATED: Regular employees can see their entire section
+        if current_user.section_id:
+            team_members = User.query.filter_by(section_id=current_user.section_id, is_active=True).all()
+        elif current_user.unit_id:
+            # If employee has unit but no section, show unit members
+            team_members = User.query.filter_by(unit_id=current_user.unit_id, is_active=True).all()
+        else:
+            # Fallback: show only current user if no organizational assignment
+            team_members = [current_user]
+    
+    # UPDATED: Sort team members by Unit name (if exists), then by last name
+    def sort_key(member):
+        unit_name = member.unit.name if member.unit else "ZZZ_No_Unit"  # Put users without unit at the end
+        last_name = member.last_name or "ZZZ_No_Name"  # Handle missing last name
+        return (unit_name, last_name)
+    
+    team_members = sorted(team_members, key=sort_key)
     
     # Get shifts for the date range and team members - ORDER BY sequence
     shifts = Shift.query.filter(
@@ -84,8 +101,21 @@ def get_shift(shift_id):
         if not shift:
             return jsonify({'success': False, 'error': 'Shift not found'}), 404
         
-        # Check permissions
-        if not current_user.can_edit_schedule() and shift.employee_id != current_user.id:
+        # UPDATED: Check permissions - allow viewing section schedules
+        can_view = False
+        
+        if current_user.can_edit_schedule():
+            can_view = True
+        elif shift.employee_id == current_user.id:
+            can_view = True
+        elif current_user.section_id and shift.employee.section_id == current_user.section_id:
+            # Allow viewing shifts within same section
+            can_view = True
+        elif current_user.unit_id and shift.employee.unit_id == current_user.unit_id:
+            # Allow viewing shifts within same unit (if no section)
+            can_view = True
+        
+        if not can_view:
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
         
         return jsonify({
@@ -114,7 +144,7 @@ def create_or_update_shift():
     try:
         data = request.get_json()
         
-        # Validate permissions
+        # UPDATED: Validate permissions for editing (not just viewing)
         employee_id = int(data.get('employee_id'))
         if not current_user.can_edit_schedule() and employee_id != current_user.id:
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
@@ -189,8 +219,23 @@ def create_or_update_shift():
 def get_employee_day_shifts(employee_id, date_str):
     """Get all shifts for an employee on a specific date"""
     try:
-        # Check permissions
-        if not current_user.can_edit_schedule() and employee_id != current_user.id:
+        # UPDATED: Check permissions for viewing
+        can_view = False
+        
+        if current_user.can_edit_schedule():
+            can_view = True
+        elif employee_id == current_user.id:
+            can_view = True
+        else:
+            # Check if employee is in same section/unit
+            employee = User.query.get(employee_id)
+            if employee:
+                if current_user.section_id and employee.section_id == current_user.section_id:
+                    can_view = True
+                elif current_user.unit_id and employee.unit_id == current_user.unit_id:
+                    can_view = True
+        
+        if not can_view:
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
         
         shift_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -232,7 +277,7 @@ def delete_shift(shift_id):
         if not shift:
             return jsonify({'success': False, 'error': 'Shift not found'}), 404
         
-        # Check permissions
+        # Check permissions - only allow editing own shifts for regular employees
         if not current_user.can_edit_schedule() and shift.employee_id != current_user.id:
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
         
@@ -243,6 +288,8 @@ def delete_shift(shift_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error deleting shift: {str(e)}'}), 500
+
+# ... [Rest of the routes remain the same - keeping them unchanged for brevity]
 
 @bp.route('/api/date-remarks')
 @login_required
@@ -266,6 +313,7 @@ def get_date_remarks():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error loading date remarks: {str(e)}'}), 500
+
 
 @bp.route('/api/date-remarks', methods=['POST'])
 @login_required
@@ -552,20 +600,106 @@ def export_worksched():
     writer.writerow(['FROM', 'TO', 'START', 'END', 'START', 'END', 'START', 'END', 'START', 'END', ''])
     writer.writerow(['', '', '', '', '', '', '', '', '', '', 'REMARKS'])
     
-    def calculate_break_times(shift, employee):
-        """Calculate break times based on employee's schedule format and shift duration"""
+    def get_standard_schedule_for_employee(employee):
+        """Get standard work schedule based on employee's schedule format - FALLBACK ONLY"""
+        if employee.schedule_format == ScheduleFormat.NINE_HOUR:
+            return {
+                'start_time': '10:00',  # Default fallback start time
+                'end_time': '19:00',    # 10:00 + 9 hours = 19:00 (7PM)
+                'break_1hr_start': '13:00',
+                'break_1hr_end': '14:00',
+                'break_30min_start': '',
+                'break_30min_end': ''
+            }
+        else:  # 8-hour shift or default
+            return {
+                'start_time': '10:00',  # Default fallback start time
+                'end_time': '18:00',    # 10:00 + 8 hours = 18:00 (6PM)
+                'break_1hr_start': '',
+                'break_1hr_end': '',
+                'break_30min_start': '13:00',
+                'break_30min_end': '13:30'
+            }
+    
+    def get_standard_shift_times(shift, employee):
+        """Get standardized shift times based on employee's schedule format"""
+        if not shift.start_time:
+            return '', ''
+        
+        start_datetime = datetime.combine(shift.date, shift.start_time)
+        
+        # Calculate end time based on employee's schedule format
+        if employee.schedule_format == ScheduleFormat.NINE_HOUR:
+            end_datetime = start_datetime + timedelta(hours=9)
+        else:  # 8-hour shift or default
+            end_datetime = start_datetime + timedelta(hours=8)
+        
+        work_start = start_datetime.strftime('%H:%M')
+        work_end = end_datetime.strftime('%H:%M')
+        
+        return work_start, work_end
+
+    def get_schedule_for_leave_day(employee, employee_shifts_for_date):
+        """Get schedule for leave day based on 1st shift start time"""
+        
+        # Find the first shift (sequence #1) for this employee on this date
+        if employee_shifts_for_date:
+            first_shift = min(employee_shifts_for_date, key=lambda x: x.sequence)
+            
+            if first_shift.start_time:
+                # Use 1st shift start time as base
+                start_datetime = datetime.combine(date.today(), first_shift.start_time)
+                
+                # Calculate end time based on employee's schedule format
+                if employee.schedule_format == ScheduleFormat.NINE_HOUR:
+                    end_datetime = start_datetime + timedelta(hours=9)
+                    break_duration = 60  # 1 hour break
+                else:  # 8-hour shift
+                    end_datetime = start_datetime + timedelta(hours=8)
+                    break_duration = 30  # 30 minute break
+                
+                # Calculate break times (start 3 hours after shift start)
+                break_start_datetime = start_datetime + timedelta(hours=3)
+                break_end_datetime = break_start_datetime + timedelta(minutes=break_duration)
+                
+                if employee.schedule_format == ScheduleFormat.NINE_HOUR:
+                    return {
+                        'start_time': start_datetime.strftime('%H:%M'),
+                        'end_time': end_datetime.strftime('%H:%M'),
+                        'break_1hr_start': break_start_datetime.strftime('%H:%M'),
+                        'break_1hr_end': break_end_datetime.strftime('%H:%M'),
+                        'break_30min_start': '',
+                        'break_30min_end': ''
+                    }
+                else:  # 8-hour shift
+                    return {
+                        'start_time': start_datetime.strftime('%H:%M'),
+                        'end_time': end_datetime.strftime('%H:%M'),
+                        'break_1hr_start': '',
+                        'break_1hr_end': '',
+                        'break_30min_start': break_start_datetime.strftime('%H:%M'),
+                        'break_30min_end': break_end_datetime.strftime('%H:%M')
+                    }
+        
+        # Fallback to standard schedule if no shifts found or no start time
+        return get_standard_schedule_for_employee(employee)
+
+    def calculate_break_times_for_shift(shift, employee):
+        """Calculate break times based on employee's schedule format and shift start time"""
         if not shift.start_time or not shift.qualifies_for_break:
-            return ('', '', '', '')  # No break times if shift < 4 hours
+            return ('', '', '', '')  # No break times if shift < 4 hours or no start time
+        
+        start_datetime = datetime.combine(shift.date, shift.start_time)
+        break_start_datetime = start_datetime + timedelta(hours=3)  # Break starts 3 hours after shift start
         
         break_duration = employee.get_break_duration_minutes()
-        break_start_time = datetime.combine(shift.date, shift.start_time) + timedelta(hours=3)
-        break_end_time = break_start_time + timedelta(minutes=break_duration)
+        break_end_datetime = break_start_datetime + timedelta(minutes=break_duration)
         
-        # Determine which columns to fill based on break duration
-        if break_duration == 60:  # 9-hour shift (1 hr break)
+        # Determine which columns to fill based on employee's schedule format
+        if employee.schedule_format == ScheduleFormat.NINE_HOUR:  # 1 hr break
             return (
-                break_start_time.strftime('%H:%M'),  # 1hr break start
-                break_end_time.strftime('%H:%M'),    # 1hr break end
+                break_start_datetime.strftime('%H:%M'),  # 1hr break start
+                break_end_datetime.strftime('%H:%M'),    # 1hr break end
                 '',  # 30min break start (empty)
                 ''   # 30min break end (empty)
             )
@@ -573,9 +707,31 @@ def export_worksched():
             return (
                 '',  # 1hr break start (empty)
                 '',  # 1hr break end (empty)
-                break_start_time.strftime('%H:%M'),  # 30min break start
-                break_end_time.strftime('%H:%M')     # 30min break end
+                break_start_datetime.strftime('%H:%M'),  # 30min break start
+                break_end_datetime.strftime('%H:%M')     # 30min break end
             )
+    
+    def get_filtered_remarks(status_value):
+        """Filter remarks to show only specific leave type abbreviations"""
+        leave_abbreviations = {
+            'sick_leave': 'SL',
+            'personal_leave': 'PL',
+            'emergency_leave': 'EL',
+            'annual_vacation': 'AVL',
+            'bereavement_leave': 'BL',
+            'paternity_leave': 'PatL',
+            'maternity_leave': 'MatL',
+            'union_leave': 'UL',
+            'fire_calamity_leave': 'FCL',
+            'solo_parent_leave': 'SPL',
+            'special_leave_women': 'SLW',
+            'vawc_leave': 'VAWCL',
+            'other': 'OFFSET',
+            'offset': 'OFFSET'
+        }
+        
+        # Return the abbreviation if it's a recognized leave type, otherwise return blank
+        return leave_abbreviations.get(status_value, '')
     
     # FIXED: Generate data by employee first, then by date
     for employee in sorted(team_members, key=lambda x: x.full_name):
@@ -590,7 +746,7 @@ def export_worksched():
             formatted_date = current_date.strftime('%d-%m-%Y')
             
             if not emp_shifts:
-                # No shifts = rest day
+                # No shifts = rest day (use blank remarks)
                 writer.writerow([
                     employee_name,
                     formatted_date,
@@ -602,78 +758,82 @@ def export_worksched():
                     '',  # 1hr break end
                     '',  # 30min break start
                     '',  # 30min break end
-                    'Rest day'   # Remarks
+                    ''   # Remarks - blank for rest days
                 ])
             else:
-                # Handle each shift for this employee on this date
-                for shift_idx, shift in enumerate(emp_shifts):
-                    # Determine DWS value and break eligibility
-                    if shift.status in [ShiftStatus.REST_DAY]:
-                        dws_value = 'FREE'
-                        work_start = ''
-                        work_end = ''
-                        break_1hr_start = ''
-                        break_1hr_end = ''
-                        break_30min_start = ''
-                        break_30min_end = ''
-                        remarks = 'Rest day'
-                    elif shift.status in [
-                        ShiftStatus.SICK_LEAVE, ShiftStatus.PERSONAL_LEAVE, 
-                        ShiftStatus.EMERGENCY_LEAVE, ShiftStatus.ANNUAL_VACATION,
-                        ShiftStatus.HOLIDAY_OFF, ShiftStatus.BEREAVEMENT_LEAVE,
-                        ShiftStatus.PATERNITY_LEAVE, ShiftStatus.MATERNITY_LEAVE,
-                        ShiftStatus.UNION_LEAVE, ShiftStatus.FIRE_CALAMITY_LEAVE,
-                        ShiftStatus.SOLO_PARENT_LEAVE, ShiftStatus.SPECIAL_LEAVE_WOMEN,
-                        ShiftStatus.VAWC_LEAVE, ShiftStatus.OTHER
-                    ]:
-                        dws_value = 'FREE'
-                        work_start = ''
-                        work_end = ''
-                        break_1hr_start = ''
-                        break_1hr_end = ''
-                        break_30min_start = ''
-                        break_30min_end = ''
-                        # Convert status to readable format
-                        remarks = shift.status.value.replace('_', ' ').title()
-                        if shift.notes:
-                            remarks += f" - {shift.notes}"
-                    else:
-                        # Regular scheduled shift
-                        dws_value = ''  # Blank for regular schedule
-                        work_start = shift.start_time.strftime('%H:%M') if shift.start_time else ''
-                        work_end = shift.end_time.strftime('%H:%M') if shift.end_time else ''
-                        
-                        # Calculate break times based on employee's schedule format
-                        break_1hr_start, break_1hr_end, break_30min_start, break_30min_end = calculate_break_times(shift, employee)
-                        
-                        # Build remarks
-                        remarks_parts = []
-                        if shift.role:
-                            remarks_parts.append(f"Role: {shift.role}")
-                        if shift.work_arrangement and shift.work_arrangement.value != 'onsite':
-                            remarks_parts.append(f"Work: {shift.work_arrangement.value.upper()}")
-                        if shift.notes:
-                            remarks_parts.append(shift.notes)
-                        
-                        remarks = ' - '.join(remarks_parts) if remarks_parts else ''
-                        
-                        # Add shift duration info for split schedules
-                        if len(emp_shifts) > 1:
-                            remarks = f"Split #{shift.sequence}" + (f" - {remarks}" if remarks else "")
+                # CORRECTED: For leave days, only create ONE row (not one per shift)
+                leave_shifts = [s for s in emp_shifts if s.status in [
+                    ShiftStatus.SICK_LEAVE, ShiftStatus.PERSONAL_LEAVE, 
+                    ShiftStatus.EMERGENCY_LEAVE, ShiftStatus.ANNUAL_VACATION,
+                    ShiftStatus.HOLIDAY_OFF, ShiftStatus.BEREAVEMENT_LEAVE,
+                    ShiftStatus.PATERNITY_LEAVE, ShiftStatus.MATERNITY_LEAVE,
+                    ShiftStatus.UNION_LEAVE, ShiftStatus.FIRE_CALAMITY_LEAVE,
+                    ShiftStatus.SOLO_PARENT_LEAVE, ShiftStatus.SPECIAL_LEAVE_WOMEN,
+                    ShiftStatus.VAWC_LEAVE, ShiftStatus.OTHER, ShiftStatus.OFFSET
+                ]]
+                
+                rest_day_shifts = [s for s in emp_shifts if s.status == ShiftStatus.REST_DAY]
+                
+                if leave_shifts:
+                    # CORRECTED: Leave days get ONE row using 1st shift start time
+                    leave_schedule = get_schedule_for_leave_day(employee, emp_shifts)
+                    status_value = leave_shifts[0].status.value
+                    remarks = get_filtered_remarks(status_value)
                     
                     writer.writerow([
                         employee_name,
                         formatted_date,
-                        formatted_date,      # Same as FROM date
-                        dws_value,           # DWS (FREE for rest/leave, blank for regular)
-                        work_start,          # Work schedule start time
-                        work_end,            # Work schedule end time
-                        break_1hr_start,     # 1hr paid break start (for 9-hour shifts)
-                        break_1hr_end,       # 1hr paid break end (for 9-hour shifts)
-                        break_30min_start,   # 30min paid break start (for 8-hour shifts)
-                        break_30min_end,     # 30min paid break end (for 8-hour shifts)
-                        remarks              # Remarks
+                        formatted_date,
+                        '',  # No DWS for leave
+                        leave_schedule['start_time'],
+                        leave_schedule['end_time'],
+                        leave_schedule['break_1hr_start'],
+                        leave_schedule['break_1hr_end'],
+                        leave_schedule['break_30min_start'],
+                        leave_schedule['break_30min_end'],
+                        remarks
                     ])
+                    
+                elif rest_day_shifts:
+                    # Rest days use blank remarks
+                    writer.writerow([
+                        employee_name,
+                        formatted_date,
+                        formatted_date,
+                        'FREE',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        '',
+                        ''  # Blank remarks for rest days
+                    ])
+                else:
+                    # Handle regular scheduled shifts (one row per shift)
+                    for shift in emp_shifts:
+                        # CORRECTED: Use standard shift times (not actual times)
+                        work_start, work_end = get_standard_shift_times(shift, employee)
+                        
+                        # Calculate break times based on employee's schedule format
+                        break_1hr_start, break_1hr_end, break_30min_start, break_30min_end = calculate_break_times_for_shift(shift, employee)
+                        
+                        # For regular shifts, use blank remarks
+                        remarks = ''
+                        
+                        writer.writerow([
+                            employee_name,
+                            formatted_date,
+                            formatted_date,      # Same as FROM date
+                            '',                  # DWS blank for regular schedule
+                            work_start,          # CORRECTED: Standard shift start time
+                            work_end,            # CORRECTED: Standard shift end time
+                            break_1hr_start,     # 1hr paid break start (for 9-hour shifts)
+                            break_1hr_end,       # 1hr paid break end (for 9-hour shifts)
+                            break_30min_start,   # 30min paid break start (for 8-hour shifts)
+                            break_30min_end,     # 30min paid break end (for 8-hour shifts)
+                            remarks              # Blank remarks for regular shifts
+                        ])
             
             current_date += timedelta(days=1)
     
@@ -705,35 +865,38 @@ def export_otnd():
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
     end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
     
+    # NEW: Extend query range to catch cross-midnight shifts
+    extended_start_date = start_date - timedelta(days=1)
+    
     # Get team members based on manager's scope - only RANK_AND_FILE employees
     from app.models import EmployeeType
     
     if current_user.section_id:
-        team_members = User.query.filter_by(
-            section_id=current_user.section_id, 
-            is_active=True,
-            employee_type=EmployeeType.RANK_AND_FILE
+        team_members = User.query.filter(
+            User.section_id == current_user.section_id,
+            User.is_active == True,
+            User.employee_type.in_([EmployeeType.RANK_AND_FILE, EmployeeType.RANK_AND_FILE_PROBATIONARY])
         ).all()
     elif current_user.unit_id:
-        team_members = User.query.filter_by(
-            unit_id=current_user.unit_id, 
-            is_active=True,
-            employee_type=EmployeeType.RANK_AND_FILE
+        team_members = User.query.filter(
+            User.unit_id == current_user.unit_id,
+            User.is_active == True,
+            User.employee_type.in_([EmployeeType.RANK_AND_FILE, EmployeeType.RANK_AND_FILE_PROBATIONARY])
         ).all()
     else:
-        team_members = User.query.filter_by(
-            is_active=True,
-            employee_type=EmployeeType.RANK_AND_FILE
+        team_members = User.query.filter(
+            User.is_active == True,
+            User.employee_type.in_([EmployeeType.RANK_AND_FILE, EmployeeType.RANK_AND_FILE_PROBATIONARY])
         ).all()
     
-    # Get all shifts for the date range and team members
+    # MODIFIED: Get shifts with extended range
     shifts = Shift.query.filter(
-        Shift.date.between(start_date, end_date),
+        Shift.date.between(extended_start_date, end_date),  # Extended range
         Shift.employee_id.in_([tm.id for tm in team_members]),
         Shift.status.in_([ShiftStatus.SCHEDULED, ShiftStatus.HOLIDAY_OFF])
     ).order_by(Shift.employee_id, Shift.date, Shift.sequence).all()
     
-    # Get date remarks (holidays) for the period
+    # UNCHANGED: Get date remarks (holidays) - keep original range
     date_remarks = DateRemark.query.filter(
         DateRemark.date.between(start_date, end_date),
         DateRemark.remark_type == DateRemarkType.HOLIDAY
@@ -741,7 +904,7 @@ def export_otnd():
     
     holiday_dates = {remark.date for remark in date_remarks}
     
-    # Calculate OTND entries
+    # MODIFIED: Calculate OTND entries with export range
     otnd_entries = []
     
     for employee in sorted(team_members, key=lambda x: x.last_name):
@@ -752,8 +915,12 @@ def export_otnd():
             if not shift.start_time or not shift.end_time:
                 continue
                 
-            shift_entries = calculate_otnd_for_shift(employee, shift, holiday_dates)
+            # MODIFIED: Pass export date range to calculation function
+            shift_entries = calculate_otnd_for_shift(employee, shift, holiday_dates, start_date, end_date)
             otnd_entries.extend(shift_entries)
+    
+    # NEW: Filter entries to only include relevant ones for the export
+    otnd_entries = filter_otnd_entries_by_export_range(otnd_entries, start_date, end_date)
     
     # Sort entries by employee last name, then by date, then by type
     otnd_entries.sort(key=lambda x: (x['SURNAME'], x['START DATE'], x['TYPE']))
@@ -796,15 +963,15 @@ def export_otnd():
     return response
 
 
-def calculate_otnd_for_shift(employee, shift, holiday_dates):
-    """Calculate OTND entries for a single shift"""
+def calculate_otnd_for_shift(employee, shift, holiday_dates, export_start_date, export_end_date):
+    """Calculate OTND entries for a single shift with proper priority hierarchy"""
     entries = []
     
     # Get employee details
     surname = employee.last_name.upper()
     employee_name = employee.first_name.upper()
     personnel_number = employee.personnel_number or ''
-    employee_type_code = employee.typecode or ''  # This is employee's actual type code
+    employee_type_code = employee.typecode or ''
     
     # Get section and unit separately
     section_name = employee.section.name if employee.section else ''
@@ -820,8 +987,8 @@ def calculate_otnd_for_shift(employee, shift, holiday_dates):
         end_datetime += timedelta(days=1)
     
     # Get employee-specific night differential hours
-    nd_start_hour = employee.night_differential_start_hour  # 20 for regular, 22 for probationary
-    nd_end_hour = employee.night_differential_end_hour      # 6 for all
+    nd_start_hour = employee.night_differential_start_hour
+    nd_end_hour = employee.night_differential_end_hour
     
     # Calculate standard work hours based on schedule format
     standard_hours = 8 if employee.schedule_format == ScheduleFormat.EIGHT_HOUR else 9
@@ -829,36 +996,94 @@ def calculate_otnd_for_shift(employee, shift, holiday_dates):
     # Calculate total shift duration
     total_shift_hours = (end_datetime - start_datetime).total_seconds() / 3600
     
-    # Process Holiday Duty first (takes priority over EVERYTHING)
+    # Check if shift crosses into ANY holiday dates
+    shift_crosses_holiday = False
+    current_check_date = start_datetime.date()
+    end_check_date = end_datetime.date()
+    
+    # Check all dates that the shift spans
+    while current_check_date <= end_check_date:
+        if current_check_date in holiday_dates:
+            shift_crosses_holiday = True
+            break
+        current_check_date += timedelta(days=1)
+    
+    # 1. Process Holiday Duty first (takes priority over EVERYTHING)
     holiday_entries = []
-    if shift.status == ShiftStatus.HOLIDAY_OFF or shift_date in holiday_dates:
+    if shift.status == ShiftStatus.HOLIDAY_OFF or shift_crosses_holiday:
         holiday_entries = calculate_holiday_hours(
             start_datetime, end_datetime, shift_date, holiday_dates,
+            export_start_date, export_end_date,
             surname, employee_name, personnel_number, section_name, unit_name
         )
         entries.extend(holiday_entries)
     
-    # Calculate Overtime (if not holiday duty AND excluding holiday periods)
+    # 2. Calculate Overtime (excluding holiday periods)
+    ot_entries = []
     if shift.status != ShiftStatus.HOLIDAY_OFF and total_shift_hours > standard_hours:
         # Calculate overtime start time
         ot_start_datetime = start_datetime + timedelta(hours=standard_hours)
         
         # If shift extends beyond standard hours
         if ot_start_datetime < end_datetime:
-            # Calculate OT but exclude holiday periods
             ot_entries = calculate_overtime_excluding_holidays(
                 ot_start_datetime, end_datetime, holiday_entries,
                 surname, employee_name, personnel_number, section_name, unit_name
             )
             entries.extend(ot_entries)
     
-    # Calculate Night Differential (excluding holiday hours)
-    nd_entries = calculate_night_differential(
+    # 3. Calculate Night Differential (excluding holiday AND overtime hours)
+    nd_entries = calculate_night_differential_excluding_ot_and_holiday(
         start_datetime, end_datetime, nd_start_hour, nd_end_hour,
-        holiday_entries, surname, employee_name, personnel_number, 
+        holiday_entries, ot_entries, surname, employee_name, personnel_number, 
         section_name, unit_name
     )
     entries.extend(nd_entries)
+    
+    return entries
+
+
+def calculate_holiday_hours(start_datetime, end_datetime, shift_date, holiday_dates, 
+                          export_start_date, export_end_date,
+                          surname, employee_name, personnel_number, section_name, unit_name):
+    """Calculate holiday hours with cross-midnight and range logic"""
+    entries = []
+    current_datetime = start_datetime
+    
+    while current_datetime < end_datetime:
+        current_date = current_datetime.date()
+        
+        if (current_date in holiday_dates and 
+            export_start_date <= current_date <= export_end_date):
+            
+            # Find the end of holiday period - use midnight (00:00) of next day
+            end_of_day = datetime.combine(current_date + timedelta(days=1), time(0, 0))
+            holiday_end = min(end_datetime, end_of_day)
+            
+            holiday_hours = (holiday_end - current_datetime).total_seconds() / 3600
+            
+            if holiday_hours > 0:
+                entries.append({
+                    'SURNAME': surname,
+                    'EMPLOYEE NAME': employee_name,
+                    'TYPE': 'OT',
+                    'PERSONNEL NUMBER': personnel_number,
+                    'TYPE CODE': '801',
+                    'START TIME': current_datetime.strftime('%H:%M'),
+                    'END TIME': holiday_end.strftime('%H:%M'),
+                    'START DATE': current_datetime.strftime('%m/%d/%Y'),
+                    'END DATE': holiday_end.strftime('%m/%d/%Y'),
+                    'TOTAL HOURS': f"{holiday_hours:.2f}",
+                    'REASON/REMARKS': 'OT HOLIDAY',
+                    'SECTION': section_name,
+                    'UNIT': unit_name
+                })
+            
+            current_datetime = holiday_end
+        else:
+            # Move to next day if current day is not a claimable holiday
+            next_day = datetime.combine(current_date + timedelta(days=1), time(0, 0))
+            current_datetime = min(next_day, end_datetime)
     
     return entries
 
@@ -902,9 +1127,9 @@ def calculate_overtime_excluding_holidays(ot_start_datetime, end_datetime, holid
             entries.append({
                 'SURNAME': surname,
                 'EMPLOYEE NAME': employee_name,
-                'TYPE': 'OT',  # Always OT for overtime
+                'TYPE': 'OT',
                 'PERSONNEL NUMBER': personnel_number,
-                'TYPE CODE': '801',  # SAP system reference for OT
+                'TYPE CODE': '801',
                 'START TIME': seg_start.strftime('%H:%M'),
                 'END TIME': seg_end.strftime('%H:%M'),
                 'START DATE': seg_start.strftime('%m/%d/%Y'),
@@ -918,53 +1143,10 @@ def calculate_overtime_excluding_holidays(ot_start_datetime, end_datetime, holid
     return entries
 
 
-def calculate_holiday_hours(start_datetime, end_datetime, shift_date, holiday_dates, 
-                          surname, employee_name, personnel_number, section_name, unit_name):
-    """Calculate holiday hours for a shift"""
-    entries = []
-    
-    current_datetime = start_datetime
-    
-    while current_datetime < end_datetime:
-        current_date = current_datetime.date()
-        
-        if current_date in holiday_dates:
-            # Find the end of holiday period (end of day or end of shift, whichever is earlier)
-            end_of_day = datetime.combine(current_date, time(23, 59, 59))
-            holiday_end = min(end_datetime, end_of_day + timedelta(seconds=1))
-            
-            holiday_hours = (holiday_end - current_datetime).total_seconds() / 3600
-            
-            if holiday_hours > 0:
-                entries.append({
-                    'SURNAME': surname,
-                    'EMPLOYEE NAME': employee_name,
-                    'TYPE': 'OT',  # Holiday is written as OT
-                    'PERSONNEL NUMBER': personnel_number,
-                    'TYPE CODE': '801',  # SAP system reference - Holiday is also OT type
-                    'START TIME': current_datetime.strftime('%H:%M'),
-                    'END TIME': holiday_end.strftime('%H:%M'),
-                    'START DATE': current_datetime.strftime('%m/%d/%Y'),
-                    'END DATE': holiday_end.strftime('%m/%d/%Y'),
-                    'TOTAL HOURS': f"{holiday_hours:.2f}",
-                    'REASON/REMARKS': 'OT HOLIDAY',
-                    'SECTION': section_name,
-                    'UNIT': unit_name
-                })
-            
-            current_datetime = holiday_end
-        else:
-            # Move to next day if current day is not a holiday
-            next_day = datetime.combine(current_date + timedelta(days=1), time(0, 0))
-            current_datetime = min(next_day, end_datetime)
-    
-    return entries
-
-
-def calculate_night_differential(start_datetime, end_datetime, nd_start_hour, nd_end_hour,
-                               holiday_entries, surname, employee_name, personnel_number,
-                               section_name, unit_name):
-    """Calculate night differential hours excluding holiday periods"""
+def calculate_night_differential_excluding_ot_and_holiday(start_datetime, end_datetime, nd_start_hour, nd_end_hour,
+                                                        holiday_entries, ot_entries, surname, employee_name, personnel_number,
+                                                        section_name, unit_name):
+    """Calculate night differential hours excluding BOTH holiday AND overtime periods"""
     entries = []
     
     # Create set of holiday time periods to exclude
@@ -974,37 +1156,69 @@ def calculate_night_differential(start_datetime, end_datetime, nd_start_hour, nd
         holiday_end = datetime.strptime(f"{holiday_entry['END DATE']} {holiday_entry['END TIME']}", '%m/%d/%Y %H:%M')
         holiday_periods.append((holiday_start, holiday_end))
     
-    # Calculate ND periods day by day
-    current_datetime = start_datetime
+    # Create set of OT time periods to exclude
+    ot_periods = []
+    for ot_entry in ot_entries:
+        ot_start = datetime.strptime(f"{ot_entry['START DATE']} {ot_entry['START TIME']}", '%m/%d/%Y %H:%M')
+        ot_end = datetime.strptime(f"{ot_entry['END DATE']} {ot_entry['END TIME']}", '%m/%d/%Y %H:%M')
+        ot_periods.append((ot_start, ot_end))
     
-    while current_datetime < end_datetime:
-        current_date = current_datetime.date()
-        
-        # Define ND period for current day (8PM/10PM to 6AM next day)
-        nd_start = datetime.combine(current_date, time(nd_start_hour, 0))
-        nd_end = datetime.combine(current_date + timedelta(days=1), time(nd_end_hour, 0))
+    # FIXED: Process ND for all days that the shift spans, including previous day ND periods
+    current_datetime = start_datetime
+    shift_start_date = start_datetime.date()
+    shift_end_date = end_datetime.date()
+    
+    # Check ND periods that could overlap with this shift
+    # We need to check the day before shift starts (for ND periods ending at 6AM)
+    # and the day the shift starts (for ND periods starting at 8PM/10PM)
+    check_dates = []
+    
+    # Add the day before shift start date (to catch ND periods ending at 6AM)
+    check_dates.append(shift_start_date - timedelta(days=1))
+    
+    # Add all dates that the shift spans
+    current_check_date = shift_start_date
+    while current_check_date <= shift_end_date:
+        check_dates.append(current_check_date)
+        current_check_date += timedelta(days=1)
+    
+    # Process each potential ND period
+    for check_date in check_dates:
+        # Define ND period for this date (8PM/10PM to 6AM next day)
+        nd_start = datetime.combine(check_date, time(nd_start_hour, 0))
+        nd_end = datetime.combine(check_date + timedelta(days=1), time(nd_end_hour, 0))
         
         # Find intersection of shift time and ND period
-        nd_period_start = max(current_datetime, nd_start)
+        nd_period_start = max(start_datetime, nd_start)
         nd_period_end = min(end_datetime, nd_end)
         
         if nd_period_start < nd_period_end:
-            # Remove holiday periods from ND calculation
+            # Start with the ND period that intersects with the shift
             nd_segments = [(nd_period_start, nd_period_end)]
             
+            # Remove holiday periods from ND calculation
             for holiday_start, holiday_end in holiday_periods:
                 new_segments = []
                 for seg_start, seg_end in nd_segments:
-                    # If holiday overlaps with ND segment
                     if holiday_start < seg_end and holiday_end > seg_start:
-                        # Add segment before holiday (if any)
                         if seg_start < holiday_start:
                             new_segments.append((seg_start, min(seg_end, holiday_start)))
-                        # Add segment after holiday (if any)
                         if seg_end > holiday_end:
                             new_segments.append((max(seg_start, holiday_end), seg_end))
                     else:
-                        # No overlap, keep segment
+                        new_segments.append((seg_start, seg_end))
+                nd_segments = new_segments
+            
+            # Remove OT periods from ND calculation
+            for ot_start, ot_end in ot_periods:
+                new_segments = []
+                for seg_start, seg_end in nd_segments:
+                    if ot_start < seg_end and ot_end > seg_start:
+                        if seg_start < ot_start:
+                            new_segments.append((seg_start, min(seg_end, ot_start)))
+                        if seg_end > ot_end:
+                            new_segments.append((max(seg_start, ot_end), seg_end))
+                    else:
                         new_segments.append((seg_start, seg_end))
                 nd_segments = new_segments
             
@@ -1015,9 +1229,9 @@ def calculate_night_differential(start_datetime, end_datetime, nd_start_hour, nd
                     entries.append({
                         'SURNAME': surname,
                         'EMPLOYEE NAME': employee_name,
-                        'TYPE': 'ND',  # Keep as ND for night differential
+                        'TYPE': 'ND',
                         'PERSONNEL NUMBER': personnel_number,
-                        'TYPE CODE': '803',  # SAP system reference for ND
+                        'TYPE CODE': '803',
                         'START TIME': seg_start.strftime('%H:%M'),
                         'END TIME': seg_end.strftime('%H:%M'),
                         'START DATE': seg_start.strftime('%m/%d/%Y'),
@@ -1027,10 +1241,572 @@ def calculate_night_differential(start_datetime, end_datetime, nd_start_hour, nd
                         'SECTION': section_name,
                         'UNIT': unit_name
                     })
-        
-        # Move to next day
-        current_datetime = datetime.combine(current_date + timedelta(days=1), time(0, 0))
-        if current_datetime >= end_datetime:
-            break
     
     return entries
+
+
+def filter_otnd_entries_by_export_range(otnd_entries, export_start_date, export_end_date):
+    """Filter OTND entries to only include those relevant to export range"""
+    filtered_entries = []
+    
+    for entry in otnd_entries:
+        entry_start_date = datetime.strptime(entry['START DATE'], '%m/%d/%Y').date()
+        
+        if entry['TYPE'] == 'OT' and 'HOLIDAY' in entry['REASON/REMARKS']:
+            # Holiday entries: only include if holiday date is within export range
+            if export_start_date <= entry_start_date <= export_end_date:
+                filtered_entries.append(entry)
+        else:
+            # OT and ND entries: include if shift date is within original export range
+            # This prevents including OT/ND from the extended query date
+            if export_start_date <= entry_start_date <= export_end_date:
+                filtered_entries.append(entry)
+    
+    return filtered_entries
+
+# Add this to the END of your app/schedule/routes.py file
+
+@bp.route('/calendar')
+@login_required
+def calendar_view():
+    """Calendar view for schedule visualization - Managers and Admins only"""
+    if not current_user.can_edit_schedule():
+        flash('You do not have permission to access the calendar view.', 'danger')
+        return redirect(url_for('schedule.view_schedule'))
+    
+    # Get date from request or default to current month
+    date_str = request.args.get('date', date.today().isoformat())
+    selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    
+    # Get the first and last day of the month
+    first_day = selected_date.replace(day=1)
+    last_day = date(selected_date.year, selected_date.month, calendar.monthrange(selected_date.year, selected_date.month)[1])
+    
+    # Get calendar start and end (including previous/next month days for full calendar grid)
+    calendar_start = first_day - timedelta(days=first_day.weekday())
+    calendar_end = last_day + timedelta(days=(6 - last_day.weekday()))
+    
+    # Get team members based on user role and permissions
+    if current_user.section_id:
+        team_members = User.query.filter_by(section_id=current_user.section_id, is_active=True).all()
+    elif current_user.unit_id:
+        team_members = User.query.filter_by(unit_id=current_user.unit_id, is_active=True).all()
+    else:
+        team_members = User.query.filter_by(is_active=True).all()
+    
+    # Get all shifts for the calendar period
+    shifts = Shift.query.filter(
+        Shift.date.between(calendar_start, calendar_end),
+        Shift.employee_id.in_([tm.id for tm in team_members])
+    ).order_by(Shift.employee_id, Shift.date, Shift.sequence).all()
+    
+    # Get date remarks for the calendar period
+    date_remarks = DateRemark.query.filter(
+        DateRemark.date.between(calendar_start, calendar_end)
+    ).all()
+    
+    # Convert shifts to JSON-serializable format
+    def shift_to_dict(shift):
+        return {
+            'id': shift.id,
+            'employee_id': shift.employee_id,
+            'date': shift.date.isoformat(),
+            'start_time': shift.start_time.strftime('%H:%M') if shift.start_time else None,
+            'end_time': shift.end_time.strftime('%H:%M') if shift.end_time else None,
+            'role': shift.role,
+            'status': shift.status.value,
+            'notes': shift.notes,
+            'color': shift.color or shift.status_color,
+            'work_arrangement': shift.work_arrangement.value if shift.work_arrangement else 'onsite',
+            'sequence': shift.sequence,
+            'time_display': shift.time_display
+        }
+    
+    # Organize data by date
+    shifts_by_date = {}
+    shifts_by_date_serializable = {}
+    
+    for shift in shifts:
+        shift_date = shift.date.isoformat()
+        if shift_date not in shifts_by_date:
+            shifts_by_date[shift_date] = []
+            shifts_by_date_serializable[shift_date] = []
+        shifts_by_date[shift_date].append(shift)
+        shifts_by_date_serializable[shift_date].append(shift_to_dict(shift))
+    
+    # Organize remarks by date
+    remarks_by_date = {}
+    remarks_by_date_serializable = {}
+    
+    for remark in date_remarks:
+        remark_date = remark.date.isoformat()
+        remarks_by_date[remark_date] = remark
+        remarks_by_date_serializable[remark_date] = remark.to_dict()
+    
+    # Create calendar grid (6 weeks x 7 days = 42 days)
+    calendar_weeks = []
+    current_date = calendar_start
+    
+    for week in range(6):
+        week_days = []
+        for day in range(7):
+            day_info = {
+                'date': current_date,
+                'is_current_month': current_date.month == selected_date.month,
+                'is_today': current_date == date.today(),
+                'shifts': shifts_by_date.get(current_date.isoformat(), []),
+                'remark': remarks_by_date.get(current_date.isoformat()),
+                'shift_count': len(shifts_by_date.get(current_date.isoformat(), [])),
+                'employee_count': len(set(shift.employee_id for shift in shifts_by_date.get(current_date.isoformat(), [])))
+            }
+            week_days.append(day_info)
+            current_date += timedelta(days=1)
+        calendar_weeks.append(week_days)
+    
+    # Calculate summary statistics
+    month_shifts = [shift for shift in shifts if shift.date.month == selected_date.month]
+    stats = {
+        'total_shifts': len(month_shifts),
+        'total_employees': len(set(shift.employee_id for shift in month_shifts)),
+        'scheduled_shifts': len([s for s in month_shifts if s.status == ShiftStatus.SCHEDULED]),
+        'leave_shifts': len([s for s in month_shifts if 'leave' in s.status.value or s.status == ShiftStatus.REST_DAY])
+    }
+    
+    return render_template('schedule/calendar.html',
+                         calendar_weeks=calendar_weeks,
+                         selected_date=selected_date,
+                         first_day=first_day,
+                         last_day=last_day,
+                         team_members=team_members,
+                         stats=stats,
+                         shifts_by_date_serializable=shifts_by_date_serializable,
+                         remarks_by_date_serializable=remarks_by_date_serializable)
+
+# ----------TEMPLATE APPLICATION ---------
+
+@bp.route('/api/templates')
+@login_required
+def get_templates():
+    """Get available schedule templates for current user"""
+    try:
+        # Get templates user can access
+        templates_query = ScheduleTemplateV2.query.filter(
+            db.or_(
+                ScheduleTemplateV2.created_by_id == current_user.id,
+                ScheduleTemplateV2.is_public == True
+            )
+        )
+        
+        # Filter by organizational scope if not admin
+        if not current_user.can_admin():
+            org_filter = []
+            if current_user.department_id:
+                org_filter.append(ScheduleTemplateV2.department_id == current_user.department_id)
+            if current_user.division_id:
+                org_filter.append(ScheduleTemplateV2.division_id == current_user.division_id)
+            if current_user.section_id:
+                org_filter.append(ScheduleTemplateV2.section_id == current_user.section_id)
+            if current_user.unit_id:
+                org_filter.append(ScheduleTemplateV2.unit_id == current_user.unit_id)
+            
+            if org_filter:
+                templates_query = templates_query.filter(db.or_(*org_filter))
+        
+        templates = templates_query.order_by(
+            ScheduleTemplateV2.last_used_at.desc().nullslast(),
+            ScheduleTemplateV2.created_at.desc()
+        ).all()
+        
+        # Enhanced template data with delete permissions
+        templates_data = []
+        for template in templates:
+            template_dict = template.to_dict()
+            
+            # IMPORTANT: Add delete permission check
+            can_delete = (current_user.can_admin() or 
+                         template.created_by_id == current_user.id)
+            template_dict['can_delete'] = can_delete
+            
+            templates_data.append(template_dict)
+        
+        return jsonify({
+            'success': True,
+            'templates': templates_data
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading templates: {str(e)}'}), 500
+
+@bp.route('/api/templates/create-snapshot', methods=['POST'])
+@login_required
+def create_template_snapshot():
+    """Create template from current schedule snapshot"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['name', 'start_date', 'end_date']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+        
+        # Parse dates
+        try:
+            start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+            end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+        
+        # Validate date range
+        if start_date > end_date:
+            return jsonify({'success': False, 'error': 'Start date must be before end date.'}), 400
+        
+        duration = (end_date - start_date).days + 1
+        if duration > 14:  # Limit to 2 weeks
+            return jsonify({'success': False, 'error': 'Template duration cannot exceed 14 days.'}), 400
+        
+        # Determine organizational scope
+        section_id = data.get('section_id')
+        unit_id = data.get('unit_id')
+        department_id = data.get('department_id')
+        division_id = data.get('division_id')
+        
+        # Use current user's scope if not specified
+        if not any([section_id, unit_id, department_id, division_id]):
+            section_id = current_user.section_id
+            unit_id = current_user.unit_id
+            department_id = current_user.department_id
+            division_id = current_user.division_id
+        
+        # Determine template type
+        template_type = TemplateType.WEEKLY if duration == 7 else TemplateType.CUSTOM
+        
+        # Create template from schedule
+        template = ScheduleTemplateV2.create_from_schedule(
+            user=current_user,
+            name=data['name'],
+            description=data.get('description', ''),
+            start_date=start_date,
+            end_date=end_date,
+            section_id=section_id,
+            unit_id=unit_id,
+            department_id=department_id,
+            division_id=division_id,
+            is_public=data.get('is_public', False),
+            template_type=template_type
+        )
+        
+        db.session.add(template)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Template "{template.name}" created successfully!',
+            'template': template.to_dict()
+        })
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error creating template: {str(e)}'}), 500
+
+@bp.route('/api/templates/<int:template_id>/apply', methods=['POST'])
+@login_required
+def apply_template(template_id):
+    """Apply template to new date range"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if not template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied to this template'}), 403
+        
+        data = request.get_json()
+        
+        # Parse target dates
+        try:
+            target_start = datetime.strptime(data['target_start_date'], '%Y-%m-%d').date()
+            target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
+        except (ValueError, KeyError):
+            return jsonify({'success': False, 'error': 'Invalid target date format'}), 400
+        
+        # Get target organizational scope
+        target_section_id = data.get('target_section_id')
+        target_unit_id = data.get('target_unit_id')
+        replace_existing = data.get('replace_existing', False)
+        employee_mapping_overrides = data.get('employee_mappings')
+        
+        # Apply template
+        result = template.apply_to_date_range(
+            start_date=target_start,
+            end_date=target_end,
+            user=current_user,
+            target_section_id=target_section_id,
+            target_unit_id=target_unit_id,
+            employee_mapping_overrides=employee_mapping_overrides,
+            replace_existing=replace_existing
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Template applied successfully! Created {result["created_shifts"]} shifts.',
+            'result': result
+        })
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error applying template: {str(e)}'}), 500
+
+@bp.route('/api/templates/<int:template_id>')
+@login_required
+def get_template_details(template_id):
+    """Get detailed template information"""
+    try:
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if not template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        
+        # Get template details with employee mappings
+        template_dict = template.to_dict()
+        template_dict['template_data'] = template.template_data
+        template_dict['employee_mappings'] = template.employee_mappings
+        
+        return jsonify({
+            'success': True,
+            'template': template_dict
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading template: {str(e)}'}), 500
+
+@bp.route('/api/templates/<int:template_id>/preview', methods=['POST'])
+@login_required
+def preview_template_application():
+    """Preview what applying a template would look like"""
+    try:
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if not template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        
+        data = request.get_json()
+        
+        # Parse target dates
+        try:
+            target_start = datetime.strptime(data['target_start_date'], '%Y-%m-%d').date()
+            target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
+        except (ValueError, KeyError):
+            return jsonify({'success': False, 'error': 'Invalid date format'}), 400
+        
+        # Get target employees
+        target_section_id = data.get('target_section_id')
+        target_unit_id = data.get('target_unit_id')
+        
+        if target_section_id:
+            target_employees = User.query.filter_by(section_id=target_section_id, is_active=True).all()
+        elif target_unit_id:
+            target_employees = User.query.filter_by(unit_id=target_unit_id, is_active=True).all()
+        else:
+            return jsonify({'success': False, 'error': 'No target scope specified'}), 400
+        
+        # Generate preview of mappings and conflicts
+        preview_data = {
+            'target_employees': [{'id': emp.id, 'name': emp.full_name, 'role': emp.job_title} for emp in target_employees],
+            'template_employees': template.template_data.get('employees', {}),
+            'shifts_to_create': len(template.template_data.get('shifts', [])),
+            'date_range': f"{target_start.strftime('%Y-%m-%d')} to {target_end.strftime('%Y-%m-%d')}",
+            'duration_match': (target_end - target_start).days + 1 == template.duration_days
+        }
+        
+        # Check for existing shifts that would conflict
+        existing_shifts = Shift.query.filter(
+            Shift.date.between(target_start, target_end),
+            Shift.employee_id.in_([emp.id for emp in target_employees])
+        ).all()
+        
+        preview_data['existing_shifts'] = len(existing_shifts)
+        preview_data['conflicts'] = len(existing_shifts) > 0
+        
+        return jsonify({
+            'success': True,
+            'preview': preview_data
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error generating preview: {str(e)}'}), 500
+
+@bp.route('/api/templates/<int:template_id>', methods=['DELETE'])
+@login_required
+def delete_template(template_id):
+    """Delete a schedule template"""
+    try:
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        # Only creator or admin can delete
+        if template.created_by_id != current_user.id and not current_user.can_admin():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        template_name = template.name
+        db.session.delete(template)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Template "{template_name}" deleted successfully!'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error deleting template: {str(e)}'}), 500
+
+@bp.route('/api/templates/<int:template_id>/duplicate', methods=['POST'])
+@login_required
+def duplicate_template(template_id):
+    """Create a copy of existing template"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        original_template = ScheduleTemplateV2.query.get(template_id)
+        if not original_template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if not original_template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        
+        data = request.get_json()
+        new_name = data.get('name', f"{original_template.name} (Copy)")
+        
+        # Create duplicate
+        duplicate = ScheduleTemplateV2(
+            name=new_name,
+            description=data.get('description', original_template.description),
+            template_type=original_template.template_type,
+            department_id=original_template.department_id,
+            division_id=original_template.division_id,
+            section_id=original_template.section_id,
+            unit_id=original_template.unit_id,
+            source_start_date=original_template.source_start_date,
+            source_end_date=original_template.source_end_date,
+            total_employees=original_template.total_employees,
+            total_shifts=original_template.total_shifts,
+            template_data=original_template.template_data.copy(),
+            employee_mappings=original_template.employee_mappings.copy() if original_template.employee_mappings else None,
+            created_by_id=current_user.id,
+            is_public=data.get('is_public', False)
+        )
+        
+        db.session.add(duplicate)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Template duplicated as "{new_name}"!',
+            'template': duplicate.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Error duplicating template: {str(e)}'}), 500
+
+@bp.route('/api/organizational-scope')
+@login_required
+def get_organizational_scope():
+    """Get available organizational units for template creation/application"""
+    try:
+        scope_data = {
+            'departments': [],
+            'divisions': [],
+            'sections': [],
+            'units': [],
+            'current_user_scope': {
+                'department_id': current_user.department_id,
+                'division_id': current_user.division_id,
+                'section_id': current_user.section_id,
+                'unit_id': current_user.unit_id
+            }
+        }
+        
+        if current_user.can_admin():
+            # Admins can see all organizational units
+            from app.models import Department, Division, Section, Unit
+            
+            scope_data['departments'] = [
+                {'id': dept.id, 'name': dept.name} 
+                for dept in Department.query.order_by(Department.name).all()
+            ]
+            scope_data['divisions'] = [
+                {'id': div.id, 'name': div.name, 'department_id': div.department_id} 
+                for div in Division.query.order_by(Division.name).all()
+            ]
+            scope_data['sections'] = [
+                {'id': sec.id, 'name': sec.name, 'division_id': sec.division_id} 
+                for sec in Section.query.order_by(Section.name).all()
+            ]
+            scope_data['units'] = [
+                {'id': unit.id, 'name': unit.name, 'section_id': unit.section_id} 
+                for unit in Unit.query.order_by(Unit.name).all()
+            ]
+        elif current_user.can_edit_schedule():
+            # Managers can see their organizational scope
+            if current_user.department_id:
+                scope_data['departments'] = [
+                    {'id': current_user.department.id, 'name': current_user.department.name}
+                ]
+                scope_data['divisions'] = [
+                    {'id': div.id, 'name': div.name, 'department_id': div.department_id}
+                    for div in current_user.department.divisions
+                ]
+            
+            if current_user.division_id:
+                if not scope_data['divisions']:  # If not already populated from department
+                    scope_data['divisions'] = [
+                        {'id': current_user.division.id, 'name': current_user.division.name, 'department_id': current_user.division.department_id}
+                    ]
+                scope_data['sections'] = [
+                    {'id': sec.id, 'name': sec.name, 'division_id': sec.division_id}
+                    for sec in current_user.division.sections
+                ]
+            
+            if current_user.section_id:
+                if not scope_data['sections']:  # If not already populated
+                    scope_data['sections'] = [
+                        {'id': current_user.section.id, 'name': current_user.section.name, 'division_id': current_user.section.division_id}
+                    ]
+                scope_data['units'] = [
+                    {'id': unit.id, 'name': unit.name, 'section_id': unit.section_id}
+                    for unit in current_user.section.units
+                ]
+            
+            if current_user.unit_id and not scope_data['units']:
+                scope_data['units'] = [
+                    {'id': current_user.unit.id, 'name': current_user.unit.name, 'section_id': current_user.unit.section_id}
+                ]
+        
+        return jsonify({
+            'success': True,
+            'scope': scope_data
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error loading organizational scope: {str(e)}'}), 500
+            

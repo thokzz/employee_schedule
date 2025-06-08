@@ -1,5 +1,6 @@
-from flask import render_template, redirect, url_for, request, flash, jsonify, current_app
+from flask import render_template, redirect, url_for, request, flash, jsonify, current_app, session
 from flask_login import login_required, current_user
+from functools import wraps
 from app.main import bp
 from app.models import User, Shift, Section, Unit, db, EmployeeType, ScheduleFormat
 from datetime import datetime, timedelta, date
@@ -8,10 +9,95 @@ import os
 from werkzeug.utils import secure_filename
 import uuid
 
+def _is_2fa_verified():
+    """Check if current user has completed 2FA verification in this session"""
+    if not current_user.is_authenticated:
+        return False
+    
+    # Check if 2FA is required for this user
+    try:
+        from app.models import TwoFactorSettings
+        settings = TwoFactorSettings.get_settings()
+        if not settings.is_2fa_required_for_user(current_user):
+            return True
+    except (ImportError, AttributeError):
+        # 2FA not available yet
+        return True
+    
+    # Check session verification
+    if (session.get('2fa_verified') and 
+        session.get('2fa_user_id') == current_user.id):
+        return True
+    
+    # Check trusted device
+    device_token = request.cookies.get('trusted_device')
+    try:
+        if current_user.can_skip_2fa(device_token):
+            session['2fa_verified'] = True
+            session['2fa_user_id'] = current_user.id
+            return True
+    except AttributeError:
+        # Method doesn't exist yet
+        pass
+    
+    return False
+
+def require_2fa(f):
+    """Decorator to enforce 2FA verification before accessing protected routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        
+        # Check if 2FA verification is required and completed
+        if not _is_2fa_verified():
+            try:
+                from app.models import TwoFactorSettings, TwoFactorStatus
+                settings = TwoFactorSettings.get_settings()
+                
+                # If 2FA is required, redirect to appropriate page
+                if settings.is_2fa_required_for_user(current_user):
+                    user_2fa = current_user.two_factor
+                    
+                    if not user_2fa or user_2fa.status in [TwoFactorStatus.DISABLED, TwoFactorStatus.PENDING_SETUP]:
+                        flash('You must set up two-factor authentication to continue.', 'warning')
+                        return redirect(url_for('auth.setup_2fa'))
+                    elif user_2fa.status == TwoFactorStatus.GRACE_PERIOD and not user_2fa.is_in_grace_period():
+                        flash('Your grace period has expired. Please set up two-factor authentication.', 'error')
+                        return redirect(url_for('auth.setup_2fa'))
+                    else:
+                        return redirect(url_for('auth.verify_2fa'))
+            except (ImportError, AttributeError):
+                # 2FA not available yet
+                pass
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
 @bp.route('/')
 @bp.route('/dashboard')
 @login_required
 def dashboard():
+    # Show 2FA status if relevant
+    show_2fa_reminder = False
+    
+    try:
+        from app.models import TwoFactorSettings, TwoFactorStatus
+        settings = TwoFactorSettings.get_settings()
+        
+        if settings.is_2fa_required_for_user(current_user):
+            user_2fa = current_user.two_factor
+            if (user_2fa and 
+                user_2fa.status == TwoFactorStatus.GRACE_PERIOD and 
+                user_2fa.is_in_grace_period() and
+                not session.get('2fa_reminder_shown')):
+                show_2fa_reminder = True
+                session['2fa_reminder_shown'] = True
+    except (ImportError, AttributeError):
+        # 2FA not available yet
+        pass
+    
     # Get current week's shifts for the user
     today = date.today()
     start_of_week = today - timedelta(days=today.weekday())
@@ -44,7 +130,10 @@ def dashboard():
         'rest_days': len([s for s in shifts if s.status.value == 'rest_day'])
     }
     
-    return render_template('main/dashboard.html', shifts=shifts, stats=stats)
+    return render_template('main/dashboard.html', 
+                         shifts=shifts, 
+                         stats=stats,
+                         show_2fa_reminder=show_2fa_reminder)
 
 @bp.route('/profile')
 @login_required
@@ -91,11 +180,14 @@ def update_profile():
         current_user.last_name = request.form['last_name']
         current_user.email = request.form['email']
         
-        # Handle avatar upload - UPDATED PATH
+        # NEW: Handle contact number update
+        contact_number = request.form.get('contact_number', '').strip()
+        current_user.contact_number = contact_number if contact_number else None
+        
+        # Handle avatar upload
         if 'avatar' in request.files:
             file = request.files['avatar']
             if file and file.filename:
-                # Use static/uploads instead of instance_path
                 upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'avatars')
                 filename = save_uploaded_file(
                     file, 
@@ -116,11 +208,10 @@ def update_profile():
                 else:
                     flash('Invalid avatar file. Please upload a valid image file.', 'warning')
         
-        # Handle signature upload - UPDATED PATH
+        # Handle signature upload
         if 'signature' in request.files:
             file = request.files['signature']
             if file and file.filename:
-                # Use static/uploads instead of instance_path
                 upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'signatures')
                 filename = save_uploaded_file(
                     file, 
@@ -239,17 +330,15 @@ def change_password():
 @bp.route('/signature/<filename>')
 @login_required
 def uploaded_signature(filename):
-    """Serve uploaded signature files - UPDATED PATH"""
+    """Serve uploaded signature files"""
     from flask import send_from_directory
-    # Use static/uploads instead of instance_path
     upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'signatures')
     return send_from_directory(upload_folder, filename)
 
 @bp.route('/avatar/<filename>')
 @login_required
 def uploaded_avatar(filename):
-    """Serve uploaded avatar files - UPDATED PATH"""
+    """Serve uploaded avatar files"""
     from flask import send_from_directory
-    # Use static/uploads instead of instance_path
     upload_folder = os.path.join(current_app.root_path, 'static', 'uploads', 'avatars')
     return send_from_directory(upload_folder, filename)

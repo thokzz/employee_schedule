@@ -3,6 +3,15 @@
 // ===================
 
 function createShift(employeeId, date) {
+    // Check if user can create shift for this employee
+    const canEdit = window.scheduleConfig.canEdit || (employeeId === window.currentUserId);
+    
+    if (!canEdit) {
+        alert('You can only edit your own shifts.');
+        return;
+    }
+    
+    // Your existing createShift code continues here...
     currentShiftId = null;
     currentEmployeeId = employeeId;
     
@@ -41,6 +50,14 @@ function createShift(employeeId, date) {
 }
 
 function editShift(shiftId, employeeId, date) {
+    // Check if user can edit this specific shift
+    const canEdit = window.scheduleConfig.canEdit || (employeeId === window.currentUserId);
+    
+    if (!canEdit) {
+        // Show view-only details instead
+        viewShiftDetails(shiftId);
+        return;
+    }
     currentShiftId = shiftId;
     currentEmployeeId = employeeId;
     
@@ -125,6 +142,132 @@ function saveShift() {
             alert('Error saving shift');
         });
     }
+}
+
+function viewShiftDetails(shiftId) {
+    fetch(`/schedule/api/shift/${shiftId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showShiftDetailsModal(data.shift);
+            } else {
+                alert('Error loading shift details: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading shift details');
+        });
+}
+
+function showShiftDetailsModal(shift) {
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="shiftDetailsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-eye"></i> Shift Details
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>View Only:</strong> You can view this shift but cannot edit it.
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Employee</label>
+                                    <p class="mb-0">${window.scheduleConfig.teamMembers[shift.employee_id]?.name || 'Unknown'}</p>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Date</label>
+                                    <p class="mb-0">${formatDate(shift.date)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Start Time</label>
+                                    <p class="mb-0">${shift.start_time || 'Not set'}</p>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">End Time</label>
+                                    <p class="mb-0">${shift.end_time || 'Not set'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Role</label>
+                                    <p class="mb-0">${shift.role || 'No role specified'}</p>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Work Arrangement</label>
+                                    <p class="mb-0">
+                                        <span class="badge bg-secondary">
+                                            ${shift.work_arrangement.toUpperCase()}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Status</label>
+                            <p class="mb-0">
+                                <span class="badge" style="background-color: ${shift.color};">
+                                    ${shift.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </span>
+                            </p>
+                        </div>
+                        
+                        ${shift.notes ? `
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Notes</label>
+                                <p class="mb-0 p-2 bg-light rounded">${shift.notes}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('shiftDetailsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('shiftDetailsModal'));
+    modal.show();
+    
+    // Clean up modal when hidden
+    document.getElementById('shiftDetailsModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
 }
 
 function saveShiftRange() {
@@ -321,6 +464,16 @@ function pasteShift(employeeId, date) {
 // ===================
 // CONTEXT MENU FUNCTIONALITY
 // ===================
+
+function formatDate(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
 
 function showShiftContextMenu(event, shiftId, employeeId, date) {
     event.preventDefault();

@@ -1,7 +1,9 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.admin import bp
-from app.models import AppSettings, User, Section, Unit, UserRole, db, EmailSettings, EmployeeType, ScheduleFormat
+from app.models import AppSettings, User, Section, Unit, UserRole, db, EmailSettings, EmployeeType, ScheduleFormat, TwoFactorSettings, UserTwoFactor, TrustedDevice, TwoFactorStatus, TwoFactorMethod
+import secrets
+
 
 # NEW IMPORTS for 4-level hierarchy
 try:
@@ -42,6 +44,9 @@ from datetime import datetime, date
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import json
+import logging
+from sqlalchemy import text
 
 def admin_required(f):
     @wraps(f)
@@ -777,49 +782,131 @@ def toggle_user_status(user_id):
     flash(f'User {user.username} has been {status}.', 'success')
     return redirect(url_for('admin.manage_users'))
 
+# ----- SAFE DELETE USER FUNCTION
+
 @bp.route('/users/<int:user_id>/delete', methods=['POST'])
 @login_required
 @admin_required
 def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    
-    # Prevent deleting the current admin user
-    if user.id == current_user.id:
-        flash('You cannot delete your own account.', 'danger')
-        return redirect(url_for('admin.manage_users'))
-    
+    """Safe delete user with proper JSON response handling"""
     try:
+        user = User.query.get_or_404(user_id)
+        
+        # Prevent deleting the current admin user
+        if user.id == current_user.id:
+            error_msg = 'You cannot delete your own account.'
+            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                return jsonify({'success': False, 'error': error_msg}), 400
+            flash(error_msg, 'danger')
+            return redirect(url_for('admin.manage_users'))
+        
+        # Store user info before deletion
         username = user.username
+        user_full_name = user.full_name
         
-        # Clean up uploaded files - UPDATED PATHS
-        import os
-        if user.avatar and user.avatar != 'default_avatar.png':
-            try:
-                # Use static/uploads instead of instance_path
-                avatar_path = os.path.join(current_app.root_path, 'static', 'uploads', 'avatars', user.avatar)
-                if os.path.exists(avatar_path):
-                    os.remove(avatar_path)
-            except:
-                pass
+        # Check for dependent records and provide options
+        try:
+            from app.models import LeaveApplication, WorkExtension
+            
+            # Count dependent records
+            leave_apps_as_employee = LeaveApplication.query.filter_by(employee_id=user.id).count()
+            leave_apps_as_approver = LeaveApplication.query.filter_by(approver_id=user.id).count()
+            work_exts_as_employee = WorkExtension.query.filter_by(employee_id=user.id).count()
+            work_exts_as_approver = WorkExtension.query.filter_by(approver_id=user.id).count()
+        except ImportError:
+            # If models don't exist yet, set counts to 0
+            leave_apps_as_employee = 0
+            leave_apps_as_approver = 0
+            work_exts_as_employee = 0
+            work_exts_as_approver = 0
         
-        if user.signature:
-            try:
-                # Use static/uploads instead of instance_path
-                signature_path = os.path.join(current_app.root_path, 'static', 'uploads', 'signatures', user.signature)
-                if os.path.exists(signature_path):
-                    os.remove(signature_path)
-            except:
-                pass
+        # Check if user has data as employee (should not be deleted)
+        if leave_apps_as_employee > 0 or work_exts_as_employee > 0:
+            error_msg = (f'Cannot delete user {username}. They have {leave_apps_as_employee} '
+                        f'leave applications and {work_exts_as_employee} work extensions as an employee. '
+                        f'Consider deactivating instead or use Force Delete.')
+            
+            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+                return jsonify({'success': False, 'error': error_msg}), 400
+            flash(error_msg, 'warning')
+            return redirect(url_for('admin.manage_users'))
         
-        db.session.delete(user)
+        # Log warning if user is an approver for other records
+        if leave_apps_as_approver > 0 or work_exts_as_approver > 0:
+            warning_msg = (f'User {username} is an approver for {leave_apps_as_approver} '
+                          f'leave applications and {work_exts_as_approver} work extensions. '
+                          f'Proceeding with safe deletion - these will be set to NULL.')
+            current_app.logger.info(warning_msg)
+        
+        # Use the safe delete method
+        try:
+            user.safe_delete()
+        except AttributeError:
+            # If safe_delete method doesn't exist, use basic deletion
+            # Handle approver references manually
+            if 'LeaveApplication' in globals():
+                leave_apps_as_approver_objs = LeaveApplication.query.filter_by(approver_id=user.id).all()
+                for leave_app in leave_apps_as_approver_objs:
+                    leave_app.approver_id = None
+                    leave_app.approver_name = f"{user_full_name} (Deleted User)"
+                    leave_app.approver_email = 'deleted@system.placeholder'
+            
+            if 'WorkExtension' in globals():
+                work_exts_as_approver_objs = WorkExtension.query.filter_by(approver_id=user.id).all()
+                for work_ext in work_exts_as_approver_objs:
+                    work_ext.approver_id = None
+                    work_ext.approver_name = f"{user_full_name} (Deleted User)"
+                    work_ext.approver_email = 'deleted@system.placeholder'
+            
+            # Clean up uploaded files
+            import os
+            if user.avatar and user.avatar != 'default_avatar.png':
+                try:
+                    avatar_path = os.path.join(current_app.root_path, 'static', 'uploads', 'avatars', user.avatar)
+                    if os.path.exists(avatar_path):
+                        os.remove(avatar_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Could not delete avatar file: {e}")
+            
+            if user.signature:
+                try:
+                    signature_path = os.path.join(current_app.root_path, 'static', 'uploads', 'signatures', user.signature)
+                    if os.path.exists(signature_path):
+                        os.remove(signature_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Could not delete signature file: {e}")
+            
+            # Delete the user
+            db.session.delete(user)
+        
+        # Commit the transaction
         db.session.commit()
-        flash(f'User {username} deleted successfully!', 'success')
+        
+        success_msg = f'User {username} deleted successfully using safe deletion method!'
+        current_app.logger.info(f"Safe deletion completed for user {username} by {current_user.username}")
+        
+        # Return appropriate response based on request type
+        if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            return jsonify({
+                'success': True, 
+                'message': success_msg,
+                'deleted_user': username
+            })
+        
+        flash(success_msg, 'success')
+        return redirect(url_for('admin.manage_users'))
+        
     except Exception as e:
         db.session.rollback()
-        flash(f'Error deleting user: {str(e)}', 'danger')
+        error_msg = f'Error deleting user: {str(e)}'
         current_app.logger.error(f"User deletion error: {str(e)}")
-    
-    return redirect(url_for('admin.manage_users'))
+        
+        # Return appropriate response based on request type
+        if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            return jsonify({'success': False, 'error': error_msg}), 500
+        
+        flash(error_msg, 'danger')
+        return redirect(url_for('admin.manage_users'))
 
 # ==================== SECTION MANAGEMENT ====================
 
@@ -1727,16 +1814,451 @@ def export_section_data(section_id):
 @login_required
 @admin_required
 def two_factor_settings():
-    """Two-factor authentication settings"""
-    return render_template('admin/2fa_settings.html')
+    """Two-factor authentication settings page"""
+    settings = TwoFactorSettings.get_settings()
+    return render_template('admin/2fa_settings.html', settings=settings)
 
 @bp.route('/settings/2fa', methods=['POST'])
 @login_required
 @admin_required
 def update_2fa_settings():
     """Update 2FA settings"""
-    flash('2FA settings updated successfully!', 'success')
+    try:
+        settings = TwoFactorSettings.get_settings()
+        
+        # Get form data
+        system_2fa_enabled = 'system_2fa_enabled' in request.form
+        grace_period_days = int(request.form.get('grace_period_days', 7))
+        remember_device_enabled = 'remember_device_enabled' in request.form
+        remember_device_days = int(request.form.get('remember_device_days', 30))
+        require_admin_2fa = 'require_admin_2fa' in request.form
+        
+        # Method availability
+        totp_enabled = 'totp_enabled' in request.form
+        sms_enabled = 'sms_enabled' in request.form
+        email_enabled = 'email_enabled' in request.form
+        
+        # Backup codes
+        backup_codes_enabled = 'backup_codes_enabled' in request.form
+        backup_codes_count = int(request.form.get('backup_codes_count', 10))
+        
+        # Validation
+        if grace_period_days < 0 or grace_period_days > 30:
+            flash('Grace period must be between 0 and 30 days.', 'error')
+            return redirect(url_for('admin.two_factor_settings'))
+        
+        if remember_device_days < 1 or remember_device_days > 90:
+            flash('Remember device duration must be between 1 and 90 days.', 'error')
+            return redirect(url_for('admin.two_factor_settings'))
+        
+        if backup_codes_count < 5 or backup_codes_count > 20:
+            flash('Backup codes count must be between 5 and 20.', 'error')
+            return redirect(url_for('admin.two_factor_settings'))
+        
+        # Ensure at least one method is enabled if 2FA is enabled
+        if system_2fa_enabled and not (totp_enabled or sms_enabled or email_enabled):
+            flash('At least one 2FA method must be enabled when system-wide 2FA is active.', 'error')
+            return redirect(url_for('admin.two_factor_settings'))
+        
+        # Update settings
+        was_enabled = settings.system_2fa_enabled
+        settings.system_2fa_enabled = system_2fa_enabled
+        settings.grace_period_days = grace_period_days
+        settings.remember_device_enabled = remember_device_enabled
+        settings.remember_device_days = remember_device_days
+        settings.require_admin_2fa = require_admin_2fa
+        settings.totp_enabled = totp_enabled
+        settings.sms_enabled = sms_enabled
+        settings.email_enabled = email_enabled
+        settings.backup_codes_enabled = backup_codes_enabled
+        settings.backup_codes_count = backup_codes_count
+        
+        db.session.commit()
+        
+        # If 2FA was just enabled system-wide, start grace period for all users
+        if system_2fa_enabled and not was_enabled:
+            _start_grace_period_for_all_users()
+            flash('System-wide 2FA enabled! All users have been given a grace period to set up 2FA.', 'success')
+        elif not system_2fa_enabled and was_enabled:
+            flash('System-wide 2FA disabled. Users can now choose whether to use 2FA.', 'info')
+        else:
+            flash('2FA settings updated successfully!', 'success')
+        
+    except ValueError as e:
+        flash('Invalid input values. Please check your entries.', 'error')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating 2FA settings: {str(e)}', 'error')
+        current_app.logger.error(f"2FA settings update error: {str(e)}")
+    
     return redirect(url_for('admin.two_factor_settings'))
+
+@bp.route('/api/2fa-stats')
+@login_required
+@admin_required
+def get_2fa_stats():
+    """Get 2FA statistics for admin dashboard"""
+    try:
+        total_users = User.query.filter_by(is_active=True).count()
+        
+        # Users with 2FA enabled
+        users_with_2fa = UserTwoFactor.query.filter_by(status=TwoFactorStatus.ENABLED).count()
+        
+        # Users in grace period
+        users_in_grace_period = UserTwoFactor.query.filter_by(status=TwoFactorStatus.GRACE_PERIOD).count()
+        
+        # Active trusted devices
+        trusted_devices_count = TrustedDevice.query.filter(
+            TrustedDevice.expires_at > datetime.utcnow()
+        ).count()
+        
+        # Cleanup expired devices
+        TrustedDevice.cleanup_expired()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_users': total_users,
+                'users_with_2fa': users_with_2fa,
+                'users_in_grace_period': users_in_grace_period,
+                'trusted_devices_count': trusted_devices_count,
+                '2fa_adoption_rate': round((users_with_2fa / max(total_users, 1)) * 100, 1)
+            }
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting 2FA stats: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/settings/2fa/sms', methods=['POST'])
+@login_required
+@admin_required
+def update_sms_settings():
+    """Update SMS provider settings"""
+    try:
+        settings = TwoFactorSettings.get_settings()
+        
+        sms_provider = request.form.get('sms_provider')
+        sms_api_key = request.form.get('sms_api_key')
+        sms_api_secret = request.form.get('sms_api_secret')
+        sms_from_number = request.form.get('sms_from_number')
+        
+        # Update SMS settings
+        settings.sms_provider = sms_provider if sms_provider else None
+        settings.sms_from_number = sms_from_number if sms_from_number else None
+        
+        # Encrypt sensitive data if provided
+        if sms_api_key:
+            settings.sms_api_key = settings.encrypt_field(sms_api_key)
+        if sms_api_secret:
+            settings.sms_api_secret = settings.encrypt_field(sms_api_secret)
+        
+        db.session.commit()
+        flash('SMS provider settings updated successfully!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating SMS settings: {str(e)}', 'error')
+        current_app.logger.error(f"SMS settings update error: {str(e)}")
+    
+    return redirect(url_for('admin.two_factor_settings'))
+
+@bp.route('/api/user-2fa-status')
+@login_required
+@admin_required
+def get_user_2fa_status():
+    """Get detailed 2FA status for all users"""
+    try:
+        users = User.query.filter_by(is_active=True).order_by(User.last_name, User.first_name).all()
+        user_data = []
+        
+        for user in users:
+            user_2fa = user.two_factor
+            
+            status_info = {
+                'id': user.id,
+                'full_name': user.full_name,
+                'email': user.email,
+                'status': 'Not Required',
+                'status_color': '#6c757d',
+                'primary_method': None,
+                'last_verified': None,
+                'backup_codes_remaining': 0,
+                'trusted_devices_count': 0
+            }
+            
+            if user_2fa:
+                status_info.update({
+                    'status': user_2fa.status.value.replace('_', ' ').title(),
+                    'status_color': _get_status_color(user_2fa.status),
+                    'primary_method': user_2fa.primary_method.value.upper() if user_2fa.primary_method else None,
+                    'last_verified': user_2fa.last_verified_at.isoformat() if user_2fa.last_verified_at else None,
+                    'backup_codes_remaining': len(user_2fa.get_backup_codes()),
+                    'trusted_devices_count': len([d for d in user.trusted_devices if d.expires_at > datetime.utcnow()])
+                })
+            
+            user_data.append(status_info)
+        
+        return jsonify({
+            'success': True,
+            'users': user_data
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting user 2FA status: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/force-2fa-setup', methods=['POST'])
+@login_required
+@admin_required
+def force_2fa_setup():
+    """Force 2FA setup for all users by resetting grace period"""
+    try:
+        settings = TwoFactorSettings.get_settings()
+        if not settings.system_2fa_enabled:
+            return jsonify({'success': False, 'message': 'System-wide 2FA is not enabled'}), 400
+        
+        count = _start_grace_period_for_all_users()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Grace period reset for {count} users',
+            'count': count
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error forcing 2FA setup: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/cleanup-expired-devices', methods=['POST'])
+@login_required
+@admin_required
+def cleanup_expired_devices():
+    """Clean up expired trusted devices"""
+    try:
+        count = TrustedDevice.cleanup_expired()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {count} expired devices',
+            'count': count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error cleaning up devices: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/emergency-2fa-action', methods=['POST'])
+@login_required
+@admin_required
+def emergency_2fa_action():
+    """Perform emergency 2FA actions (disable/reset)"""
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        username = data.get('username')
+        reason = data.get('reason')
+        
+        if not all([action, username, reason]):
+            return jsonify({'success': False, 'message': 'Missing required fields'}), 400
+        
+        # Find user
+        user = User.query.filter(
+            (User.username == username) | (User.email == username)
+        ).first()
+        
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        # Log the emergency action
+        current_app.logger.warning(
+            f"Emergency 2FA action '{action}' performed by {current_user.username} "
+            f"on user {user.username}. Reason: {reason}"
+        )
+        
+        if action == 'disable':
+            _disable_user_2fa(user)
+            message = f"2FA disabled for user {user.username}"
+        elif action == 'reset':
+            _reset_user_2fa(user)
+            message = f"2FA reset for user {user.username}"
+        else:
+            return jsonify({'success': False, 'message': 'Invalid action'}), 400
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in emergency 2FA action: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/emergency-2fa-action-by-id', methods=['POST'])
+@login_required
+@admin_required
+def emergency_2fa_action_by_id():
+    """Perform emergency 2FA action by user ID"""
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        user_id = data.get('user_id')
+        reason = data.get('reason')
+        
+        user = User.query.get_or_404(user_id)
+        
+        # Log the emergency action
+        current_app.logger.warning(
+            f"Emergency 2FA action '{action}' performed by {current_user.username} "
+            f"on user {user.username}. Reason: {reason}"
+        )
+        
+        if action == 'disable':
+            _disable_user_2fa(user)
+            message = f"2FA disabled for user {user.username}"
+        elif action == 'reset':
+            _reset_user_2fa(user)
+            message = f"2FA reset for user {user.username}"
+        else:
+            return jsonify({'success': False, 'message': 'Invalid action'}), 400
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in emergency 2FA action by ID: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/generate-emergency-code', methods=['POST'])
+@login_required
+@admin_required
+def generate_emergency_code():
+    """Generate one-time emergency access code for user"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        reason = data.get('reason')
+        
+        if not username:
+            return jsonify({'success': False, 'message': 'Username required'}), 400
+        
+        # Find user
+        user = User.query.filter(
+            (User.username == username) | (User.email == username)
+        ).first()
+        
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'}), 404
+        
+        # Generate emergency code
+        emergency_code = secrets.token_urlsafe(12)
+        
+        # Store emergency code in session with expiration (valid for 1 hour)
+        session[f'emergency_code_{user.id}'] = {
+            'code': emergency_code,
+            'expires': (datetime.utcnow() + timedelta(hours=1)).isoformat(),
+            'generated_by': current_user.id
+        }
+        
+        # Log the emergency code generation
+        current_app.logger.warning(
+            f"Emergency access code generated by {current_user.username} "
+            f"for user {user.username}. Reason: {reason}"
+        )
+        
+        return jsonify({
+            'success': True,
+            'code': emergency_code,
+            'message': 'Emergency access code generated (valid for 1 hour)'
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating emergency code: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Helper functions
+
+def _start_grace_period_for_all_users():
+    """Start grace period for all users who need 2FA"""
+    settings = TwoFactorSettings.get_settings()
+    users = User.query.filter_by(is_active=True).all()
+    count = 0
+    
+    for user in users:
+        if settings.is_2fa_required_for_user(user):
+            user_2fa = user.two_factor
+            if not user_2fa:
+                user_2fa = UserTwoFactor(user_id=user.id)
+                db.session.add(user_2fa)
+            
+            # Reset grace period
+            user_2fa.start_grace_period()
+            count += 1
+    
+    db.session.commit()
+    return count
+
+def _disable_user_2fa(user):
+    """Disable 2FA for a user"""
+    user_2fa = user.two_factor
+    if user_2fa:
+        user_2fa.status = TwoFactorStatus.DISABLED
+        user_2fa.totp_secret = None
+        user_2fa.totp_verified = False
+        user_2fa.phone_verified = False
+        user_2fa.email_2fa_enabled = False
+        user_2fa.primary_method = None
+        user_2fa.backup_codes = None
+        user_2fa.backup_codes_used = None
+        user_2fa.grace_period_start = None
+    
+    # Remove all trusted devices
+    for device in user.trusted_devices:
+        db.session.delete(device)
+
+def _reset_user_2fa(user):
+    """Reset 2FA for a user (they'll need to set it up again)"""
+    user_2fa = user.two_factor
+    if user_2fa:
+        user_2fa.status = TwoFactorStatus.PENDING_SETUP
+        user_2fa.totp_secret = None
+        user_2fa.totp_verified = False
+        user_2fa.phone_verified = False
+        user_2fa.email_2fa_enabled = False
+        user_2fa.primary_method = None
+        user_2fa.backup_codes = None
+        user_2fa.backup_codes_used = None
+        user_2fa.last_verified_at = None
+        user_2fa.verification_attempts = 0
+        user_2fa.locked_until = None
+        
+        # Start new grace period
+        user_2fa.start_grace_period()
+    
+    # Remove all trusted devices
+    for device in user.trusted_devices:
+        db.session.delete(device)
+
+def _get_status_color(status):
+    """Get color for 2FA status badge"""
+    colors = {
+        TwoFactorStatus.DISABLED: '#6c757d',
+        TwoFactorStatus.PENDING_SETUP: '#ffc107',
+        TwoFactorStatus.ENABLED: '#198754',
+        TwoFactorStatus.GRACE_PERIOD: '#fd7e14'
+    }
+    return colors.get(status, '#6c757d')
 
 @bp.route('/reports/usage')
 @login_required
@@ -2122,3 +2644,684 @@ def employee_database():
                          sections=sections, 
                          units=units,
                          scope=scope)
+
+# -- ENHANCED USER DELETE METHOD ---
+
+@bp.route('/users/<int:user_id>/force-delete', methods=['POST'])
+@login_required
+@admin_required
+def force_delete_user(user_id):
+    """Permanently delete user and ALL associated data - Admin only"""
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        # Prevent deleting the current admin user
+        if user.id == current_user.id:
+            return jsonify({
+                'success': False, 
+                'error': 'You cannot delete your own account.'
+            }), 400
+        
+        # Get form data for confirmation
+        data = request.get_json()
+        confirmation_text = data.get('confirmation_text', '').strip()
+        reason = data.get('reason', '').strip()
+        
+        # Validate confirmation text
+        expected_confirmation = f"DELETE {user.username}"
+        if confirmation_text != expected_confirmation:
+            return jsonify({
+                'success': False, 
+                'error': f'Confirmation text must be exactly: {expected_confirmation}'
+            }), 400
+        
+        if not reason or len(reason) < 10:
+            return jsonify({
+                'success': False, 
+                'error': 'Detailed reason for deletion is required (minimum 10 characters).'
+            }), 400
+        
+        # Log the force deletion for audit trail
+        current_app.logger.warning(
+            f"FORCE DELETE initiated by {current_user.username} "
+            f"for user {user.username} (ID: {user.id}). "
+            f"Reason: {reason}"
+        )
+        
+        # Store user info before deletion
+        user_info = {
+            'id': user.id,
+            'username': user.username,
+            'full_name': user.full_name,
+            'email': user.email
+        }
+        
+        # Execute force deletion
+        deletion_summary = user.force_delete_all_data()
+        
+        # Commit the transaction
+        db.session.commit()
+        
+        # Log successful deletion
+        current_app.logger.warning(
+            f"FORCE DELETE completed for user {user_info['username']}. "
+            f"Summary: {json.dumps(deletion_summary, default=str)}"
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'User {user_info["username"]} and all associated data have been permanently deleted.',
+            'deletion_summary': deletion_summary
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in force delete: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'Error during force deletion: {str(e)}'
+        }), 500
+
+@bp.route('/users/<int:user_id>/deletion-preview')
+@login_required
+@admin_required
+def preview_user_deletion(user_id):
+    """Preview what data will be deleted for a user"""
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        if user.id == current_user.id:
+            return jsonify({
+                'success': False, 
+                'error': 'Cannot delete your own account.'
+            }), 400
+        
+        # Get deletion preview
+        preview = user.get_deletion_preview()
+        
+        return jsonify({
+            'success': True,
+            'preview': preview
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating deletion preview: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'Error generating preview: {str(e)}'
+        }), 500
+
+@bp.route('/audit/deletions')
+@login_required
+@admin_required
+def view_deletion_audit():
+    """View audit log of user deletions - Admin only"""
+    try:
+        # This would require a separate audit table in a production system
+        # For now, we'll show recent log entries from the application log
+        
+        import os
+        from datetime import datetime, timedelta
+        
+        audit_entries = []
+        
+        # Try to read recent deletion logs from the application log
+        # This is a simplified approach - in production, use a proper audit table
+        try:
+            log_file = current_app.config.get('LOG_FILE')
+            if log_file and os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    lines = f.readlines()
+                    
+                # Look for deletion-related log entries in the last 100 lines
+                for line in lines[-100:]:
+                    if 'FORCE DELETE' in line or 'Safe deletion completed' in line:
+                        audit_entries.append(line.strip())
+        except Exception as e:
+            current_app.logger.warning(f"Could not read audit log: {e}")
+        
+        return render_template('admin/deletion_audit.html', 
+                             audit_entries=audit_entries[-50:])  # Show last 50 entries
+        
+    except Exception as e:
+        flash(f'Error loading audit log: {str(e)}', 'danger')
+        return redirect(url_for('admin.admin_dashboard'))
+
+@bp.route('/system/cleanup', methods=['POST'])
+@login_required
+@admin_required
+def system_cleanup():
+    """Perform system cleanup tasks"""
+    try:
+        data = request.get_json()
+        cleanup_type = data.get('type', '')
+        
+        if cleanup_type == 'orphaned_files':
+            # Clean up orphaned uploaded files
+            cleanup_result = _cleanup_orphaned_files()
+            return jsonify({
+                'success': True,
+                'message': f'Cleanup completed. {cleanup_result["files_removed"]} orphaned files removed.',
+                'details': cleanup_result
+            })
+        
+        elif cleanup_type == 'expired_sessions':
+            # Clean up expired trusted devices
+            from app.models import TrustedDevice
+            expired_count = TrustedDevice.cleanup_expired()
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Removed {expired_count} expired trusted devices.'
+            })
+        
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid cleanup type specified.'
+            }), 400
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Error during cleanup: {str(e)}'
+        }), 500
+
+def _cleanup_orphaned_files():
+    """Clean up files that no longer have corresponding user records"""
+    import os
+    from flask import current_app
+    
+    cleanup_result = {
+        'files_removed': 0,
+        'files_checked': 0,
+        'errors': []
+    }
+    
+    try:
+        # Check avatars directory
+        avatars_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'avatars')
+        if os.path.exists(avatars_dir):
+            cleanup_result.update(_cleanup_directory_files(avatars_dir, 'avatar', User))
+        
+        # Check signatures directory
+        signatures_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'signatures')
+        if os.path.exists(signatures_dir):
+            sig_result = _cleanup_directory_files(signatures_dir, 'signature', User)
+            cleanup_result['files_removed'] += sig_result['files_removed']
+            cleanup_result['files_checked'] += sig_result['files_checked']
+            cleanup_result['errors'].extend(sig_result['errors'])
+        
+    except Exception as e:
+        cleanup_result['errors'].append(f"General cleanup error: {str(e)}")
+    
+    return cleanup_result
+
+def _cleanup_directory_files(directory, field_name, model_class):
+    """Clean up files in a specific directory"""
+    import os
+    
+    result = {
+        'files_removed': 0,
+        'files_checked': 0,
+        'errors': []
+    }
+    
+    try:
+        # Get all files in directory
+        for filename in os.listdir(directory):
+            if filename == 'default_avatar.png':  # Skip default files
+                continue
+                
+            result['files_checked'] += 1
+            file_path = os.path.join(directory, filename)
+            
+            # Check if any user has this file
+            users_with_file = model_class.query.filter(
+                getattr(model_class, field_name) == filename
+            ).count()
+            
+            if users_with_file == 0:
+                try:
+                    os.remove(file_path)
+                    result['files_removed'] += 1
+                    current_app.logger.info(f"Removed orphaned file: {filename}")
+                except Exception as e:
+                    result['errors'].append(f"Could not remove {filename}: {str(e)}")
+    
+    except Exception as e:
+        result['errors'].append(f"Error processing directory {directory}: {str(e)}")
+    
+    return result
+
+
+# ENHANCED ADMIN DASHBOARD WITH DELETION METRICS
+
+@bp.route('/dashboard/metrics')
+@login_required
+@admin_required
+def admin_dashboard_metrics():
+    """Get enhanced metrics for admin dashboard including deletion statistics"""
+    try:
+        # Basic user metrics
+        total_users = User.query.count()
+        active_users = User.query.filter_by(is_active=True).count()
+        inactive_users = total_users - active_users
+        
+        # Role distribution
+        admins = User.query.filter_by(role=UserRole.ADMINISTRATOR).count()
+        managers = User.query.filter_by(role=UserRole.MANAGER).count()
+        employees = User.query.filter_by(role=UserRole.EMPLOYEE).count()
+        
+        # Organizational metrics
+        total_departments = Department.query.count() if Department else 0
+        total_divisions = Division.query.count() if Division else 0
+        total_sections = Section.query.count()
+        total_units = Unit.query.count()
+        
+        # Data integrity metrics
+        orphaned_shifts = db.session.execute(text("""
+            SELECT COUNT(*) FROM shifts s 
+            LEFT JOIN users u ON s.employee_id = u.id 
+            WHERE u.id IS NULL
+        """)).scalar()
+        
+        orphaned_leave_apps = db.session.execute(text("""
+            SELECT COUNT(*) FROM leave_applications la 
+            LEFT JOIN users u ON la.employee_id = u.id 
+            WHERE u.id IS NULL
+        """)).scalar()
+        
+        # Recent activity metrics (last 30 days)
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        
+        recent_users = User.query.filter(User.created_at >= thirty_days_ago).count()
+        recent_templates = ScheduleTemplateV2.query.filter(
+            ScheduleTemplateV2.created_at >= thirty_days_ago
+        ).count()
+        
+        # System health indicators
+        total_trusted_devices = TrustedDevice.query.count()
+        expired_devices = TrustedDevice.query.filter(
+            TrustedDevice.expires_at < datetime.utcnow()
+        ).count()
+        
+        # 2FA adoption metrics
+        users_with_2fa = UserTwoFactor.query.filter_by(
+            status=TwoFactorStatus.ENABLED
+        ).count() if 'UserTwoFactor' in globals() else 0
+        
+        metrics = {
+            'users': {
+                'total': total_users,
+                'active': active_users,
+                'inactive': inactive_users,
+                'admins': admins,
+                'managers': managers,
+                'employees': employees,
+                'recent_additions': recent_users
+            },
+            'organization': {
+                'departments': total_departments,
+                'divisions': total_divisions,
+                'sections': total_sections,
+                'units': total_units
+            },
+            'data_integrity': {
+                'orphaned_shifts': orphaned_shifts,
+                'orphaned_leave_apps': orphaned_leave_apps,
+                'health_score': calculate_health_score(orphaned_shifts, orphaned_leave_apps, total_users)
+            },
+            'security': {
+                'users_with_2fa': users_with_2fa,
+                'total_trusted_devices': total_trusted_devices,
+                'expired_devices': expired_devices,
+                '2fa_adoption_rate': round((users_with_2fa / max(active_users, 1)) * 100, 1)
+            },
+            'activity': {
+                'recent_templates': recent_templates,
+                'system_uptime': get_system_uptime()
+            }
+        }
+        
+        return jsonify({
+            'success': True,
+            'metrics': metrics
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting admin metrics: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Error loading metrics: {str(e)}'
+        }), 500
+
+def calculate_health_score(orphaned_shifts, orphaned_leave_apps, total_users):
+    """Calculate system health score (0-100)"""
+    if total_users == 0:
+        return 100
+    
+    total_orphaned = orphaned_shifts + orphaned_leave_apps
+    
+    if total_orphaned == 0:
+        return 100
+    elif total_orphaned < 10:
+        return 95
+    elif total_orphaned < 50:
+        return 85
+    elif total_orphaned < 100:
+        return 70
+    else:
+        return max(50, 100 - (total_orphaned // 10))
+
+def get_system_uptime():
+    """Get approximate system uptime"""
+    try:
+        import psutil
+        boot_time = psutil.boot_time()
+        uptime_seconds = time.time() - boot_time
+        
+        days = int(uptime_seconds // 86400)
+        hours = int((uptime_seconds % 86400) // 3600)
+        
+        return f"{days}d {hours}h"
+    except ImportError:
+        return "Unknown"
+
+# BATCH OPERATIONS FOR USER MANAGEMENT
+
+@bp.route('/users/batch-operations', methods=['POST'])
+@login_required
+@admin_required
+def batch_user_operations():
+    """Perform batch operations on multiple users"""
+    try:
+        data = request.get_json()
+        operation = data.get('operation')
+        user_ids = data.get('user_ids', [])
+        
+        if not user_ids:
+            return jsonify({
+                'success': False,
+                'error': 'No users selected for batch operation.'
+            }), 400
+        
+        # Prevent operations on current user
+        if current_user.id in user_ids:
+            user_ids.remove(current_user.id)
+        
+        if not user_ids:
+            return jsonify({
+                'success': False,
+                'error': 'Cannot perform batch operations on your own account.'
+            }), 400
+        
+        users = User.query.filter(User.id.in_(user_ids)).all()
+        results = {
+            'success_count': 0,
+            'error_count': 0,
+            'errors': [],
+            'processed_users': []
+        }
+        
+        for user in users:
+            try:
+                if operation == 'deactivate':
+                    if user.is_active:
+                        user.is_active = False
+                        results['success_count'] += 1
+                        results['processed_users'].append(f"Deactivated: {user.username}")
+                
+                elif operation == 'activate':
+                    if not user.is_active:
+                        user.is_active = True
+                        results['success_count'] += 1
+                        results['processed_users'].append(f"Activated: {user.username}")
+                
+                elif operation == 'force_delete':
+                    # This requires additional confirmation
+                    confirmation = data.get('confirmation', {})
+                    if not confirmation.get('confirmed') or confirmation.get('code') != 'BATCH_DELETE_CONFIRMED':
+                        return jsonify({
+                            'success': False,
+                            'error': 'Batch force deletion requires explicit confirmation.'
+                        }), 400
+                    
+                    deletion_summary = user.force_delete_all_data()
+                    results['success_count'] += 1
+                    results['processed_users'].append(f"Force deleted: {user.username}")
+                    
+                    # Log the batch deletion
+                    current_app.logger.warning(
+                        f"BATCH FORCE DELETE: User {user.username} deleted by {current_user.username}. "
+                        f"Reason: {confirmation.get('reason', 'Batch operation')}"
+                    )
+                
+                else:
+                    results['errors'].append(f"Unknown operation: {operation}")
+                    results['error_count'] += 1
+                    
+            except Exception as e:
+                results['errors'].append(f"Error processing {user.username}: {str(e)}")
+                results['error_count'] += 1
+        
+        if operation != 'force_delete':  # Force delete commits in the method
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Batch operation completed. {results["success_count"]} successful, {results["error_count"]} errors.',
+            'results': results
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Batch operation error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Batch operation failed: {str(e)}'
+        }), 500
+
+
+# SYSTEM MAINTENANCE ROUTES
+
+
+@bp.route('/maintenance/database-integrity')
+@login_required
+@admin_required
+def check_database_integrity():
+    """Check and report database integrity issues"""
+    try:
+        integrity_report = {
+            'orphaned_records': {},
+            'missing_references': {},
+            'recommendations': [],
+            'health_score': 100
+        }
+        
+        # Check for orphaned shifts
+        orphaned_shifts = db.session.execute(text("""
+            SELECT s.id, s.employee_id, s.date 
+            FROM shifts s 
+            LEFT JOIN users u ON s.employee_id = u.id 
+            WHERE u.id IS NULL
+            LIMIT 10
+        """)).fetchall()
+        
+        integrity_report['orphaned_records']['shifts'] = len(orphaned_shifts)
+        
+        # Check for orphaned leave applications
+        orphaned_leaves = db.session.execute(text("""
+            SELECT la.id, la.employee_id, la.reference_code 
+            FROM leave_applications la 
+            LEFT JOIN users u ON la.employee_id = u.id 
+            WHERE u.id IS NULL
+            LIMIT 10
+        """)).fetchall()
+        
+        integrity_report['orphaned_records']['leave_applications'] = len(orphaned_leaves)
+        
+        # Check for users without sections/units
+        users_without_org = User.query.filter(
+            User.section_id.is_(None),
+            User.unit_id.is_(None),
+            User.is_active == True
+        ).count()
+        
+        integrity_report['missing_references']['users_without_organization'] = users_without_org
+        
+        # Generate recommendations
+        if orphaned_shifts:
+            integrity_report['recommendations'].append("Clean up orphaned shifts that reference deleted users")
+        
+        if orphaned_leaves:
+            integrity_report['recommendations'].append("Review orphaned leave applications")
+        
+        if users_without_org > 0:
+            integrity_report['recommendations'].append(f"Assign {users_without_org} users to organizational units")
+        
+        # Calculate health score
+        total_issues = sum(integrity_report['orphaned_records'].values()) + sum(integrity_report['missing_references'].values())
+        integrity_report['health_score'] = max(0, 100 - (total_issues * 2))
+        
+        return render_template('admin/database_integrity.html', 
+                             report=integrity_report)
+        
+    except Exception as e:
+        flash(f'Error checking database integrity: {str(e)}', 'danger')
+        return redirect(url_for('admin.admin_dashboard'))
+
+@bp.route('/maintenance/fix-orphaned-records', methods=['POST'])
+@login_required
+@admin_required
+def fix_orphaned_records():
+    """Fix orphaned records in the database"""
+    try:
+        data = request.get_json()
+        fix_type = data.get('type')
+        
+        if fix_type == 'orphaned_shifts':
+            # Delete orphaned shifts
+            result = db.session.execute(text("""
+                DELETE FROM shifts 
+                WHERE employee_id NOT IN (SELECT id FROM users)
+            """))
+            
+            deleted_count = result.rowcount
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Deleted {deleted_count} orphaned shifts.',
+                'count': deleted_count
+            })
+        
+        elif fix_type == 'orphaned_leaves':
+            # Delete orphaned leave applications
+            result = db.session.execute(text("""
+                DELETE FROM leave_applications 
+                WHERE employee_id NOT IN (SELECT id FROM users)
+            """))
+            
+            deleted_count = result.rowcount
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Deleted {deleted_count} orphaned leave applications.',
+                'count': deleted_count
+            })
+        
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid fix type specified.'
+            }), 400
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Error fixing orphaned records: {str(e)}'
+        }), 500
+
+
+# USER EXPORT WITH ENHANCED DETAILS
+
+@bp.route('/users/export-detailed')
+@login_required
+@admin_required
+def export_detailed_users():
+    """Export detailed user list including deletion statistics"""
+    import io
+    import csv
+    from flask import make_response
+    from datetime import date
+    
+    users = User.query.order_by(User.last_name, User.first_name).all()
+    
+    # Create CSV output
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        'ID', 'Username', 'Full Name', 'Email', 'Role', 'Status',
+        'Department', 'Division', 'Section', 'Unit', 
+        'Employee Type', 'Hire Date', 'Years of Service',
+        'Is Approver', 'Approver Scope', 'Contact Number',
+        'Total Shifts', 'Leave Applications Filed', 'Leave Applications to Review',
+        'Work Extensions Filed', 'Templates Created', 'Last Login',
+        'Account Created', 'Can Be Safely Deleted'
+    ])
+    
+    # Write user data with deletion analysis
+    for user in users:
+        # Get user statistics
+        shift_count = Shift.query.filter_by(employee_id=user.id).count()
+        leave_filed = LeaveApplication.query.filter_by(employee_id=user.id).count()
+        leave_to_review = LeaveApplication.query.filter_by(approver_id=user.id).count()
+        work_ext_filed = WorkExtension.query.filter_by(employee_id=user.id).count()
+        templates_created = ScheduleTemplateV2.query.filter_by(created_by_id=user.id).count()
+        
+        # Determine if user can be safely deleted
+        has_dependencies = (shift_count > 0 or leave_filed > 0 or 
+                          work_ext_filed > 0 or templates_created > 0)
+        
+        safe_to_delete = "No" if has_dependencies else "Yes"
+        
+        writer.writerow([
+            user.id,
+            user.username,
+            user.full_name,
+            user.email,
+            user.role.value,
+            'Active' if user.is_active else 'Inactive',
+            user.department.name if hasattr(user, 'department') and user.department else '',
+            user.division.name if hasattr(user, 'division') and user.division else '',
+            user.section.name if user.section else '',
+            user.unit.name if user.unit else '',
+            user.employee_type.value if user.employee_type else '',
+            user.hiring_date.strftime('%Y-%m-%d') if user.hiring_date else '',
+            user.years_of_service if user.years_of_service else '',
+            'Yes' if user.can_approve_leaves() else 'No',
+            user.approver_scope if user.can_approve_leaves() else '',
+            user.contact_number or '',
+            shift_count,
+            leave_filed,
+            leave_to_review,
+            work_ext_filed,
+            templates_created,
+            '',  # Last login - would need session tracking
+            user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '',
+            safe_to_delete
+        ])
+    
+    # Create response
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=detailed_users_export_{date.today().strftime("%Y%m%d")}.csv'
+    
+    return response

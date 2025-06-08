@@ -5,23 +5,7 @@ from flask_login import login_required, current_user
 from app.leave import bp
 from app.models import (User, Section, Unit, LeaveApplication, LeaveType, 
                        LeaveStatus, UserRole, db, Shift, ShiftStatus, WorkExtension, WorkExtensionStatus)
-from app.utils.email_service import EmailService  # FIXED: Import email service
-try:
-    from app.utils.email_service import EmailService
-    print("DEBUG: EmailService imported successfully")
-except ImportError as e:
-    print(f"DEBUG: EmailService import failed: {str(e)}")
-    # Create a fallback EmailService
-    class EmailService:
-        @staticmethod
-        def send_leave_request_notification(leave_application):
-            print(f"DEBUG: Leave request notification for {leave_application.reference_code} - EmailService not available")
-            return True
-        
-        @staticmethod
-        def send_leave_status_notification(leave_application, status):
-            print(f"DEBUG: Leave status notification for {leave_application.reference_code}: {status} - EmailService not available")
-            return True
+from app.utils.email_service import EmailService
 from datetime import datetime, date, timedelta
 import os
 from werkzeug.utils import secure_filename
@@ -53,11 +37,11 @@ def get_user_approver(user):
         if unit_approver:
             approver = unit_approver
     
-    # If still no approver, try to find a manager/admin in the same section
+    # If still no approver, try to find a manager in the same section (EXCLUDE ADMINISTRATOR)
     if not approver and user.section_id:
         manager_approver = User.query.filter(
             User.section_id == user.section_id,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR]),
+            User.role == UserRole.MANAGER,  # CHANGED: Only MANAGER, not ADMINISTRATOR
             User.is_active == True
         ).first()
         
@@ -75,12 +59,12 @@ def request_leave():
     # Get the designated approver for current user
     approver = get_user_approver(current_user)
     
-    # Get all available approvers as fallback
+    # Get all available approvers as fallback (EXCLUDE ADMINISTRATOR)
     available_approvers = User.query.filter(
         db.or_(
             User.is_section_approver == True,
             User.is_unit_approver == True,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR])
+            User.role == UserRole.MANAGER  # CHANGED: Only MANAGER, not ADMINISTRATOR
         ),
         User.is_active == True
     ).all()
