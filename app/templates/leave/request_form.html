@@ -38,7 +38,7 @@
                     <div class="form-group mb-3">
                         <label class="form-label">Div./Department</label>
                         <input type="text" id="employee_unit" name="dept" class="form-control" 
-                               value="{{ current_user.section.name if current_user.section else 'Not Assigned' }}" readonly>
+                               value="{{ current_user.div_department or 'Not Assigned' }}" readonly>
                     </div>
                 </div>
             </div>

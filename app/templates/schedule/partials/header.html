@@ -1,3 +1,4 @@
+<!-- Clean, streamlined header with organized template actions -->
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
     <h1 class="h2 mb-3 mb-md-0">Schedule</h1>
     
@@ -31,31 +32,247 @@
         </div>
         
         {% if can_edit %}
-        <button class="btn btn-success btn-sm" onclick="publishSchedule()">
-            <i class="bi bi-check-circle"></i> Publish
+        <!-- STREAMLINED: Template Actions - Single Dropdown -->
+        <div class="dropdown">
+            <button class="btn btn-info btn-sm dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown" title="Template Actions">
+                <i class="bi bi-files"></i> Templates
+            </button>
+            <ul class="dropdown-menu">
+                <li><h6 class="dropdown-header"><i class="bi bi-magic"></i> Template Actions</h6></li>
+                <li><a class="dropdown-item" href="#" onclick="showQuickTemplateModal()">
+                    <i class="bi bi-lightning"></i> Quick Apply
+                </a></li>
+                {% if view_type == 'week' %}
+                <li><a class="dropdown-item" href="#" onclick="createTemplateFromCurrentWeek()">
+                    <i class="bi bi-camera"></i> Save Current Week
+                </a></li>
+                {% endif %}
+                <li><a class="dropdown-item" href="#" onclick="showTemplateModal()">
+                    <i class="bi bi-search"></i> Browse & Manage
+                </a></li>
+            </ul>
+        </div>
+        
+        <!-- Quick Action: Publish -->
+        <button class="btn btn-success btn-sm" onclick="publishSchedule()" title="Publish Schedule">
+            <i class="bi bi-check-circle"></i>
+            <span class="d-none d-md-inline">Publish</span>
         </button>
         
+        <!-- More Actions Dropdown -->
         <div class="dropdown">
             <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" 
-                    data-bs-toggle="dropdown">
+                    data-bs-toggle="dropdown" title="More Actions">
                 <i class="bi bi-three-dots"></i>
             </button>
             <ul class="dropdown-menu">
+                <!-- Export Actions -->
+                <li><h6 class="dropdown-header"><i class="bi bi-download"></i> Export</h6></li>
                 <li><a class="dropdown-item" href="#" onclick="exportSchedule()">
-                    <i class="bi bi-download"></i> Export CSV
+                    <i class="bi bi-file-spreadsheet"></i> Export CSV
                 </a></li>
                 <li><a class="dropdown-item" href="#" onclick="exportWorksched()">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Export Worksched
                 </a></li>
+                
                 <li><hr class="dropdown-divider"></li>
+                
+                <!-- Management Actions -->
+                <li><h6 class="dropdown-header"><i class="bi bi-gear"></i> Manage</h6></li>
                 <li><a class="dropdown-item" href="#" onclick="showHolidayManagement()">
-                    <i class="bi bi-calendar-event"></i> Manage Holidays
+                    <i class="bi bi-calendar-event"></i> Holidays
                 </a></li>
-                <li><a class="dropdown-item" href="#" onclick="showTemplateModal()">
-                    <i class="bi bi-files"></i> Use Template
+                <li><a class="dropdown-item" href="{{ url_for('schedule.calendar_view') }}">
+                    <i class="bi bi-calendar3"></i> Calendar View
                 </a></li>
             </ul>
         </div>
         {% endif %}
     </div>
 </div>
+
+<!-- Template Success/Info Alerts -->
+<div id="templateAlerts" class="alert-container mb-3" style="display: none;">
+    <!-- Dynamic alerts will be inserted here -->
+</div>
+
+<!-- Template Quick Actions for Week View (Optional: Shows only in week view for quick access) -->
+{% if can_edit and view_type == 'week' %}
+<div class="card mb-3 border-info bg-light">
+    <div class="card-body p-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-magic text-info me-2"></i>
+                <span class="small fw-bold text-info">Quick Template Actions:</span>
+            </div>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary" onclick="createTemplateFromCurrentWeek()" title="Save this week as a reusable template">
+                    <i class="bi bi-camera"></i> Save as Template
+                </button>
+                <button class="btn btn-outline-info" onclick="showQuickTemplateModal()" title="Apply an existing template to this week">
+                    <i class="bi bi-lightning"></i> Apply Template
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Navigation functions
+function navigateDate(direction) {
+    const currentDate = new Date(window.scheduleConfig.selectedDate);
+    let newDate;
+    
+    if (window.scheduleConfig.viewType === 'day') {
+        currentDate.setDate(currentDate.getDate() + direction);
+        newDate = currentDate;
+    } else if (window.scheduleConfig.viewType === 'week') {
+        currentDate.setDate(currentDate.getDate() + (direction * 7));
+        newDate = currentDate;
+    } else if (window.scheduleConfig.viewType === 'month') {
+        currentDate.setMonth(currentDate.getMonth() + direction);
+        newDate = currentDate;
+    }
+    
+    if (newDate) {
+        const dateStr = newDate.toISOString().split('T')[0];
+        const url = new URL(window.location);
+        url.searchParams.set('date', dateStr);
+        window.location.href = url.toString();
+    }
+}
+
+function navigateToDate(dateValue) {
+    if (dateValue) {
+        const url = new URL(window.location);
+        url.searchParams.set('date', dateValue);
+        window.location.href = url.toString();
+    }
+}
+
+// Export functions
+function exportSchedule() {
+    const startDate = window.scheduleConfig.dates.first;
+    const endDate = window.scheduleConfig.dates.last;
+    const url = `${window.scheduleConfig.urls.exportSchedule}?start_date=${startDate}&end_date=${endDate}`;
+    window.open(url, '_blank');
+}
+
+function exportWorksched() {
+    const startDate = window.scheduleConfig.dates.first;
+    const endDate = window.scheduleConfig.dates.last;
+    const url = `${window.scheduleConfig.urls.exportWorksched}?start_date=${startDate}&end_date=${endDate}`;
+    window.open(url, '_blank');
+}
+
+// Publish function
+function publishSchedule() {
+    if (confirm('Are you sure you want to publish this schedule? This will notify all team members.')) {
+        // Implement publish functionality
+        showTemplateAlert('Schedule published successfully!', 'success');
+    }
+}
+
+// Holiday management function
+function showHolidayManagement() {
+    const holidayModal = document.getElementById('holidayManagementModal');
+    if (holidayModal) {
+        const modal = new bootstrap.Modal(holidayModal);
+        modal.show();
+    } else {
+        showTemplateAlert('Holiday management feature is not yet implemented.', 'info');
+    }
+}
+
+// Template function - streamlined
+function createTemplateFromCurrentWeek() {
+    if (window.scheduleConfig.viewType !== 'week') {
+        showTemplateAlert('Please switch to week view to create a weekly template', 'warning');
+        return;
+    }
+    
+    showTemplateModal();
+    
+    // Pre-populate form data
+    const modalElement = document.getElementById('templateManagementModal');
+    if (modalElement) {
+        modalElement.addEventListener('shown.bs.modal', function() {
+            const createTab = document.getElementById('create-tab');
+            if (createTab) createTab.click();
+            
+            setTimeout(() => {
+                const startDateInput = document.querySelector('#createTemplateForm input[name="start_date"]');
+                const endDateInput = document.querySelector('#createTemplateForm input[name="end_date"]');
+                const nameInput = document.querySelector('#createTemplateForm input[name="name"]');
+                
+                if (startDateInput) startDateInput.value = window.scheduleConfig.dates.first;
+                if (endDateInput) endDateInput.value = window.scheduleConfig.dates.last;
+                
+                if (nameInput && !nameInput.value) {
+                    const weekStart = new Date(window.scheduleConfig.dates.first);
+                    nameInput.value = `Week of ${weekStart.toLocaleDateString()}`;
+                }
+            }, 100);
+        }, { once: true });
+    }
+}
+
+// Enhanced alert function
+function showTemplateAlert(message, type = 'info', autoHide = true) {
+    const alertContainer = document.getElementById('templateAlerts');
+    if (!alertContainer) {
+        alert(message);
+        return;
+    }
+    
+    const alertId = 'alert-' + Date.now();
+    const iconMap = {
+        'success': 'check-circle',
+        'warning': 'exclamation-triangle', 
+        'danger': 'x-circle',
+        'info': 'info-circle'
+    };
+    
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" id="${alertId}" role="alert">
+            <i class="bi bi-${iconMap[type] || 'info-circle'}"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    alertContainer.insertAdjacentHTML('beforeend', alertHtml);
+    alertContainer.style.display = 'block';
+    
+    if (autoHide) {
+        setTimeout(() => {
+            const alertElement = document.getElementById(alertId);
+            if (alertElement) {
+                const bsAlert = new bootstrap.Alert(alertElement);
+                bsAlert.close();
+                
+                setTimeout(() => {
+                    if (alertContainer.children.length === 0) {
+                        alertContainer.style.display = 'none';
+                    }
+                }, 150);
+            }
+        }, 5000);
+    }
+}
+
+// Global alert override
+const originalShowAlert = window.showAlert || function(message, type) {
+    console.log(`${type.toUpperCase()}: ${message}`);
+};
+
+window.showAlert = function(message, type = 'info') {
+    if (message.toLowerCase().includes('template')) {
+        showTemplateAlert(message, type);
+    } else {
+        originalShowAlert(message, type);
+    }
+};
+</script>

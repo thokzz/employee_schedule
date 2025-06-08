@@ -93,6 +93,26 @@
                         </div>
                     </div>
                     
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="contact_number" class="form-label">Contact Number</label>
+                                <input type="text" class="form-control" id="contact_number" name="contact_number" 
+                                       value="{{ user.contact_number or '' }}"
+                                       placeholder="e.g., +639123456789">
+                                <small class="text-muted">Mobile or telephone number</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="hiring_date" class="form-label">Hiring Date</label>
+                                <input type="date" class="form-control" id="hiring_date" name="hiring_date"
+                                       value="{{ user.hiring_date.isoformat() if user.hiring_date else '' }}">
+                                <small class="text-muted">Date when employment started</small>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Employee Type and Schedule Format -->
                     <div class="row">
                         <div class="col-md-6">
@@ -135,10 +155,11 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="hiring_date" class="form-label">Hiring Date</label>
-                                <input type="date" class="form-control" id="hiring_date" name="hiring_date"
-                                       value="{{ user.hiring_date.isoformat() if user.hiring_date else '' }}">
-                                <small class="text-muted">Date when employment started</small>
+                                <label for="typecode" class="form-label">Type Code</label>
+                                <input type="text" class="form-control" id="typecode" name="typecode" 
+                                       value="{{ user.typecode or '' }}"
+                                       placeholder="e.g., PROB, PERM">
+                                <small class="text-muted">Employment type code</small>
                             </div>
                         </div>
                     </div>
@@ -165,7 +186,46 @@
                     </div>
                     
                     <hr>
-                    <h6 class="text-muted mb-3">Organizational Assignment</h6>
+                    <h6 class="text-muted mb-3">Organizational Assignment (4-Level Hierarchy)</h6>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>4-Level Hierarchy:</strong> Department → Division → Section → Unit
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="department_id" class="form-label">Department</label>
+                                <select class="form-select" id="department_id" name="department_id">
+                                    <option value="">No Department</option>
+                                    {% for department in departments %}
+                                        <option value="{{ department.id }}" 
+                                                {% if user.department_id == department.id %}selected{% endif %}>
+                                            {{ department.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Top-level organizational unit</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="division_id" class="form-label">Division</label>
+                                <select class="form-select" id="division_id" name="division_id">
+                                    <option value="">No Division</option>
+                                    {% for division in divisions %}
+                                        <option value="{{ division.id }}" 
+                                                data-department="{{ division.department_id }}"
+                                                {% if user.division_id == division.id %}selected{% endif %}>
+                                            {{ division.name }} ({{ division.department.name }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Sub-department organizational unit</small>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -175,11 +235,14 @@
                                     <option value="">No Section</option>
                                     {% for section in sections %}
                                         <option value="{{ section.id }}" 
+                                                data-division="{{ section.division_id if section.division else '' }}"
                                                 {% if user.section_id == section.id %}selected{% endif %}>
                                             {{ section.name }}
+                                            {% if section.division %} ({{ section.division.name }}){% endif %}
                                         </option>
                                     {% endfor %}
                                 </select>
+                                <small class="text-muted">Work group assignment</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -195,6 +258,62 @@
                                         </option>
                                     {% endfor %}
                                 </select>
+                                <small class="text-muted">Team assignment</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Hierarchy Display -->
+                    <div id="current_hierarchy" class="alert alert-success" style="display: none;">
+                        <i class="bi bi-diagram-3"></i>
+                        <strong>Current Hierarchy:</strong> <span id="hierarchy_display"></span>
+                    </div>
+
+                    <hr>
+                    <h6 class="text-muted mb-3">Approver Permissions</h6>
+
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Note:</strong> Users must be assigned to the corresponding organizational level before being granted approver status.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_department_approver" name="is_department_approver"
+                                       {% if user.is_department_approver %}checked{% endif %}>
+                                <label class="form-check-label" for="is_department_approver">
+                                    <strong>Department Approver</strong>
+                                    <br><small class="text-muted">Can approve leaves for all employees in the department</small>
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_division_approver" name="is_division_approver"
+                                       {% if user.is_division_approver %}checked{% endif %}>
+                                <label class="form-check-label" for="is_division_approver">
+                                    <strong>Division Approver</strong>
+                                    <br><small class="text-muted">Can approve leaves for all employees in the division</small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_section_approver" name="is_section_approver"
+                                       {% if user.is_section_approver %}checked{% endif %}>
+                                <label class="form-check-label" for="is_section_approver">
+                                    <strong>Section Approver</strong>
+                                    <br><small class="text-muted">Can approve leaves for employees in their section</small>
+                                </label>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="is_unit_approver" name="is_unit_approver"
+                                       {% if user.is_unit_approver %}checked{% endif %}>
+                                <label class="form-check-label" for="is_unit_approver">
+                                    <strong>Unit Approver</strong>
+                                    <br><small class="text-muted">Can approve leaves for employees in their unit</small>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -219,12 +338,21 @@
                 {% if user.div_department %}
                     <p class="card-text"><small class="text-info">{{ user.div_department }}</small></p>
                 {% endif %}
+                
+                <!-- 4-Level Hierarchy Display -->
+                {% if user.department %}
+                    <p class="card-text"><span class="badge bg-danger">{{ user.department.name }}</span></p>
+                {% endif %}
+                {% if user.division %}
+                    <p class="card-text"><span class="badge bg-warning text-dark">{{ user.division.name }}</span></p>
+                {% endif %}
                 {% if user.section %}
-                    <p class="card-text"><small class="text-muted">{{ user.section.name }}</small></p>
+                    <p class="card-text"><span class="badge bg-success">{{ user.section.name }}</span></p>
                 {% endif %}
                 {% if user.unit %}
-                    <p class="card-text"><small class="text-muted">{{ user.unit.name }}</small></p>
+                    <p class="card-text"><span class="badge bg-info">{{ user.unit.name }}</span></p>
                 {% endif %}
+                
                 <p class="card-text">
                     <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
                         {{ 'Active' if user.is_active else 'Inactive' }}
@@ -296,6 +424,18 @@
                 </div>
                 <div class="row mb-2">
                     <div class="col-6">
+                        <strong>Years of Service:</strong>
+                    </div>
+                    <div class="col-6">
+                        {% if user.years_of_service is not none %}
+                            {{ user.years_of_service }} year{{ 's' if user.years_of_service != 1 else '' }}
+                        {% else %}
+                            Not calculated
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-6">
                         <strong>Signature:</strong>
                     </div>
                     <div class="col-6">
@@ -310,6 +450,38 @@
                 </div>
             </div>
         </div>
+
+        <!-- Approver Status Card -->
+        {% if user.can_approve_leaves() %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Approver Status</h6>
+            </div>
+            <div class="card-body">
+                <p class="text-success"><i class="bi bi-check-circle"></i> <strong>Can approve leaves</strong></p>
+                <p class="text-muted small">{{ user.approver_scope }}</p>
+                
+                {% if user.is_department_approver %}
+                    <span class="badge bg-danger me-1">Department Approver</span>
+                {% endif %}
+                {% if user.is_division_approver %}
+                    <span class="badge bg-warning text-dark me-1">Division Approver</span>
+                {% endif %}
+                {% if user.is_section_approver %}
+                    <span class="badge bg-success me-1">Section Approver</span>
+                {% endif %}
+                {% if user.is_unit_approver %}
+                    <span class="badge bg-info me-1">Unit Approver</span>
+                {% endif %}
+                
+                <div class="mt-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="updateApproverStatus()">
+                        <i class="bi bi-gear"></i> Update Approver Status
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         
         <div class="card mt-3">
             <div class="card-header">
@@ -385,33 +557,242 @@
         </div>
     </div>
 </div>
+
+<!-- Approver Status Modal -->
+<div class="modal fade" id="approverModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Approver Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Current approver scope: <strong>{{ user.approver_scope }}</strong></p>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="modal_is_department_approver" {% if user.is_department_approver %}checked{% endif %}>
+                    <label class="form-check-label" for="modal_is_department_approver">Department Approver</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="modal_is_division_approver" {% if user.is_division_approver %}checked{% endif %}>
+                    <label class="form-check-label" for="modal_is_division_approver">Division Approver</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="modal_is_section_approver" {% if user.is_section_approver %}checked{% endif %}>
+                    <label class="form-check-label" for="modal_is_section_approver">Section Approver</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="modal_is_unit_approver" {% if user.is_unit_approver %}checked{% endif %}>
+                    <label class="form-check-label" for="modal_is_unit_approver">Unit Approver</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveApproverStatus()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Filter units based on selected section
-document.getElementById('section_id').addEventListener('change', function() {
-    const selectedSection = this.value;
+document.addEventListener('DOMContentLoaded', function() {
+    const departmentSelect = document.getElementById('department_id');
+    const divisionSelect = document.getElementById('division_id');
+    const sectionSelect = document.getElementById('section_id');
     const unitSelect = document.getElementById('unit_id');
-    const unitOptions = unitSelect.querySelectorAll('option');
     
-    unitOptions.forEach(option => {
-        if (option.value === '') {
-            option.style.display = 'block';
-        } else {
-            const unitSection = option.getAttribute('data-section');
-            option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+    // Filter divisions based on selected department
+    departmentSelect.addEventListener('change', function() {
+        const selectedDepartment = this.value;
+        const divisionOptions = divisionSelect.querySelectorAll('option');
+        
+        divisionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const divisionDepartment = option.getAttribute('data-department');
+                option.style.display = (selectedDepartment === '' || divisionDepartment === selectedDepartment) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset lower level selections if department changed
+        if (divisionSelect.value && selectedDepartment) {
+            const selectedDivisionOption = divisionSelect.querySelector(`option[value="${divisionSelect.value}"]`);
+            if (selectedDivisionOption && selectedDivisionOption.getAttribute('data-department') !== selectedDepartment) {
+                divisionSelect.value = '';
+                sectionSelect.value = '';
+                unitSelect.value = '';
+            }
         }
+        
+        filterSections();
+        filterUnits();
+        updateHierarchyDisplay();
     });
     
-    // Reset unit selection if it's no longer valid
-    const selectedUnit = unitSelect.value;
-    if (selectedUnit && selectedSection) {
-        const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
-        if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
-            unitSelect.value = '';
+    // Filter sections based on selected division
+    divisionSelect.addEventListener('change', function() {
+        filterSections();
+        // Reset unit selection if section changed
+        unitSelect.value = '';
+        filterUnits();
+        updateHierarchyDisplay();
+    });
+    
+    // Filter units based on selected section
+    sectionSelect.addEventListener('change', function() {
+        filterUnits();
+        updateHierarchyDisplay();
+    });
+    
+    // Update hierarchy when unit changes
+    unitSelect.addEventListener('change', function() {
+        updateHierarchyDisplay();
+    });
+    
+    function filterSections() {
+        const selectedDivision = divisionSelect.value;
+        const sectionOptions = sectionSelect.querySelectorAll('option');
+        
+        sectionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const sectionDivision = option.getAttribute('data-division');
+                option.style.display = (selectedDivision === '' || sectionDivision === selectedDivision || sectionDivision === '') ? 'block' : 'none';
+            }
+        });
+        
+        // Reset section selection if it's no longer valid
+        const selectedSection = sectionSelect.value;
+        if (selectedSection && selectedDivision) {
+            const selectedSectionOption = sectionSelect.querySelector(`option[value="${selectedSection}"]`);
+            if (selectedSectionOption && selectedSectionOption.getAttribute('data-division') !== selectedDivision && selectedSectionOption.getAttribute('data-division') !== '') {
+                sectionSelect.value = '';
+            }
         }
     }
+    
+    function filterUnits() {
+        const selectedSection = sectionSelect.value;
+        const unitOptions = unitSelect.querySelectorAll('option');
+        
+        unitOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const unitSection = option.getAttribute('data-section');
+                option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset unit selection if it's no longer valid
+        const selectedUnit = unitSelect.value;
+        if (selectedUnit && selectedSection) {
+            const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
+            if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
+                unitSelect.value = '';
+            }
+        }
+    }
+    
+    // Update hierarchy display
+    function updateHierarchyDisplay() {
+        const indicator = document.getElementById('current_hierarchy');
+        const display = document.getElementById('hierarchy_display');
+        const dept = departmentSelect.options[departmentSelect.selectedIndex]?.text || '';
+        const div = divisionSelect.options[divisionSelect.selectedIndex]?.text || '';
+        const sect = sectionSelect.options[sectionSelect.selectedIndex]?.text || '';
+        const unit = unitSelect.options[unitSelect.selectedIndex]?.text || '';
+        
+        let hierarchy = [];
+        if (dept && dept !== 'No Department') hierarchy.push(`<span class="badge bg-danger">${dept}</span>`);
+        if (div && div !== 'No Division') hierarchy.push(`<span class="badge bg-warning text-dark">${div.split(' (')[0]}</span>`);
+        if (sect && sect !== 'No Section') hierarchy.push(`<span class="badge bg-success">${sect.split(' (')[0]}</span>`);
+        if (unit && unit !== 'No Unit') hierarchy.push(`<span class="badge bg-info">${unit.split(' (')[0]}</span>`);
+        
+        if (hierarchy.length > 0) {
+            display.innerHTML = hierarchy.join(' → ');
+            indicator.style.display = 'block';
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+    
+    // Initial hierarchy display
+    updateHierarchyDisplay();
+    
+    // Validate approver permissions
+    const approverCheckboxes = document.querySelectorAll('input[type="checkbox"][id*="approver"]');
+    
+    approverCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            validateApproverPermissions();
+        });
+    });
+    
+    function validateApproverPermissions() {
+        // Clear existing warnings
+        document.querySelectorAll('.approver-warning').forEach(warning => warning.remove());
+        
+        const isDeptApprover = document.getElementById('is_department_approver').checked;
+        const isDivApprover = document.getElementById('is_division_approver').checked;
+        const isSectApprover = document.getElementById('is_section_approver').checked;
+        const isUnitApprover = document.getElementById('is_unit_approver').checked;
+        
+        const deptId = departmentSelect.value;
+        const divId = divisionSelect.value;
+        const sectId = sectionSelect.value;
+        const unitId = unitSelect.value;
+        
+        // Show warnings if approver status is selected but no assignment
+        if (isDeptApprover && !deptId) {
+            showApproverWarning('is_department_approver', 'Department approver requires department assignment');
+        }
+        if (isDivApprover && !divId) {
+            showApproverWarning('is_division_approver', 'Division approver requires division assignment');
+        }
+        if (isSectApprover && !sectId) {
+            showApproverWarning('is_section_approver', 'Section approver requires section assignment');
+        }
+        if (isUnitApprover && !unitId) {
+            showApproverWarning('is_unit_approver', 'Unit approver requires unit assignment');
+        }
+    }
+    
+    function showApproverWarning(checkboxId, message) {
+        const warning = document.createElement('div');
+        warning.className = 'alert alert-warning alert-sm mt-2 approver-warning';
+        warning.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${message}`;
+        
+        const checkbox = document.getElementById(checkboxId);
+        checkbox.closest('.form-check').appendChild(warning);
+    }
+    
+    // Form validation before submit
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const errors = [];
+        
+        // Check if any approver permission is set without corresponding assignment
+        if (document.getElementById('is_department_approver').checked && !departmentSelect.value) {
+            errors.push('Department approver requires department assignment');
+        }
+        if (document.getElementById('is_division_approver').checked && !divisionSelect.value) {
+            errors.push('Division approver requires division assignment');
+        }
+        if (document.getElementById('is_section_approver').checked && !sectionSelect.value) {
+            errors.push('Section approver requires section assignment');
+        }
+        if (document.getElementById('is_unit_approver').checked && !unitSelect.value) {
+            errors.push('Unit approver requires unit assignment');
+        }
+        
+        if (errors.length > 0) {
+            e.preventDefault();
+            alert('Please fix the following issues:\n\n' + errors.join('\n'));
+        }
+    });
 });
 
 function confirmDelete() {
@@ -430,6 +811,41 @@ function resetPassword() {
 
 function viewActivity() {
     alert('Activity log feature coming soon!');
+}
+
+function updateApproverStatus() {
+    new bootstrap.Modal(document.getElementById('approverModal')).show();
+}
+
+function saveApproverStatus() {
+    const data = {
+        is_department_approver: document.getElementById('modal_is_department_approver').checked,
+        is_division_approver: document.getElementById('modal_is_division_approver').checked,
+        is_section_approver: document.getElementById('modal_is_section_approver').checked,
+        is_unit_approver: document.getElementById('modal_is_unit_approver').checked
+    };
+    
+    fetch(`/admin/users/{{ user.id }}/approver-status`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error updating approver status: ' + error);
+    });
+    
+    bootstrap.Modal.getInstance(document.getElementById('approverModal')).hide();
 }
 
 // Password strength indicator

@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar View{% endblock %}
+
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/calendar.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+    <h1 class="h2 mb-3 mb-md-0">
+        <i class="bi bi-calendar3"></i> Calendar View
+    </h1>
+    
+    <div class="d-flex flex-wrap gap-2">
+        <!-- View Toggle -->
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('schedule.view_schedule', date=selected_date) }}" 
+               class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-list"></i> Linear View
+            </a>
+            <a href="{{ url_for('schedule.calendar_view', date=selected_date) }}" 
+               class="btn btn-sm btn-primary">
+                <i class="bi bi-calendar3"></i> Calendar View
+            </a>
+        </div>
+        
+        <!-- Month Navigation -->
+        <div class="btn-group" role="group">
+            <button class="btn btn-outline-secondary btn-sm" onclick="navigateMonth(-1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <input type="month" id="month-picker" class="form-control form-control-sm" 
+                   value="{{ selected_date.strftime('%Y-%m') }}" onchange="navigateToMonth(this.value)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="navigateMonth(1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+        
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" 
+                    data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots"></i>
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="exportCalendarMonth()">
+                    <i class="bi bi-download"></i> Export Month Data
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="printCalendar()">
+                    <i class="bi bi-printer"></i> Print Calendar
+                </a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Month Statistics -->
+<div class="month-stats">
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.total_shifts }}</div>
+        <div class="stat-label">Total Shifts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.total_employees }}</div>
+        <div class="stat-label">Employees Scheduled</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.scheduled_shifts }}</div>
+        <div class="stat-label">Active Shifts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.leave_shifts }}</div>
+        <div class="stat-label">Leave/Rest Days</div>
+    </div>
+</div>
+
+<!-- Calendar -->
+<div class="calendar-container">
+    <div class="calendar-header">
+        <h3 class="mb-0">{{ selected_date.strftime('%B %Y') }}</h3>
+        <p class="mb-0 opacity-75">Team Schedule Overview</p>
+    </div>
+    
+    <div class="calendar-grid">
+        <!-- Day Headers -->
+        {% for day_name in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+        <div class="calendar-day-header">
+            {{ day_name[:3] }}
+        </div>
+        {% endfor %}
+        
+        <!-- Calendar Days -->
+        {% for week in calendar_weeks %}
+            {% for day in week %}
+            <div class="calendar-day 
+                        {% if not day.is_current_month %}other-month{% endif %}
+                        {% if day.is_today %}today{% endif %}
+                        {% if day.remark %}has-holiday{% endif %}"
+                 onclick="showDayDetail('{{ day.date.isoformat() }}')">
+                
+                <div class="day-number">{{ day.date.day }}</div>
+                
+                {% if day.remark %}
+                <div class="holiday-marker" title="{{ day.remark.title }}">
+                    {{ day.remark.remark_type.value[:3].upper() }}
+                </div>
+                {% endif %}
+                
+                {% if day.is_current_month and (day.shift_count > 0 or day.employee_count > 0) %}
+                <div class="day-stats">
+                    {% if day.shift_count > 0 %}
+                    <span class="stat-badge" title="{{ day.shift_count }} shifts">
+                        {{ day.shift_count }}
+                    </span>
+                    {% endif %}
+                    {% if day.employee_count > 0 %}
+                    <span class="stat-badge employees" title="{{ day.employee_count }} employees">
+                        <i class="bi bi-people"></i> {{ day.employee_count }}
+                    </span>
+                    {% endif %}
+                </div>
+                
+                <div class="shift-preview">
+                    {% for shift in day.shifts[:8] %}
+                    <div class="shift-dot" 
+                         style="background-color: {{ shift.color or shift.status_color }};"
+                         title="{{ shift.employee.full_name }} - {{ shift.time_display }}"></div>
+                    {% endfor %}
+                    {% if day.shift_count > 8 %}
+                    <div class="shift-dot" style="background-color: #6c757d;" title="+{{ day.shift_count - 8 }} more">
+                        <span style="font-size: 8px; color: white;">+</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+    
+    <!-- Legend -->
+    <div class="calendar-legend">
+        <div class="legend-item">
+            <div class="legend-dot" style="background-color: var(--primary-color);"></div>
+            <span>Scheduled Shift</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background-color: #6c757d;"></div>
+            <span>Rest Day</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background-color: #dc3545;"></div>
+            <span>Leave</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background-color: #ffc107;"></div>
+            <span>Other Status</span>
+        </div>
+        <div class="legend-item">
+            <i class="bi bi-square" style="color: #ffcdd2;"></i>
+            <span>Holiday/Special Day</span>
+        </div>
+        <div class="legend-item">
+            <i class="bi bi-square" style="color: #bbdefb;"></i>
+            <span>Today</span>
+        </div>
+    </div>
+</div>
+
+<!-- Day Detail Modal -->
+<div class="modal fade" id="dayDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content day-detail-modal">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dayDetailTitle">Day Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="dayDetailContent">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="editDayScheduleBtn" onclick="editDaySchedule()">
+                    <i class="bi bi-pencil"></i> Edit Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Store the shifts and remarks data for JavaScript access
+window.calendarData = {
+    shiftsByDate: {{ shifts_by_date_serializable | tojson }},
+    remarksByDate: {{ remarks_by_date_serializable | tojson }},
+    selectedDate: '{{ selected_date.isoformat() }}',
+    teamMembers: {
+        {% for member in team_members %}
+        {{ member.id }}: {
+            name: '{{ member.full_name }}',
+            initials: '{{ member.initials }}',
+            section: '{{ member.section.name if member.section else "" }}'
+        }{{ ',' if not loop.last }}
+        {% endfor %}
+    }
+};
+
+// Navigation functions
+function navigateMonth(direction) {
+    const currentDate = new Date('{{ selected_date.isoformat() }}');
+    currentDate.setMonth(currentDate.getMonth() + direction);
+    const newDate = currentDate.toISOString().split('T')[0];
+    window.location.href = `{{ url_for('schedule.calendar_view') }}?date=${newDate}`;
+}
+
+function navigateToMonth(monthValue) {
+    const newDate = monthValue + '-01';
+    window.location.href = `{{ url_for('schedule.calendar_view') }}?date=${newDate}`;
+}
+
+function showDayDetail(dateStr) {
+    const shifts = window.calendarData.shiftsByDate[dateStr] || [];
+    const remark = window.calendarData.remarksByDate[dateStr];
+    const date = new Date(dateStr);
+    
+    // Format date for title
+    const dateTitle = date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    document.getElementById('dayDetailTitle').textContent = dateTitle;
+    
+    let content = '';
+    
+    // Add holiday/remark info if present
+    if (remark) {
+        content += `
+            <div class="alert alert-info">
+                <h6><i class="bi bi-calendar-event"></i> ${remark.title}</h6>
+                ${remark.description ? `<p class="mb-0">${remark.description}</p>` : ''}
+            </div>
+        `;
+    }
+    
+    // Add shift information
+    if (shifts.length > 0) {
+        content += `<h6>Scheduled Shifts (${shifts.length})</h6>`;
+        content += '<div class="shift-list">';
+        
+        // Group shifts by employee
+        const shiftsByEmployee = {};
+        shifts.forEach(shift => {
+            const empId = shift.employee_id;
+            if (!shiftsByEmployee[empId]) {
+                shiftsByEmployee[empId] = [];
+            }
+            shiftsByEmployee[empId].push(shift);
+        });
+        
+        Object.keys(shiftsByEmployee).forEach(empId => {
+            const employee = window.calendarData.teamMembers[empId];
+            const empShifts = shiftsByEmployee[empId];
+            
+            empShifts.forEach((shift, index) => {
+                const statusDisplay = shift.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const timeDisplay = shift.start_time && shift.end_time ? 
+                    `${shift.start_time} - ${shift.end_time}` : 'No time set';
+                
+                content += `
+                    <div class="shift-item" style="border-left-color: ${shift.color || '#007bff'};">
+                        <div class="shift-employee">${employee.name}</div>
+                        <div class="shift-time">${timeDisplay}</div>
+                        <div class="shift-details">
+                            Status: ${statusDisplay}
+                            ${shift.role ? ` | Role: ${shift.role}` : ''}
+                            ${shift.work_arrangement && shift.work_arrangement !== 'onsite' ? ` | ${shift.work_arrangement.toUpperCase()}` : ''}
+                            ${empShifts.length > 1 ? ` | Shift #${shift.sequence}` : ''}
+                        </div>
+                        ${shift.notes ? `<div class="shift-details mt-1"><em>${shift.notes}</em></div>` : ''}
+                    </div>
+                `;
+            });
+        });
+        
+        content += '</div>';
+    } else {
+        content += '<div class="text-center text-muted p-4"><i class="bi bi-calendar-x"></i><br>No shifts scheduled for this day</div>';
+    }
+    
+    document.getElementById('dayDetailContent').innerHTML = content;
+    
+    // Set up edit button
+    const editBtn = document.getElementById('editDayScheduleBtn');
+    editBtn.onclick = () => editDaySchedule(dateStr);
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('dayDetailModal')).show();
+}
+
+function editDaySchedule(dateStr) {
+    // Redirect to linear schedule view for editing
+    window.location.href = `{{ url_for('schedule.view_schedule') }}?view=day&date=${dateStr || window.calendarData.selectedDate}`;
+}
+
+function exportCalendarMonth() {
+    const startDate = '{{ first_day.isoformat() }}';
+    const endDate = '{{ last_day.isoformat() }}';
+    window.location.href = `{{ url_for('schedule.export_worksched') }}?start_date=${startDate}&end_date=${endDate}`;
+}
+
+function printCalendar() {
+    window.print();
+}
+
+// Print styles
+const printStyles = `
+    @media print {
+        .modal, .btn, .dropdown, nav, .main-content > *:not(.calendar-container) {
+            display: none !important;
+        }
+        
+        .calendar-container {
+            margin: 0 !important;
+            box-shadow: none !important;
+        }
+        
+        .calendar-day {
+            min-height: 100px !important;
+            page-break-inside: avoid;
+        }
+        
+        .calendar-grid {
+            gap: 0 !important;
+        }
+    }
+`;
+
+// Add print styles to head
+const styleSheet = document.createElement('style');
+styleSheet.textContent = printStyles;
+document.head.appendChild(styleSheet);
+</script>
+{% endblock %}

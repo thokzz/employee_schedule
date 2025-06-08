@@ -5,15 +5,146 @@
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2">User Management</h1>
-    <a href="{{ url_for('admin.create_user') }}" class="btn btn-primary">
-        <i class="bi bi-person-plus"></i> Add New User
-    </a>
+    <div class="btn-group">
+        <a href="{{ url_for('admin.create_user') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Add New User
+        </a>
+        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            <i class="bi bi-gear"></i> Actions
+        </button>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('admin.import_employee_database') }}">
+                <i class="bi bi-upload"></i> Import Users
+            </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin.download_employee_template') }}">
+                <i class="bi bi-download"></i> Download Template
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin.export_employee_database') }}">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export to CSV
+            </a></li>
+        </ul>
+    </div>
 </div>
 
-<div class="card">
+<!-- Filter Controls -->
+<div class="card mb-3">
+    <div class="card-header">
+        <h6 class="card-title mb-0">Filter Users</h6>
+    </div>
     <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_department" class="form-label">Department</label>
+                    <select class="form-select form-select-sm" id="filter_department">
+                        <option value="">All Departments</option>
+                        {% for department in departments %}
+                            <option value="{{ department.id }}">{{ department.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_division" class="form-label">Division</label>
+                    <select class="form-select form-select-sm" id="filter_division">
+                        <option value="">All Divisions</option>
+                        {% for division in divisions %}
+                            <option value="{{ division.id }}" data-department="{{ division.department_id }}">
+                                {{ division.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_section" class="form-label">Section</label>
+                    <select class="form-select form-select-sm" id="filter_section">
+                        <option value="">All Sections</option>
+                        {% for section in sections %}
+                            <option value="{{ section.id }}" data-division="{{ section.division_id if section.division else '' }}">
+                                {{ section.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_unit" class="form-label">Unit</label>
+                    <select class="form-select form-select-sm" id="filter_unit">
+                        <option value="">All Units</option>
+                        {% for unit in units %}
+                            <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
+                                {{ unit.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_role" class="form-label">Role</label>
+                    <select class="form-select form-select-sm" id="filter_role">
+                        <option value="">All Roles</option>
+                        <option value="employee">Employee</option>
+                        <option value="manager">Manager</option>
+                        <option value="administrator">Administrator</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="mb-3">
+                    <label for="filter_status" class="form-label">Status</label>
+                    <select class="form-select form-select-sm" id="filter_status">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="mb-3">
+                    <label for="search_input" class="form-label">Search</label>
+                    <input type="text" class="form-control form-control-sm" id="search_input" 
+                           placeholder="Search by name, email, or personnel number...">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="mb-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-grid">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="clearFilters()">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">Users <span id="user_count" class="badge bg-secondary">{{ users|length }}</span></h6>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" onclick="toggleView('table')" id="table_view_btn">
+                <i class="bi bi-table"></i> Table
+            </button>
+            <button class="btn btn-outline-secondary" onclick="toggleView('cards')" id="cards_view_btn">
+                <i class="bi bi-grid-3x3-gap"></i> Cards
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Table View -->
+        <div id="table_view" class="table-responsive">
+            <table class="table table-striped" id="users_table">
                 <thead>
                     <tr>
                         <th>Avatar</th>
@@ -21,38 +152,85 @@
                         <th>Username</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th>Department</th>
+                        <th>Division</th>
                         <th>Section</th>
+                        <th>Unit</th>
+                        <th>Approver</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for user in users %}
-                    <tr>
+                    <tr data-user-id="{{ user.id }}" 
+                        data-department="{{ user.department_id or '' }}"
+                        data-division="{{ user.division_id or '' }}" 
+                        data-section="{{ user.section_id or '' }}" 
+                        data-unit="{{ user.unit_id or '' }}"
+                        data-role="{{ user.role.value }}"
+                        data-status="{{ 'active' if user.is_active else 'inactive' }}">
                         <td>
                             <div class="employee-initials">{{ user.initials }}</div>
                         </td>
                         <td>
                             <div>
                                 <strong>{{ user.full_name }}</strong>
-                                {% if user.unit %}
-                                    <br><small class="text-muted">{{ user.unit.name }}</small>
+                                {% if user.job_title %}
+                                    <br><small class="text-muted">{{ user.job_title }}</small>
+                                {% endif %}
+                                {% if user.personnel_number %}
+                                    <br><small class="text-info">#{{ user.personnel_number }}</small>
                                 {% endif %}
                             </div>
                         </td>
                         <td>{{ user.username }}</td>
-                        <td>{{ user.email }}</td>
+                        <td>
+                            {{ user.email }}
+                            {% if user.contact_number %}
+                                <br><small class="text-muted"><i class="bi bi-telephone"></i> {{ user.contact_number }}</small>
+                            {% endif %}
+                        </td>
                         <td>
                             <span class="badge bg-{{ 'danger' if user.role.value == 'administrator' else 'warning' if user.role.value == 'manager' else 'primary' }}">
                                 {{ user.role.value.title() }}
                             </span>
                         </td>
                         <td>
-                            {% if user.section %}
-                                {{ user.section.name }}
-                                {% if user.unit %} - {{ user.unit.name }}{% endif %}
+                            {% if user.department %}
+                                <span class="badge bg-danger">{{ user.department.name }}</span>
                             {% else %}
-                                <span class="text-muted">Not assigned</span>
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.division %}
+                                <span class="badge bg-warning text-dark">{{ user.division.name }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.section %}
+                                <span class="badge bg-success">{{ user.section.name }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.unit %}
+                                <span class="badge bg-info">{{ user.unit.name }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.can_approve_leaves() %}
+                                <span class="badge bg-success" title="{{ user.approver_scope }}">
+                                    <i class="bi bi-check-circle"></i> Approver
+                                </span>
+                            {% else %}
+                                <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td>
@@ -61,6 +239,7 @@
                             </span>
                         </td>
                         <td>
+                            <!-- Enhanced Action Buttons with Force Delete -->
                             <div class="btn-group" role="group">
                                 <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
                                    class="btn btn-sm btn-outline-primary" title="Edit User">
@@ -72,10 +251,17 @@
                                     <i class="bi bi-{{ 'toggle-off' if user.is_active else 'toggle-on' }}"></i>
                                 </a>
                                 {% if user.id != current_user.id %}
-                                <button class="btn btn-sm btn-outline-danger" 
+                                <!-- Regular Delete Button -->
+                                <button class="btn btn-sm btn-outline-warning" 
                                         onclick="confirmDelete({{ user.id }}, '{{ user.username }}')"
-                                        title="Delete User">
+                                        title="Safe Delete User">
                                     <i class="bi bi-trash"></i>
+                                </button>
+                                <!-- Force Delete Button (Admin Only) -->
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="showForceDeleteModal({{ user.id }}, '{{ user.username }}', '{{ user.full_name }}')"
+                                        title="Force Delete All Data">
+                                    <i class="bi bi-trash3-fill"></i> Force
                                 </button>
                                 {% endif %}
                             </div>
@@ -84,6 +270,101 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Cards View -->
+        <div id="cards_view" style="display: none;">
+            <div class="row" id="user_cards">
+                {% for user in users %}
+                <div class="col-md-6 col-lg-4 mb-3 user-card" 
+                     data-user-id="{{ user.id }}"
+                     data-department="{{ user.department_id or '' }}"
+                     data-division="{{ user.division_id or '' }}" 
+                     data-section="{{ user.section_id or '' }}" 
+                     data-unit="{{ user.unit_id or '' }}"
+                     data-role="{{ user.role.value }}"
+                     data-status="{{ 'active' if user.is_active else 'inactive' }}">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="employee-initials me-3">{{ user.initials }}</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="card-title mb-1">{{ user.full_name }}</h6>
+                                    <p class="card-text small text-muted mb-0">{{ user.email }}</p>
+                                    {% if user.job_title %}
+                                        <p class="card-text small text-muted mb-0">{{ user.job_title }}</p>
+                                    {% endif %}
+                                </div>
+                                <span class="badge bg-{{ 'success' if user.is_active else 'secondary' }}">
+                                    {{ 'Active' if user.is_active else 'Inactive' }}
+                                </span>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <span class="badge bg-{{ 'danger' if user.role.value == 'administrator' else 'warning' if user.role.value == 'manager' else 'primary' }} me-1">
+                                    {{ user.role.value.title() }}
+                                </span>
+                                {% if user.can_approve_leaves() %}
+                                    <span class="badge bg-success" title="{{ user.approver_scope }}">
+                                        <i class="bi bi-check-circle"></i> Approver
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- 4-Level Hierarchy Display -->
+                            <div class="hierarchy-display">
+                                {% if user.department %}
+                                    <div><span class="badge bg-danger me-1">{{ user.department.name }}</span></div>
+                                {% endif %}
+                                {% if user.division %}
+                                    <div><span class="badge bg-warning text-dark me-1">{{ user.division.name }}</span></div>
+                                {% endif %}
+                                {% if user.section %}
+                                    <div><span class="badge bg-success me-1">{{ user.section.name }}</span></div>
+                                {% endif %}
+                                {% if user.unit %}
+                                    <div><span class="badge bg-info me-1">{{ user.unit.name }}</span></div>
+                                {% endif %}
+                            </div>
+
+                            {% if user.years_of_service is not none %}
+                                <p class="card-text small">
+                                    <i class="bi bi-calendar-check"></i> {{ user.years_of_service }} year{{ 's' if user.years_of_service != 1 else '' }} of service
+                                </p>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer">
+                            <!-- Enhanced Action Buttons for Cards View -->
+                            <div class="btn-group w-100" role="group">
+                                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+                                <a href="{{ url_for('admin.toggle_user_status', user_id=user.id) }}" 
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-{{ 'toggle-off' if user.is_active else 'toggle-on' }}"></i>
+                                    {{ 'Deactivate' if user.is_active else 'Activate' }}
+                                </a>
+                                {% if user.id != current_user.id %}
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-warning" 
+                                            onclick="confirmDelete({{ user.id }}, '{{ user.username }}')"
+                                            title="Safe Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="showForceDeleteModal({{ user.id }}, '{{ user.username }}', '{{ user.full_name }}')"
+                                            title="Force Delete">
+                                        <i class="bi bi-trash3-fill"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </div>
@@ -115,9 +396,96 @@
     </div>
 </div>
 
-<!-- Quick Add User Modal (for convenience) -->
+<!-- Force Delete Confirmation Modal -->
+<div class="modal fade" id="forceDeleteModal" tabindex="-1" aria-labelledby="forceDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="forceDeleteModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i> 
+                    PERMANENT FORCE DELETE
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Warning Section -->
+                <div class="alert alert-danger">
+                    <h6><i class="bi bi-exclamation-triangle-fill"></i> <strong>DANGER: IRREVERSIBLE ACTION</strong></h6>
+                    <p class="mb-1">This will <strong>PERMANENTLY DELETE</strong> user <strong id="forceDeleteUsername"></strong> and <strong>ALL</strong> associated data:</p>
+                    <ul class="mb-0">
+                        <li>User account and profile</li>
+                        <li>All shifts and schedules</li>
+                        <li>All leave applications</li>
+                        <li>All work extensions</li>
+                        <li>Schedule templates created by user</li>
+                        <li>2FA settings and trusted devices</li>
+                        <li>Uploaded files (avatar, signature)</li>
+                    </ul>
+                </div>
+
+                <!-- Deletion Preview Section -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-info-circle"></i> Deletion Impact Preview
+                            <button type="button" class="btn btn-sm btn-outline-primary float-end" 
+                                    onclick="loadDeletionPreview()" id="previewBtn">
+                                <i class="bi bi-search"></i> Load Preview
+                            </button>
+                        </h6>
+                    </div>
+                    <div class="card-body" id="deletionPreview">
+                        <div class="text-muted">Click "Load Preview" to see what data will be affected.</div>
+                    </div>
+                </div>
+
+                <!-- Confirmation Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-shield-check"></i> Confirmation Required</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="forceDeleteReason" class="form-label">
+                                <strong>Reason for Force Deletion:</strong> <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="form-control" id="forceDeleteReason" rows="3" 
+                                      placeholder="Enter detailed reason for permanent deletion..." required></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="confirmationText" class="form-label">
+                                <strong>Type exactly:</strong> <code id="confirmationTextRequired"></code>
+                            </label>
+                            <input type="text" class="form-control" id="confirmationText" 
+                                   placeholder="Type the confirmation text exactly as shown above" required>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="confirmUnderstanding" required>
+                            <label class="form-check-label text-danger" for="confirmUnderstanding">
+                                <strong>I understand this action is PERMANENT and IRREVERSIBLE</strong>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-danger" id="confirmForceDeleteBtn" onclick="executeForceDelete()" disabled>
+                    <i class="bi bi-trash3-fill"></i> PERMANENTLY DELETE ALL DATA
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Add User Modal -->
 <div class="modal fade" id="quickAddModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Quick Add User</h5>
@@ -128,63 +496,108 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="first_name" class="form-label">First Name</label>
-                                <input type="text" class="form-control" id="first_name" name="first_name" required>
+                                <label for="quick_first_name" class="form-label">First Name</label>
+                                <input type="text" class="form-control" id="quick_first_name" name="first_name" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="last_name" class="form-label">Last Name</label>
-                                <input type="text" class="form-control" id="last_name" name="last_name" required>
+                                <label for="quick_last_name" class="form-label">Last Name</label>
+                                <input type="text" class="form-control" id="quick_last_name" name="last_name" required>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_username" class="form-label">Username</label>
+                                <input type="text" class="form-control" id="quick_username" name="username" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_email" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="quick_email" name="email" required>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" required>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="quick_password" name="password" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_role" class="form-label">Role</label>
+                                <select class="form-select" id="quick_role" name="role" required>
+                                    <option value="">Select Role</option>
+                                    <option value="employee">Employee</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="administrator">Administrator</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_department_id" class="form-label">Department</label>
+                                <select class="form-select" id="quick_department_id" name="department_id">
+                                    <option value="">No Department</option>
+                                    {% for department in departments %}
+                                        <option value="{{ department.id }}">{{ department.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_division_id" class="form-label">Division</label>
+                                <select class="form-select" id="quick_division_id" name="division_id">
+                                    <option value="">No Division</option>
+                                    {% for division in divisions %}
+                                        <option value="{{ division.id }}" data-department="{{ division.department_id }}">
+                                            {{ division.name }} ({{ division.department.name }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="role" class="form-label">Role</label>
-                        <select class="form-select" id="role" name="role" required>
-                            <option value="">Select Role</option>
-                            <option value="employee">Employee</option>
-                            <option value="manager">Manager</option>
-                            <option value="administrator">Administrator</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="section_id" class="form-label">Section</label>
-                        <select class="form-select" id="section_id" name="section_id">
-                            <option value="">No Section</option>
-                            {% for section in sections %}
-                                <option value="{{ section.id }}">{{ section.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="unit_id" class="form-label">Unit</label>
-                        <select class="form-select" id="unit_id" name="unit_id">
-                            <option value="">No Unit</option>
-                            {% for unit in units %}
-                                <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
-                                    {{ unit.name }} ({{ unit.section.name }})
-                                </option>
-                            {% endfor %}
-                        </select>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_section_id" class="form-label">Section</label>
+                                <select class="form-select" id="quick_section_id" name="section_id">
+                                    <option value="">No Section</option>
+                                    {% for section in sections %}
+                                        <option value="{{ section.id }}" data-division="{{ section.division_id if section.division else '' }}">
+                                            {{ section.name }}
+                                            {% if section.division %} ({{ section.division.name }}){% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="quick_unit_id" class="form-label">Unit</label>
+                                <select class="form-select" id="quick_unit_id" name="unit_id">
+                                    <option value="">No Unit</option>
+                                    {% for unit in units %}
+                                        <option value="{{ unit.id }}" data-section="{{ unit.section_id }}">
+                                            {{ unit.name }} ({{ unit.section.name }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -199,43 +612,1020 @@
 
 {% block extra_js %}
 <script>
-function confirmDelete(userId, username) {
-    document.getElementById('deleteUsername').textContent = username;
-    document.getElementById('deleteForm').action = `/admin/users/${userId}/delete`;
-    new bootstrap.Modal(document.getElementById('deleteModal')).show();
-}
-
-// Filter units based on selected section in quick add modal
-document.getElementById('section_id')?.addEventListener('change', function() {
-    const selectedSection = this.value;
-    const unitSelect = document.getElementById('unit_id');
-    const unitOptions = unitSelect.querySelectorAll('option');
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize filter functionality
+    setupFilters();
+    setupQuickAddModal();
     
-    unitOptions.forEach(option => {
-        if (option.value === '') {
-            option.style.display = 'block';
-        } else {
-            const unitSection = option.getAttribute('data-section');
-            option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
-        }
-    });
-    
-    // Reset unit selection if it's no longer valid
-    const selectedUnit = unitSelect.value;
-    if (selectedUnit && selectedSection) {
-        const selectedUnitOption = unitSelect.querySelector(`option[value="${selectedUnit}"]`);
-        if (selectedUnitOption && selectedUnitOption.getAttribute('data-section') !== selectedSection) {
-            unitSelect.value = '';
-        }
-    }
+    // Set initial view
+    toggleView('table');
 });
 
-// Show quick add modal when pressing 'n' key
+function setupFilters() {
+    const departmentFilter = document.getElementById('filter_department');
+    const divisionFilter = document.getElementById('filter_division');
+    const sectionFilter = document.getElementById('filter_section');
+    const unitFilter = document.getElementById('filter_unit');
+    const roleFilter = document.getElementById('filter_role');
+    const statusFilter = document.getElementById('filter_status');
+    const searchInput = document.getElementById('search_input');
+    
+    // Cascade filtering for organizational hierarchy
+    departmentFilter.addEventListener('change', function() {
+        const selectedDepartment = this.value;
+        const divisionOptions = divisionFilter.querySelectorAll('option');
+        
+        divisionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const divisionDepartment = option.getAttribute('data-department');
+                option.style.display = (selectedDepartment === '' || divisionDepartment === selectedDepartment) ? 'block' : 'none';
+            }
+        });
+        
+        // Reset lower level selections
+        divisionFilter.value = '';
+        sectionFilter.value = '';
+        unitFilter.value = '';
+        
+        filterSections();
+        filterUnits();
+        applyFilters();
+    });
+    
+    divisionFilter.addEventListener('change', function() {
+        filterSections();
+        unitFilter.value = '';
+        filterUnits();
+        applyFilters();
+    });
+    
+    sectionFilter.addEventListener('change', function() {
+        filterUnits();
+        applyFilters();
+    });
+    
+    function filterSections() {
+        const selectedDivision = divisionFilter.value;
+        const sectionOptions = sectionFilter.querySelectorAll('option');
+        
+        sectionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const sectionDivision = option.getAttribute('data-division');
+                option.style.display = (selectedDivision === '' || sectionDivision === selectedDivision || sectionDivision === '') ? 'block' : 'none';
+            }
+        });
+    }
+    
+    function filterUnits() {
+        const selectedSection = sectionFilter.value;
+        const unitOptions = unitFilter.querySelectorAll('option');
+        
+        unitOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const unitSection = option.getAttribute('data-section');
+                option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+            }
+        });
+    }
+    
+    // Apply filters when any filter changes
+    [departmentFilter, divisionFilter, sectionFilter, unitFilter, roleFilter, statusFilter].forEach(filter => {
+        filter.addEventListener('change', applyFilters);
+    });
+    
+    // Apply search filter
+    searchInput.addEventListener('input', debounce(applyFilters, 300));
+    
+    function applyFilters() {
+        const departmentValue = departmentFilter.value;
+        const divisionValue = divisionFilter.value;
+        const sectionValue = sectionFilter.value;
+        const unitValue = unitFilter.value;
+        const roleValue = roleFilter.value;
+        const statusValue = statusFilter.value;
+        const searchValue = searchInput.value.toLowerCase();
+        
+        const tableRows = document.querySelectorAll('#users_table tbody tr');
+        const userCards = document.querySelectorAll('.user-card');
+        let visibleCount = 0;
+        
+        // Filter table rows
+        tableRows.forEach(row => {
+            const shouldShow = filterRow(row, {
+                department: departmentValue,
+                division: divisionValue,
+                section: sectionValue,
+                unit: unitValue,
+                role: roleValue,
+                status: statusValue,
+                search: searchValue
+            });
+            
+            row.style.display = shouldShow ? '' : 'none';
+            if (shouldShow) visibleCount++;
+        });
+        
+        // Filter user cards
+        userCards.forEach(card => {
+            const shouldShow = filterRow(card, {
+                department: departmentValue,
+                division: divisionValue,
+                section: sectionValue,
+                unit: unitValue,
+                role: roleValue,
+                status: statusValue,
+                search: searchValue
+            });
+            
+            card.style.display = shouldShow ? '' : 'none';
+        });
+        
+        // Update count
+        document.getElementById('user_count').textContent = visibleCount;
+    }
+    
+    function filterRow(element, filters) {
+        const departmentMatch = !filters.department || element.getAttribute('data-department') === filters.department;
+        const divisionMatch = !filters.division || element.getAttribute('data-division') === filters.division;
+        const sectionMatch = !filters.section || element.getAttribute('data-section') === filters.section;
+        const unitMatch = !filters.unit || element.getAttribute('data-unit') === filters.unit;
+        const roleMatch = !filters.role || element.getAttribute('data-role') === filters.role;
+        const statusMatch = !filters.status || element.getAttribute('data-status') === filters.status;
+        
+        let searchMatch = true;
+        if (filters.search) {
+            const text = element.textContent.toLowerCase();
+            searchMatch = text.includes(filters.search);
+        }
+        
+        return departmentMatch && divisionMatch && sectionMatch && unitMatch && roleMatch && statusMatch && searchMatch;
+    }
+}
+
+function setupQuickAddModal() {
+    const quickDepartmentSelect = document.getElementById('quick_department_id');
+    const quickDivisionSelect = document.getElementById('quick_division_id');
+    const quickSectionSelect = document.getElementById('quick_section_id');
+    const quickUnitSelect = document.getElementById('quick_unit_id');
+    
+    // Filter quick add modal dropdowns
+    quickDepartmentSelect.addEventListener('change', function() {
+        const selectedDepartment = this.value;
+        const divisionOptions = quickDivisionSelect.querySelectorAll('option');
+        
+        divisionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const divisionDepartment = option.getAttribute('data-department');
+                option.style.display = (selectedDepartment === '' || divisionDepartment === selectedDepartment) ? 'block' : 'none';
+            }
+        });
+        
+        quickDivisionSelect.value = '';
+        quickSectionSelect.value = '';
+        quickUnitSelect.value = '';
+        
+        filterQuickSections();
+        filterQuickUnits();
+    });
+    
+    quickDivisionSelect.addEventListener('change', function() {
+        filterQuickSections();
+        quickUnitSelect.value = '';
+        filterQuickUnits();
+    });
+    
+    quickSectionSelect.addEventListener('change', function() {
+        filterQuickUnits();
+    });
+    
+    function filterQuickSections() {
+        const selectedDivision = quickDivisionSelect.value;
+        const sectionOptions = quickSectionSelect.querySelectorAll('option');
+        
+        sectionOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const sectionDivision = option.getAttribute('data-division');
+                option.style.display = (selectedDivision === '' || sectionDivision === selectedDivision || sectionDivision === '') ? 'block' : 'none';
+            }
+        });
+    }
+    
+    function filterQuickUnits() {
+        const selectedSection = quickSectionSelect.value;
+        const unitOptions = quickUnitSelect.querySelectorAll('option');
+        
+        unitOptions.forEach(option => {
+            if (option.value === '') {
+                option.style.display = 'block';
+            } else {
+                const unitSection = option.getAttribute('data-section');
+                option.style.display = (selectedSection === '' || unitSection === selectedSection) ? 'block' : 'none';
+            }
+        });
+    }
+}
+
+function toggleView(viewType) {
+    const tableView = document.getElementById('table_view');
+    const cardsView = document.getElementById('cards_view');
+    const tableBtn = document.getElementById('table_view_btn');
+    const cardsBtn = document.getElementById('cards_view_btn');
+    
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        cardsView.style.display = 'none';
+        tableBtn.classList.add('active');
+        cardsBtn.classList.remove('active');
+    } else {
+        tableView.style.display = 'none';
+        cardsView.style.display = 'block';
+        tableBtn.classList.remove('active');
+        cardsBtn.classList.add('active');
+    }
+    
+    // Store preference
+    localStorage.setItem('userViewPreference', viewType);
+}
+
+function clearFilters() {
+    document.getElementById('filter_department').value = '';
+    document.getElementById('filter_division').value = '';
+    document.getElementById('filter_section').value = '';
+    document.getElementById('filter_unit').value = '';
+    document.getElementById('filter_role').value = '';
+    document.getElementById('filter_status').value = '';
+    document.getElementById('search_input').value = '';
+    
+    // Show all options in dropdowns
+    document.querySelectorAll('#filter_division option, #filter_section option, #filter_unit option').forEach(option => {
+        option.style.display = 'block';
+    });
+    
+    // Show all users
+    document.querySelectorAll('#users_table tbody tr, .user-card').forEach(element => {
+        element.style.display = '';
+    });
+    
+    // Update count
+    const totalUsers = document.querySelectorAll('#users_table tbody tr').length;
+    document.getElementById('user_count').textContent = totalUsers;
+}
+
+// Enhanced JavaScript for Force Delete Functionality
+let currentForceDeleteUser = null;
+
+function showForceDeleteModal(userId, username, fullName) {
+    currentForceDeleteUser = {
+        id: userId,
+        username: username,
+        fullName: fullName
+    };
+    
+    // Reset modal state
+    document.getElementById('forceDeleteUsername').textContent = fullName;
+    document.getElementById('confirmationTextRequired').textContent = `DELETE ${username}`;
+    document.getElementById('forceDeleteReason').value = '';
+    document.getElementById('confirmationText').value = '';
+    document.getElementById('confirmUnderstanding').checked = false;
+    document.getElementById('confirmForceDeleteBtn').disabled = true;
+    document.getElementById('deletionPreview').innerHTML = '<div class="text-muted">Click "Load Preview" to see what data will be affected.</div>';
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('forceDeleteModal')).show();
+    
+    // Set up validation
+    setupForceDeleteValidation();
+}
+
+function setupForceDeleteValidation() {
+    const reasonField = document.getElementById('forceDeleteReason');
+    const confirmationField = document.getElementById('confirmationText');
+    const understandingCheck = document.getElementById('confirmUnderstanding');
+    const deleteBtn = document.getElementById('confirmForceDeleteBtn');
+    
+    function validateForm() {
+        const reasonValid = reasonField.value.trim().length >= 10;
+        const confirmationValid = confirmationField.value === `DELETE ${currentForceDeleteUser.username}`;
+        const understandingValid = understandingCheck.checked;
+        
+        deleteBtn.disabled = !(reasonValid && confirmationValid && understandingValid);
+        
+        // Visual feedback
+        reasonField.classList.toggle('is-valid', reasonValid);
+        reasonField.classList.toggle('is-invalid', !reasonValid && reasonField.value.length > 0);
+        
+        confirmationField.classList.toggle('is-valid', confirmationValid);
+        confirmationField.classList.toggle('is-invalid', !confirmationValid && confirmationField.value.length > 0);
+    }
+    
+    reasonField.addEventListener('input', validateForm);
+    confirmationField.addEventListener('input', validateForm);
+    understandingCheck.addEventListener('change', validateForm);
+}
+
+function loadDeletionPreview() {
+    const previewContainer = document.getElementById('deletionPreview');
+    const previewBtn = document.getElementById('previewBtn');
+    
+    // Show loading state
+    previewBtn.disabled = true;
+    previewBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+    previewContainer.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Loading deletion preview...</div>';
+    
+    fetch(`/admin/users/${currentForceDeleteUser.id}/deletion-preview`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayDeletionPreview(data.preview);
+            } else {
+                previewContainer.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            previewContainer.innerHTML = `<div class="alert alert-danger">Error loading preview: ${error.message}</div>`;
+        })
+        .finally(() => {
+            previewBtn.disabled = false;
+            previewBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh Preview';
+        });
+}
+
+function displayDeletionPreview(preview) {
+    const container = document.getElementById('deletionPreview');
+    
+    let html = '<div class="row">';
+    
+    // Data to Delete
+    html += '<div class="col-md-6">';
+    html += '<h6 class="text-danger"><i class="bi bi-trash"></i> Data to Delete</h6>';
+    html += '<ul class="list-group list-group-flush">';
+    
+    for (const [key, count] of Object.entries(preview.data_to_delete)) {
+        if (count > 0) {
+            html += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${formatDataType(key)}
+                        <span class="badge bg-danger rounded-pill">${count}</span>
+                     </li>`;
+        }
+    }
+    
+    if (Object.values(preview.data_to_delete).every(count => count === 0)) {
+        html += '<li class="list-group-item text-muted">No data to delete</li>';
+    }
+    
+    html += '</ul></div>';
+    
+    // Data to Update
+    html += '<div class="col-md-6">';
+    html += '<h6 class="text-warning"><i class="bi bi-arrow-repeat"></i> Data to Update</h6>';
+    html += '<ul class="list-group list-group-flush">';
+    
+    for (const [key, count] of Object.entries(preview.data_to_update)) {
+        if (count > 0) {
+            html += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${formatDataType(key)}
+                        <span class="badge bg-warning rounded-pill">${count}</span>
+                     </li>`;
+        }
+    }
+    
+    if (Object.values(preview.data_to_update).every(count => count === 0)) {
+        html += '<li class="list-group-item text-muted">No data to update</li>';
+    }
+    
+    html += '</ul></div>';
+    html += '</div>';
+    
+    // Files to Delete
+    if (preview.files_to_delete.length > 0) {
+        html += '<div class="mt-3">';
+        html += '<h6 class="text-info"><i class="bi bi-file-earmark"></i> Files to Delete</h6>';
+        html += '<ul class="list-group">';
+        preview.files_to_delete.forEach(file => {
+            html += `<li class="list-group-item">${file}</li>`;
+        });
+        html += '</ul></div>';
+    }
+    
+    // Warnings
+    if (preview.warnings.length > 0) {
+        html += '<div class="mt-3">';
+        html += '<h6 class="text-warning"><i class="bi bi-exclamation-triangle"></i> Warnings</h6>';
+        html += '<div class="alert alert-warning">';
+        preview.warnings.forEach(warning => {
+            html += `<div>${warning}</div>`;
+        });
+        html += '</div></div>';
+    }
+    
+    // Summary
+    html += '<div class="mt-3">';
+    html += '<div class="alert alert-info">';
+    html += `<strong>Summary:</strong> ${preview.summary.total_records_to_delete} records to delete, `;
+    html += `${preview.summary.total_records_to_update} records to update, `;
+    html += `${preview.summary.total_files_to_delete} files to delete`;
+    html += '</div></div>';
+    
+    container.innerHTML = html;
+}
+
+function formatDataType(key) {
+    const formats = {
+        'shifts': 'Schedule Shifts',
+        'leave_applications_as_employee': 'Leave Applications (as Employee)',
+        'leave_applications_as_approver': 'Leave Applications (as Approver)',
+        'work_extensions_as_employee': 'Work Extensions (as Employee)',
+        'work_extensions_as_approver': 'Work Extensions (as Approver)',
+        'schedule_templates': 'Schedule Templates',
+        'date_remarks': 'Date Remarks',
+        'two_factor_data': '2FA Settings',
+        'trusted_devices': 'Trusted Devices'
+    };
+    
+    return formats[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function executeForceDelete() {
+    const reason = document.getElementById('forceDeleteReason').value.trim();
+    const confirmationText = document.getElementById('confirmationText').value;
+    const deleteBtn = document.getElementById('confirmForceDeleteBtn');
+    
+    // Final validation
+    if (!reason || confirmationText !== `DELETE ${currentForceDeleteUser.username}`) {
+        alert('Please complete all required fields correctly.');
+        return;
+    }
+    
+    // Show progress
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+    
+    // Execute force delete
+    fetch(`/admin/users/${currentForceDeleteUser.id}/force-delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            confirmation_text: confirmationText,
+            reason: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showAlert('success', `${data.message}\n\nDeletion Summary:\n${formatDeletionSummary(data.deletion_summary)}`);
+            
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('forceDeleteModal')).hide();
+            
+            // Reload page to refresh user list
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showAlert('danger', `Force deletion failed: ${data.error}`);
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="bi bi-trash3-fill"></i> PERMANENTLY DELETE ALL DATA';
+        }
+    })
+    .catch(error => {
+        showAlert('danger', `Error during force deletion: ${error.message}`);
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '<i class="bi bi-trash3-fill"></i> PERMANENTLY DELETE ALL DATA';
+    });
+}
+
+function formatDeletionSummary(summary) {
+    let result = '';
+    for (const [key, value] of Object.entries(summary.deleted_records)) {
+        if (value > 0) {
+            result += `${formatDataType(key)}: ${value}\n`;
+        }
+    }
+    
+    if (summary.files_deleted.length > 0) {
+        result += `\nFiles deleted: ${summary.files_deleted.join(', ')}`;
+    }
+    
+    if (summary.warnings.length > 0) {
+        result += `\nWarnings: ${summary.warnings.join(', ')}`;
+    }
+    
+    return result;
+}
+
+function showAlert(type, message) {
+    // Remove any existing alerts of the same type
+    const existingAlerts = document.querySelectorAll(`.alert-${type}`);
+    existingAlerts.forEach(alert => {
+        bootstrap.Alert.getOrCreateInstance(alert).close();
+    });
+    
+    const alertsContainer = document.querySelector('.main-content');
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.style.marginBottom = '1rem';
+    alertDiv.innerHTML = `
+        <div style="white-space: pre-line;">${message}</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insert at the top of main content
+    alertsContainer.insertBefore(alertDiv, alertsContainer.firstChild);
+    
+    // Auto-dismiss success messages after 5 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                bootstrap.Alert.getOrCreateInstance(alertDiv).close();
+            }
+        }, 5000);
+    }
+    
+    // Scroll to top to make alert visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Enhanced regular delete function with better messaging
+function confirmDelete(userId, username) {
+    // Show detailed confirmation dialog
+    const confirmationMessage = `Are you sure you want to delete user "${username}"?\n\n` +
+        `This will perform a SAFE deletion that preserves data integrity by:\n` +
+        `• Setting approver references to NULL for leave applications\n` +
+        `• Cleaning up user files\n` +
+        `• Removing user account\n\n` +
+        `For complete data removal, use "Force Delete" instead.\n\n` +
+        `Click OK to proceed with safe deletion.`;
+    
+    if (confirm(confirmationMessage)) {
+        // Show loading state in UI
+        const deleteButton = event.target.closest('button');
+        if (deleteButton) {
+            deleteButton.disabled = true;
+            deleteButton.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        }
+        
+        // Perform safe delete with proper JSON request
+        fetch(`/admin/users/${userId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'safe_delete',
+                confirm: true
+            })
+        })
+        .then(response => {
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response. Check server logs for errors.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                showAlert('success', data.message);
+                // Remove the user row from the table/card view
+                removeUserFromView(userId);
+                // Reload page after delay to refresh user count
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showAlert('danger', data.error);
+                // Re-enable button
+                if (deleteButton) {
+                    deleteButton.disabled = false;
+                    deleteButton.innerHTML = '<i class="bi bi-trash"></i>';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Delete user error:', error);
+            showAlert('danger', `Error: ${error.message}`);
+            // Re-enable button
+            if (deleteButton) {
+                deleteButton.disabled = false;
+                deleteButton.innerHTML = '<i class="bi bi-trash"></i>';
+            }
+        });
+    }
+}
+
+function handleFetchError(response) {
+    if (!response.ok) {
+        if (response.status === 404) {
+            throw new Error('User not found');
+        } else if (response.status === 403) {
+            throw new Error('Access denied - insufficient permissions');
+        } else if (response.status === 500) {
+            throw new Error('Server error - please check logs');
+        } else {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+    }
+    return response;
+}
+
+function getCSRFToken() {
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    return csrfMeta ? csrfMeta.getAttribute('content') : null;
+}
+
+// Enhanced fetch with CSRF token
+function safeFetch(url, options = {}) {
+    const csrfToken = getCSRFToken();
+    
+    // Set default headers
+    options.headers = options.headers || {};
+    options.headers['Content-Type'] = 'application/json';
+    options.headers['Accept'] = 'application/json';
+    
+    // Add CSRF token if available
+    if (csrfToken) {
+        options.headers['X-CSRFToken'] = csrfToken;
+    }
+    
+    return fetch(url, options)
+        .then(handleFetchError)
+        .then(response => {
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
+            return response.json();
+        });
+}
+
+function removeUserFromView(userId) {
+    // Remove from table view
+    const tableRow = document.querySelector(`tr[data-user-id="${userId}"]`);
+    if (tableRow) {
+        tableRow.style.transition = 'opacity 0.5s ease';
+        tableRow.style.opacity = '0';
+        setTimeout(() => {
+            tableRow.remove();
+            updateUserCount();
+        }, 500);
+    }
+    
+    // Remove from card view
+    const userCard = document.querySelector(`.user-card[data-user-id="${userId}"]`);
+    if (userCard) {
+        userCard.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        userCard.style.opacity = '0';
+        userCard.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            userCard.remove();
+            updateUserCount();
+        }, 500);
+    }
+}
+
+function updateUserCount() {
+    const countBadge = document.getElementById('user_count');
+    if (countBadge) {
+        const currentCount = parseInt(countBadge.textContent) || 0;
+        if (currentCount > 0) {
+            countBadge.textContent = currentCount - 1;
+        }
+    }
+}
+
+// Utility function for debouncing
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.key === 'n' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         new bootstrap.Modal(document.getElementById('quickAddModal')).show();
+    } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('search_input').focus();
+    } else if (e.key === 't' && e.altKey) {
+        e.preventDefault();
+        toggleView('table');
+    } else if (e.key === 'c' && e.altKey) {
+        e.preventDefault();
+        toggleView('cards');
+    } else if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        const modal = document.getElementById('forceDeleteModal');
+        if (modal && !modal.classList.contains('show')) {
+            console.log('Force delete keyboard shortcut pressed - select a user first');
+        }
     }
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"], [title]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            delay: { "show": 500, "hide": 100 }
+        });
+    });
+    
+    // Add confirmation styling to delete buttons
+    const deleteButtons = document.querySelectorAll('button[onclick*="confirmDelete"]');
+    deleteButtons.forEach(button => {
+        button.addEventListener('mouseenter', function() {
+            this.classList.add('shadow-sm');
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            this.classList.remove('shadow-sm');
+        });
+    });
+});
+
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+    showAlert('danger', 'An unexpected error occurred. Please refresh the page and try again.');
+    event.preventDefault();
+});
+
+// Load view preference
+document.addEventListener('DOMContentLoaded', function() {
+    const savedView = localStorage.getItem('userViewPreference') || 'table';
+    toggleView(savedView);
+});
+
+// Export functionality
+function exportUsers() {
+    window.location.href = '/admin/export/employees';
+}
+
+// Bulk actions (placeholder for future implementation)
+function selectAllUsers() {
+    const checkboxes = document.querySelectorAll('.user-checkbox');
+    checkboxes.forEach(cb => cb.checked = true);
+    updateBulkActions();
+}
+
+function deselectAllUsers() {
+    const checkboxes = document.querySelectorAll('.user-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateBulkActions();
+}
+
+function updateBulkActions() {
+    const selectedCount = document.querySelectorAll('.user-checkbox:checked').length;
+    const bulkActions = document.getElementById('bulk-actions');
+    
+    if (selectedCount > 0) {
+        bulkActions.style.display = 'block';
+        document.getElementById('selected-count').textContent = selectedCount;
+    } else {
+        bulkActions.style.display = 'none';
+    }
+}
+
+// Enhanced tooltip initialization for new buttons
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips for all buttons
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            delay: { "show": 500, "hide": 100 }
+        });
+    });
+});
 </script>
+
+<style>
+.employee-initials {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, #007bff, #6f42c1);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.hierarchy-display .badge {
+    margin-bottom: 2px;
+    font-size: 0.7rem;
+}
+
+.user-card {
+    transition: transform 0.2s ease-in-out;
+}
+
+.user-card:hover {
+    transform: translateY(-2px);
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.btn-group .btn {
+    border-radius: 0.25rem;
+}
+
+.btn-group .btn:not(:first-child) {
+    margin-left: -1px;
+}
+
+.btn.active {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
+
+#search_input:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Enhanced Force Delete Styling */
+.btn-outline-danger {
+    border-color: #dc3545;
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+.btn-outline-warning {
+    border-color: #ffc107;
+    color: #664d03;
+}
+
+.btn-outline-warning:hover {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #000;
+}
+
+/* Force delete modal styling */
+#forceDeleteModal .modal-header {
+    background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+}
+
+#forceDeleteModal .alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+#forceDeleteModal .form-control.is-valid {
+    border-color: #28a745;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='m2.3 6.73.69-.77L5.15 4.3l-.68-.77L2.3 5.8l-.69-.77-.68.77z'/%3e%3c/svg%3e");
+}
+
+#forceDeleteModal .form-control.is-invalid {
+    border-color: #dc3545;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3e%3cpath fill='%23dc3545' d='M2.78 1.22a.75.75 0 0 0-1.06 1.06L4.94 5.5 1.72 8.72a.75.75 0 0 0 1.06 1.06L6 6.56l3.22 3.22a.75.75 0 0 0 1.06-1.06L7.06 5.5l3.22-3.22a.75.75 0 0 0-1.06-1.06L6 4.44 2.78 1.22z'/%3e%3c/svg%3e");
+}
+
+/* Button group enhancement */
+.btn-group .btn {
+    position: relative;
+}
+
+.btn-group .btn-outline-danger::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    background: #dc3545;
+    border-radius: 50%;
+    animation: pulse-danger 2s infinite;
+}
+
+@keyframes pulse-danger {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.2); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* Deletion preview styling */
+.list-group-item {
+    border-left: 3px solid transparent;
+}
+
+.list-group-item:has(.bg-danger) {
+    border-left-color: #dc3545;
+}
+
+.list-group-item:has(.bg-warning) {
+    border-left-color: #ffc107;
+}
+
+.list-group-item:has(.bg-info) {
+    border-left-color: #0dcaf0;
+}
+
+/* Enhanced modal responsiveness */
+@media (max-width: 768px) {
+    #forceDeleteModal .modal-lg {
+        margin: 10px;
+        max-width: calc(100% - 20px);
+    }
+    
+    #forceDeleteModal .modal-body .row {
+        flex-direction: column;
+    }
+    
+    #forceDeleteModal .col-md-6 {
+        margin-bottom: 1rem;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+    }
+    
+    .btn-group .btn {
+        margin-left: 0;
+        margin-top: -1px;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .employee-initials {
+        width: 32px;
+        height: 32px;
+        font-size: 12px;
+    }
+}
+
+/* Loading states */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Alert enhancements */
+.alert {
+    border-left: 4px solid;
+    margin-bottom: 1rem;
+}
+
+.alert-danger {
+    border-left-color: #dc3545;
+}
+
+.alert-success {
+    border-left-color: #28a745;
+}
+
+.alert-warning {
+    border-left-color: #ffc107;
+}
+
+.alert-info {
+    border-left-color: #0dcaf0;
+}
+</style>
 {% endblock %}

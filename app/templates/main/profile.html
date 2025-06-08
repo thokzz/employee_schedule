@@ -39,19 +39,13 @@
                                value="{{ current_user.email }}" required>
                     </div>
                     
-                    <!-- NEW: Contact Number Field -->
+                    <!-- Contact Number Field -->
                     <div class="mb-3">
                         <label for="contact_number" class="form-label">Contact Number</label>
                         <input type="tel" class="form-control" id="contact_number" name="contact_number" 
                                value="{{ current_user.contact_number or '' }}" 
                                placeholder="+1234567890 or 0912-345-6789">
                         <small class="text-muted">Your contact number for emergency or work-related communications</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="avatar" class="form-label">Avatar</label>
-                        <input type="file" class="form-control" id="avatar" name="avatar" accept="image/*">
-                        <small class="text-muted">Upload a new avatar image (optional)</small>
                     </div>
                     
                     <!-- Digital Signature Upload -->
@@ -90,6 +84,50 @@
                     Please contact your administrator if any information needs to be updated.
                 </div>
                 
+                <!-- 4-Level Organizational Hierarchy -->
+                <div class="mb-4">
+                    <h6 class="text-primary mb-3">
+                        <i class="bi bi-diagram-3"></i> Organizational Structure
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="department_readonly" class="form-label">Department</label>
+                                <input type="text" class="form-control" id="department_readonly" 
+                                       value="{% if current_user.department %}{{ current_user.department.name }}{% else %}Not assigned{% endif %}" readonly>
+                                <small class="text-muted">Top-level organizational unit</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="division_readonly" class="form-label">Division</label>
+                                <input type="text" class="form-control" id="division_readonly" 
+                                       value="{% if current_user.division %}{{ current_user.division.name }}{% else %}Not assigned{% endif %}" readonly>
+                                <small class="text-muted">Division within department</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="section_readonly" class="form-label">Section</label>
+                                <input type="text" class="form-control" id="section_readonly" 
+                                       value="{% if current_user.section %}{{ current_user.section.name }}{% else %}Not assigned{% endif %}" readonly>
+                                <small class="text-muted">Section within division</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="unit_readonly" class="form-label">Unit</label>
+                                <input type="text" class="form-control" id="unit_readonly" 
+                                       value="{% if current_user.unit %}{{ current_user.unit.name }}{% else %}Not assigned{% endif %}" readonly>
+                                <small class="text-muted">Smallest organizational unit</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Basic Employment Details -->
                 <div class="row">
                     <div class="col-md-6">
@@ -102,10 +140,10 @@
                     </div>
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <label for="div_department_readonly" class="form-label">Div./Department</label>
+                            <label for="div_department_readonly" class="form-label">Div./Department (Legacy)</label>
                             <input type="text" class="form-control" id="div_department_readonly" 
                                    value="{{ current_user.div_department or 'Not set' }}" readonly>
-                            <small class="text-muted">Division or Department assignment</small>
+                            <small class="text-muted">Legacy division/department field</small>
                         </div>
                     </div>
                 </div>
@@ -168,25 +206,6 @@
                     </div>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="section_readonly" class="form-label">Section</label>
-                            <input type="text" class="form-control" id="section_readonly" 
-                                   value="{{ current_user.section.name if current_user.section else 'Not assigned' }}" readonly>
-                            <small class="text-muted">Section assignment</small>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="unit_readonly" class="form-label">Unit</label>
-                            <input type="text" class="form-control" id="unit_readonly" 
-                                   value="{{ current_user.unit.name if current_user.unit else 'Not assigned' }}" readonly>
-                            <small class="text-muted">Unit assignment</small>
-                        </div>
-                    </div>
-                </div>
-                
                 <div class="alert alert-warning">
                     <i class="bi bi-exclamation-triangle"></i>
                     <strong>Need Changes?</strong> Contact your administrator to update employment information.
@@ -195,8 +214,7 @@
         </div>
     </div>
     
-<!-- Update the Profile Summary section in profile.html -->
-
+    <!-- Profile Summary Sidebar -->
     <div class="col-md-4">
         <!-- Profile Summary -->
         <div class="card">
@@ -210,7 +228,7 @@
                     <p class="card-text"><small class="text-primary">{{ current_user.job_title }}</small></p>
                 {% endif %}
                 
-                <!-- 4-Level Hierarchy Display -->
+                <!-- 4-Level Hierarchy Display with Icons -->
                 {% if current_user.department %}
                     <p class="card-text">
                         <small class="text-danger">
@@ -526,6 +544,7 @@
         </div>
     </div>
 </div>
+
 <!-- Change Password Modal -->
 <div class="modal fade" id="changePasswordModal" tabindex="-1">
     <div class="modal-dialog">
@@ -595,7 +614,7 @@ function viewSignature() {
 }
 
 function downloadProfile() {
-    // Generate a comprehensive profile summary
+    // Generate a comprehensive profile summary including 4-level hierarchy
     const profileData = {
         name: '{{ current_user.full_name }}',
         username: '{{ current_user.username }}',
@@ -610,6 +629,8 @@ function downloadProfile() {
         job_title: '{{ current_user.job_title or "" }}',
         rank: '{{ current_user.rank or "" }}',
         hiring_date: '{{ current_user.hiring_date.strftime("%Y-%m-%d") if current_user.hiring_date else "" }}',
+        department: '{{ current_user.department.name if current_user.department else "" }}',
+        division: '{{ current_user.division.name if current_user.division else "" }}',
         section: '{{ current_user.section.name if current_user.section else "" }}',
         unit: '{{ current_user.unit.name if current_user.unit else "" }}',
         signature_status: '{{ "Uploaded" if current_user.signature else "Not uploaded" }}'
@@ -624,17 +645,21 @@ Personal Information:
 - Email: ${profileData.email}
 - Contact Number: ${profileData.contact_number || 'Not provided'}
 
+Organizational Structure (4-Level Hierarchy):
+- Department: ${profileData.department || 'Not assigned'}
+- Division: ${profileData.division || 'Not assigned'}
+- Section: ${profileData.section || 'Not assigned'}
+- Unit: ${profileData.unit || 'Not assigned'}
+
 Employment Information:
 - Role: ${profileData.role}
-- Div./Department: ${profileData.div_department || 'Not set'}
+- Div./Department (Legacy): ${profileData.div_department || 'Not set'}
 - Employee Type: ${profileData.employee_type || 'Not set'}
 - Schedule Format: ${profileData.schedule_format || 'Not set'}
 - Personnel Number: ${profileData.personnel_number || 'Not set'}
 - Job Title: ${profileData.job_title || 'Not set'}
 - Rank: ${profileData.rank || 'Not set'}
 - Hiring Date: ${profileData.hiring_date || 'Not set'}
-- Section: ${profileData.section || 'Not assigned'}
-- Unit: ${profileData.unit || 'Not assigned'}
 - Digital Signature: ${profileData.signature_status}
 
 Generated on: ${new Date().toLocaleString()}

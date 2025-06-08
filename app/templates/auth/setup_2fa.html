@@ -1,0 +1,194 @@
+<!-- app/templates/auth/setup_2fa.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Up Two-Factor Authentication</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .method-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .method-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .method-card.border-primary {
+            border-color: #0d6efd !important;
+            border-width: 2px !important;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid vh-100">
+        <div class="row h-100">
+            <div class="col-md-6 d-flex align-items-center justify-content-center">
+                <div class="card shadow-lg border-0" style="max-width: 500px; width: 100%;">
+                    <div class="card-body p-5">
+                        <div class="text-center mb-4">
+                            <i class="bi bi-shield-lock display-4 text-primary mb-3"></i>
+                            <h3 class="fw-bold text-primary">Set Up Two-Factor Authentication</h3>
+                            <p class="text-muted">Choose a method to secure your account</p>
+                        </div>
+
+                        {% if user_2fa and user_2fa.is_in_grace_period() %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-clock"></i>
+                            <strong>Grace Period:</strong> You have until 
+                            {{ (user_2fa.grace_period_start + timedelta(days=7)).strftime('%B %d, %Y') }} 
+                            to set up 2FA.
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Required:</strong> Two-factor authentication is required for your account.
+                        </div>
+                        {% endif %}
+
+                        <form method="POST">
+                            <!-- CSRF Token -->
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <h6 class="mb-3">Choose your preferred method:</h6>
+                            
+                            {% for method in available_methods %}
+                            <div class="card mb-3 method-card" style="cursor: pointer;" onclick="selectMethod('{{ method.value }}')">
+                                <div class="card-body">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="method" 
+                                               id="method_{{ method.value }}" value="{{ method.value }}">
+                                        <label class="form-check-label w-100" for="method_{{ method.value }}">
+                                            {% if method.value == 'totp' %}
+                                            <div class="d-flex align-items-center">
+                                                <i class="bi bi-phone display-6 text-primary me-3"></i>
+                                                <div>
+                                                    <strong>Authenticator App (TOTP)</strong>
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        Use Google Authenticator, Authy, or similar apps
+                                                        <br><strong>Recommended for best security</strong>
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            {% elif method.value == 'sms' %}
+                                            <div class="d-flex align-items-center">
+                                                <i class="bi bi-chat-dots display-6 text-success me-3"></i>
+                                                <div>
+                                                    <strong>SMS Text Message</strong>
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        Receive codes via text message to your phone
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            {% elif method.value == 'email' %}
+                                            <div class="d-flex align-items-center">
+                                                <i class="bi bi-envelope display-6 text-info me-3"></i>
+                                                <div>
+                                                    <strong>Email Verification</strong>
+                                                    <br>
+                                                    <small class="text-muted">
+                                                        Receive codes via email to {{ current_user.email }}
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" class="btn btn-primary btn-lg" id="continue-btn" disabled>
+                                    <i class="bi bi-arrow-right"></i> Continue with Selected Method
+                                </button>
+                            </div>
+                        </form>
+
+                        {% if user_2fa and user_2fa.is_in_grace_period() %}
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-clock"></i> Set Up Later (Grace Period)
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 d-none d-md-flex align-items-center justify-content-center" 
+                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="text-center text-white p-4">
+                    <i class="bi bi-shield-check display-1 mb-4"></i>
+                    <h2 class="fw-bold mb-4">Enhanced Security</h2>
+                    <p class="lead mb-4">
+                        Two-factor authentication adds an extra layer of security to your account, 
+                        protecting your data even if your password is compromised.
+                    </p>
+                    
+                    <div class="row mt-5">
+                        <div class="col-4 text-center">
+                            <i class="bi bi-lock display-4 mb-3"></i>
+                            <h6>Secure</h6>
+                            <small>Advanced protection</small>
+                        </div>
+                        <div class="col-4 text-center">
+                            <i class="bi bi-lightning display-4 mb-3"></i>
+                            <h6>Fast</h6>
+                            <small>Quick verification</small>
+                        </div>
+                        <div class="col-4 text-center">
+                            <i class="bi bi-check-circle display-4 mb-3"></i>
+                            <h6>Reliable</h6>
+                            <small>Industry standard</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    function selectMethod(method) {
+        // Select the radio button
+        document.getElementById('method_' + method).checked = true;
+        
+        // Enable continue button
+        document.getElementById('continue-btn').disabled = false;
+        
+        // Highlight selected card
+        document.querySelectorAll('.method-card').forEach(card => {
+            card.classList.remove('border-primary');
+        });
+        
+        document.querySelector(`#method_${method}`).closest('.method-card').classList.add('border-primary');
+    }
+
+    // Enable continue button when method is selected
+    document.querySelectorAll('input[name="method"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            document.getElementById('continue-btn').disabled = false;
+        });
+    });
+    </script>
+</body>
+</html>

@@ -1,11 +1,24 @@
-<div class="date-header" id="date-header-{{ date.isoformat() }}">
+{% set is_weekend = date.weekday() >= 5 %}
+<div class="date-header" id="date-header-{{ date.isoformat() }}" style="
+    {% if is_weekend %}
+        background-color: #6c757d; 
+    {% else %}
+        background-color: #6f42c1;
+    {% endif %}
+    color: white; 
+    padding: 5px; 
+    border-radius: 6px; 
+    text-align: center; 
+    margin-bottom: 5px;">
+    
     {% if can_edit %}
     <div class="date-actions">
-        <button class="date-action-btn" onclick="editDateRemark('{{ date.isoformat() }}')" title="Edit date remark">
+        <button class="date-action-btn" onclick="editDateRemark('{{ date.isoformat() }}')" title="Edit date remark" style="background: none; border: none; color: white; opacity: 0.8; padding: 2px;">
             <i class="bi bi-pencil"></i>
         </button>
     </div>
     {% endif %}
+    
     <div class="date-header-main">
         <div class="fw-bold">{{ date.strftime('%a') }}</div>
         <small>{{ date.strftime('%b %d') }}</small>

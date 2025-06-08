@@ -1,5 +1,4 @@
 # Create new file: app/work_extension/routes.py
-
 from flask import render_template, request, redirect, url_for, flash, jsonify, make_response
 from flask_login import login_required, current_user
 from app.work_extension import bp
@@ -37,11 +36,11 @@ def get_user_approver(user):
         if unit_approver:
             approver = unit_approver
     
-    # If still no approver, try to find a manager/admin in the same section
+    # If still no approver, try to find a manager in the same section (EXCLUDE ADMINISTRATOR)
     if not approver and user.section_id:
         manager_approver = User.query.filter(
             User.section_id == user.section_id,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR]),
+            User.role == UserRole.MANAGER,  # CHANGED: Only MANAGER, not ADMINISTRATOR
             User.is_active == True
         ).first()
         
@@ -63,12 +62,12 @@ def request_work_extension():
     # Get the designated approver for current user
     approver = get_user_approver(current_user)
     
-    # Get all available approvers as fallback
+    # Get all available approvers as fallback (EXCLUDE ADMINISTRATOR)
     available_approvers = User.query.filter(
         db.or_(
             User.is_section_approver == True,
             User.is_unit_approver == True,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR])
+            User.role == UserRole.MANAGER  # CHANGED: Only MANAGER, not ADMINISTRATOR
         ),
         User.is_active == True
     ).all()
@@ -506,12 +505,12 @@ def html_to_pdf(html_content):
     """Convert HTML content to PDF using wkhtmltopdf"""
     try:
         options = {
-            'page-size': 'A5',
+            'page-size': 'A6',
             'orientation': 'landscape',
-            'margin-top': '0.01in',
-            'margin-right': '0.2in', 
-            'margin-bottom': '0.2in',
-            'margin-left': '0.01in',
+            'margin-top': '0.2in',
+            'margin-right': '0.4in', 
+            'margin-bottom': '0.4in',
+            'margin-left': '0.6in',
             'encoding': "UTF-8",
             'no-outline': None,
             'enable-local-file-access': None,
@@ -545,7 +544,7 @@ def get_signature_html(signature_path, alt_text="Signature"):
         return ''
 
 def create_populated_work_extension_html(extension):
-    """Create HTML content with populated Work Extension form data"""
+    """Create HTML content with populated Work Extension form data optimized for A5 landscape"""
     
     # Get signature images
     employee_signature = get_signature_html(extension.employee_signature_path, "Employee Signature")
@@ -564,7 +563,7 @@ def create_populated_work_extension_html(extension):
     
     # Split reason into multiple lines for the form
     reason_lines = extension.reason.split('\n') if extension.reason else ['']
-    reason_text = extension.reason[:500] if extension.reason else ''  # Limit to fit form
+    reason_text = extension.reason[:400] if extension.reason else ''  # Reduced to fit better
 
     html_template = f"""
     <!DOCTYPE html>
@@ -579,34 +578,34 @@ def create_populated_work_extension_html(extension):
                 margin: 0;
                 padding: 0;
                 background-color: white;
-                font-size: 14px;
-                line-height: 1.2;
+                font-size: 12px;
+                line-height: 1.1;
             }}
             
             .form-container {{
-                width: 210mm;
-                height: 297mm;
+                width: 148mm;  /* A5 landscape width */
+                height: 105mm;  /* A5 landscape height */
                 margin: 0 auto;
-                padding: 80px 60px 60px 60px;
+                padding: 8mm 6mm;  /* Reduced padding significantly */
                 box-sizing: border-box;
                 position: relative;
             }}
             
             .title {{
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
                 text-decoration: underline;
-                margin-bottom: 80px;
+                margin-bottom: 8mm;  /* Reduced from 80px */
                 letter-spacing: 0.5px;
                 text-align: center;
             }}
             
             .basic-info {{
-                margin-bottom: 40px;
+                margin-bottom: 4mm;  /* Reduced from 40px */
             }}
             
             .name-line {{
-                margin-bottom: 20px;
+                margin-bottom: 3mm;  /* Reduced from 20px */
                 display: flex;
                 align-items: baseline;
             }}
@@ -614,49 +613,50 @@ def create_populated_work_extension_html(extension):
             .section-date-line {{
                 display: flex;
                 align-items: baseline;
-                margin-bottom: 40px;
+                margin-bottom: 4mm;  /* Reduced from 40px */
             }}
             
             .name-line label,
             .section-date-line label {{
                 font-weight: bold;
-                margin-right: 5px;
+                margin-right: 3px;
+                font-size: 11px;
             }}
             
             .underline {{
                 border-bottom: 1px solid #000;
                 flex: 1;
-                height: 16px;
-                margin-left: 5px;
-                margin-right: 5px;
+                height: 14px;  /* Reduced height */
+                margin-left: 3px;
+                margin-right: 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 3px;
+                font-size: 11px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .underline-section {{
                 border-bottom: 1px solid #000;
-                width: 350px;
-                height: 16px;
-                margin-left: 5px;
-                margin-right: 30px;
+                width: 60mm;  /* Adjusted for A5 */
+                height: 14px;
+                margin-left: 3px;
+                margin-right: 5mm;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 3px;
+                font-size: 11px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .underline-date {{
                 border-bottom: 1px solid #000;
-                width: 250px;
-                height: 16px;
-                margin-left: 5px;
+                width: 40mm;  /* Adjusted for A5 */
+                height: 14px;
+                margin-left: 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 3px;
+                font-size: 11px;
                 display: flex;
                 align-items: flex-end;
             }}
@@ -664,40 +664,44 @@ def create_populated_work_extension_html(extension):
             .main-content {{
                 display: flex;
                 border: 2px solid #000;
-                margin-bottom: 60px;
+                margin-bottom: 6mm;  /* Reduced from 60px */
+                height: 45mm;  /* Fixed height for main content */
             }}
             
             .left-section {{
                 width: 50%;
-                padding: 20px;
+                padding: 3mm;  /* Reduced padding */
                 border-right: 1px solid #000;
+                box-sizing: border-box;
             }}
             
             .right-section {{
                 width: 50%;
-                padding: 20px;
+                padding: 3mm;  /* Reduced padding */
+                box-sizing: border-box;
             }}
             
             .left-section .field {{
-                margin-bottom: 20px;
+                margin-bottom: 2.5mm;  /* Reduced spacing */
                 display: flex;
                 align-items: baseline;
             }}
             
             .left-section .field label {{
                 font-weight: bold;
-                margin-right: 5px;
+                margin-right: 3px;
                 white-space: nowrap;
+                font-size: 10px;
             }}
             
             .field-underline {{
                 border-bottom: 1px solid #000;
                 flex: 1;
-                height: 16px;
-                margin-left: 5px;
+                height: 12px;  /* Reduced height */
+                margin-left: 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 3px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
@@ -705,34 +709,35 @@ def create_populated_work_extension_html(extension):
             .shift-schedule {{
                 display: flex;
                 align-items: baseline;
-                margin-bottom: 20px;
+                margin-bottom: 2.5mm;
             }}
             
             .shift-schedule label {{
                 font-weight: bold;
-                margin-right: 5px;
+                margin-right: 3px;
+                font-size: 10px;
             }}
             
             .shift-from {{
                 border-bottom: 1px solid #000;
-                width: 80px;
-                height: 16px;
-                margin: 0 5px;
+                width: 15mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .shift-to {{
                 border-bottom: 1px solid #000;
-                width: 80px;
-                height: 16px;
-                margin: 0 5px;
+                width: 15mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
@@ -740,45 +745,47 @@ def create_populated_work_extension_html(extension):
             .time-in-out {{
                 display: flex;
                 align-items: baseline;
-                margin-bottom: 30px;
+                margin-bottom: 3mm;  /* Reduced spacing */
             }}
             
             .time-in-out label {{
                 font-weight: bold;
-                margin-right: 5px;
+                margin-right: 3px;
+                font-size: 10px;
             }}
             
             .time-in {{
                 border-bottom: 1px solid #000;
-                width: 90px;
-                height: 16px;
-                margin: 0 5px 0 5px;
+                width: 18mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .time-out {{
                 border-bottom: 1px solid #000;
-                width: 90px;
-                height: 16px;
-                margin: 0 5px;
+                width: 18mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .extended-time-section {{
-                margin-top: 10px;
+                margin-top: 1mm;  /* Reduced spacing */
             }}
             
             .extended-time-title {{
                 font-weight: bold;
-                margin-bottom: 15px;
+                margin-bottom: 2mm;  /* Reduced spacing */
+                font-size: 10px;
             }}
             
             .extended-time-fields {{
@@ -788,52 +795,56 @@ def create_populated_work_extension_html(extension):
             
             .extended-time-fields label {{
                 font-weight: bold;
-                margin-right: 5px;
+                margin-right: 3px;
+                font-size: 10px;
             }}
             
             .extended-from {{
                 border-bottom: 1px solid #000;
-                width: 120px;
-                height: 16px;
-                margin: 0 5px 0 5px;
+                width: 22mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .extended-to {{
                 border-bottom: 1px solid #000;
-                width: 120px;
-                height: 16px;
-                margin: 0 5px;
+                width: 22mm;  /* Adjusted for A5 */
+                height: 12px;
+                margin: 0 3px;
                 position: relative;
-                padding-left: 5px;
-                font-size: 14px;
+                padding-left: 2px;
+                font-size: 10px;
                 display: flex;
                 align-items: flex-end;
             }}
             
             .right-section h3 {{
                 font-weight: bold;
-                font-size: 14px;
-                margin: 0 0 20px 0;
+                font-size: 11px;
+                margin: 0 0 2mm 0;  /* Reduced margin */
             }}
             
             .reason-content {{
                 width: 100%;
-                height: 140px;
-                font-size: 12px;
-                line-height: 1.4;
-                padding: 5px;
+                height: 35mm;  /* Fixed height for reason box */
+                font-size: 10px;
+                line-height: 1.2;
+                padding: 2mm;
                 word-wrap: break-word;
+                overflow: hidden;
+                box-sizing: border-box;
             }}
             
             .signatures {{
                 display: flex;
                 justify-content: space-between;
-                margin-top: 40px;
+                margin-top: 4mm;  /* Reduced from 40px */
+                height: 20mm;  /* Fixed height for signatures */
             }}
             
             .signature-block {{
@@ -843,22 +854,24 @@ def create_populated_work_extension_html(extension):
             
             .signature-title {{
                 font-weight: bold;
-                margin-bottom: 40px;
+                margin-bottom: 3mm;  /* Reduced spacing */
+                font-size: 10px;
             }}
             
             .signature-line {{
                 border-bottom: 1px solid #000;
-                height: 40px;
-                margin-bottom: 10px;
-                width: 220px;
+                height: 8mm;  /* Reduced signature line height */
+                margin-bottom: 1mm;
+                width: 35mm;  /* Adjusted for A5 */
                 display: flex;
                 align-items: flex-end;
-                padding-left: 5px;
+                padding-left: 2px;
             }}
             
             .signature-label {{
                 font-weight: normal;
-                font-size: 14px;
+                font-size: 9px;  /* Smaller label text */
+                line-height: 1;
             }}
             
             @media print {{
@@ -869,7 +882,7 @@ def create_populated_work_extension_html(extension):
                 
                 .form-container {{
                     margin: 0;
-                    padding: 80px 60px 60px 60px;
+                    padding: 8mm 6mm;
                 }}
             }}
         </style>

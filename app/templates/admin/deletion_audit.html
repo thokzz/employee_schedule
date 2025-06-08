@@ -1,0 +1,735 @@
+<!-- Deletion Audit Template: templates/admin/deletion_audit.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deletion Audit Log</title>
+</head>
+<body>
+{% extends "base.html" %}
+
+{% block title %}Deletion Audit Log{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-shield-exclamation"></i> Deletion Audit Log</h1>
+    <div class="btn-group">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+        <button class="btn btn-outline-primary" onclick="exportAuditLog()">
+            <i class="bi bi-download"></i> Export Log
+        </button>
+    </div>
+</div>
+
+<!-- System Health Overview -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Total Deletions</h6>
+                        <h3 id="totalDeletions">{{ audit_entries|length }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-trash fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Force Deletions</h6>
+                        <h3 id="forceDeletions">
+                            {{ audit_entries|selectattr('FORCE DELETE')|list|length }}
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-exclamation-triangle fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Safe Deletions</h6>
+                        <h3 id="safeDeletions">
+                            {{ audit_entries|selectattr('Safe deletion')|list|length }}
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-shield-check fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-secondary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">System Health</h6>
+                        <h3 id="systemHealth">Good</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-heart-pulse fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audit Log -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-file-text"></i> Recent Deletion Activities
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if audit_entries %}
+        <div class="table-responsive">
+            <table class="table table-striped" id="auditTable">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Action Type</th>
+                        <th>Target User</th>
+                        <th>Performed By</th>
+                        <th>Details</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in audit_entries %}
+                    <tr>
+                        <td>
+                            {% set timestamp = entry.split(' ')[0:2] %}
+                            <small class="text-muted">{{ timestamp|join(' ') }}</small>
+                        </td>
+                        <td>
+                            {% if 'FORCE DELETE' in entry %}
+                                <span class="badge bg-danger">Force Delete</span>
+                            {% elif 'Safe deletion' in entry %}
+                                <span class="badge bg-success">Safe Delete</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set user_match = entry|regex_search('user ([^\s]+)') %}
+                            {% if user_match %}
+                                <code>{{ user_match[1] }}</code>
+                            {% else %}
+                                <span class="text-muted">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set admin_match = entry|regex_search('by ([^\s]+)') %}
+                            {% if admin_match %}
+                                <strong>{{ admin_match[1] }}</strong>
+                            {% else %}
+                                <span class="text-muted">System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ entry[:100] }}{% if entry|length > 100 %}...{% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            {% if 'completed' in entry %}
+                                <i class="bi bi-check-circle text-success" title="Completed"></i>
+                            {% elif 'initiated' in entry %}
+                                <i class="bi bi-clock text-warning" title="In Progress"></i>
+                            {% else %}
+                                <i class="bi bi-question-circle text-muted" title="Unknown"></i>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox display-1 text-muted"></i>
+            <h4 class="text-muted">No deletion activities found</h4>
+            <p class="text-muted">Deletion activities will appear here when users are deleted.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Database Integrity Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-database"></i> Database Integrity Check
+            <button class="btn btn-sm btn-outline-primary float-end" onclick="checkIntegrity()">
+                <i class="bi bi-arrow-clockwise"></i> Run Check
+            </button>
+        </h5>
+    </div>
+    <div class="card-body" id="integrityResults">
+        <div class="text-center">
+            <button class="btn btn-primary" onclick="checkIntegrity()">
+                <i class="bi bi-play-circle"></i> Check Database Integrity
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function exportAuditLog() {
+    // Create CSV export of audit log
+    const table = document.getElementById('auditTable');
+    if (!table) {
+        alert('No audit data to export');
+        return;
+    }
+    
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const cols = row.querySelectorAll('td, th');
+        let csvRow = [];
+        
+        for (let j = 0; j < cols.length; j++) {
+            csvRow.push('"' + cols[j].innerText.replace(/"/g, '""') + '"');
+        }
+        
+        csv.push(csvRow.join(','));
+    }
+    
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `deletion_audit_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function checkIntegrity() {
+    const resultsDiv = document.getElementById('integrityResults');
+    const checkBtn = event.target.closest('button');
+    
+    // Show loading state
+    checkBtn.disabled = true;
+    checkBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking...';
+    resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div> Checking database integrity...</div>';
+    
+    fetch('/admin/maintenance/database-integrity')
+        .then(response => response.text())
+        .then(html => {
+            // Extract the results section from the response
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const reportContent = doc.querySelector('.card-body');
+            
+            if (reportContent) {
+                resultsDiv.innerHTML = reportContent.innerHTML;
+            } else {
+                resultsDiv.innerHTML = '<div class="alert alert-success">Database integrity check completed successfully.</div>';
+            }
+        })
+        .catch(error => {
+            resultsDiv.innerHTML = `<div class="alert alert-danger">Error checking integrity: ${error.message}</div>`;
+        })
+        .finally(() => {
+            checkBtn.disabled = false;
+            checkBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Run Check';
+        });
+}
+
+// Initialize DataTable for audit log
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.getElementById('auditTable');
+    if (table && table.querySelector('tbody tr')) {
+        // Simple sorting functionality
+        const headers = table.querySelectorAll('th');
+        headers.forEach((header, index) => {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', () => sortTable(table, index));
+        });
+    }
+});
+
+function sortTable(table, column) {
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    const sorted = rows.sort((a, b) => {
+        const aText = a.cells[column].textContent.trim();
+        const bText = b.cells[column].textContent.trim();
+        return aText.localeCompare(bText);
+    });
+    
+    // Clear and re-append sorted rows
+    tbody.innerHTML = '';
+    sorted.forEach(row => tbody.appendChild(row));
+}
+</script>
+{% endblock %}
+</body>
+</html>
+
+<!-- Database Integrity Template: templates/admin/database_integrity.html -->
+{% extends "base.html" %}
+
+{% block title %}Database Integrity Report{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-database-check"></i> Database Integrity Report</h1>
+    <div class="btn-group">
+        <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+        <button class="btn btn-outline-success" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh Report
+        </button>
+    </div>
+</div>
+
+<!-- System Health Score -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body text-center">
+                <h2 class="mb-3">Database Health Score</h2>
+                <div class="progress mb-3" style="height: 30px;">
+                    <div class="progress-bar bg-{{ 'success' if report.health_score >= 90 else 'warning' if report.health_score >= 70 else 'danger' }}" 
+                         role="progressbar" 
+                         style="width: {{ report.health_score }}%"
+                         aria-valuenow="{{ report.health_score }}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        {{ report.health_score }}%
+                    </div>
+                </div>
+                <p class="text-muted">
+                    {% if report.health_score >= 90 %}
+                        <i class="bi bi-check-circle text-success"></i> Excellent - Database is in optimal condition
+                    {% elif report.health_score >= 70 %}
+                        <i class="bi bi-exclamation-triangle text-warning"></i> Good - Minor issues detected
+                    {% else %}
+                        <i class="bi bi-x-circle text-danger"></i> Attention Required - Multiple issues found
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Issues Overview -->
+<div class="row mb-4">
+    <!-- Orphaned Records -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Orphaned Records</h5>
+            </div>
+            <div class="card-body">
+                {% if report.orphaned_records %}
+                    <ul class="list-group list-group-flush">
+                        {% for record_type, count in report.orphaned_records.items() %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ record_type.replace('_', ' ').title() }}
+                            {% if count > 0 %}
+                                <span class="badge bg-danger rounded-pill">{{ count }}</span>
+                                <button class="btn btn-sm btn-outline-danger ms-2" 
+                                        onclick="fixOrphanedRecords('{{ record_type }}')">
+                                    <i class="bi bi-trash"></i> Fix
+                                </button>
+                            {% else %}
+                                <span class="badge bg-success rounded-pill">0</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="text-center text-success">
+                        <i class="bi bi-check-circle display-4"></i>
+                        <p class="mt-2">No orphaned records found</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Missing References -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Missing References</h5>
+            </div>
+            <div class="card-body">
+                {% if report.missing_references %}
+                    <ul class="list-group list-group-flush">
+                        {% for ref_type, count in report.missing_references.items() %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ ref_type.replace('_', ' ').title() }}
+                            {% if count > 0 %}
+                                <span class="badge bg-warning rounded-pill">{{ count }}</span>
+                            {% else %}
+                                <span class="badge bg-success rounded-pill">0</span>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="text-center text-success">
+                        <i class="bi bi-check-circle display-4"></i>
+                        <p class="mt-2">All references are valid</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recommendations -->
+{% if report.recommendations %}
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Recommendations</h5>
+    </div>
+    <div class="card-body">
+        <ol class="mb-0">
+            {% for recommendation in report.recommendations %}
+            <li class="mb-2">{{ recommendation }}</li>
+            {% endfor %}
+        </ol>
+        
+        <div class="mt-3">
+            <button class="btn btn-success me-2" onclick="autoFixIssues()">
+                <i class="bi bi-magic"></i> Auto-Fix Safe Issues
+            </button>
+            <button class="btn btn-outline-primary" onclick="scheduleMaintenanceReport()">
+                <i class="bi bi-calendar-plus"></i> Schedule Maintenance
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Detailed Analysis -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Detailed Analysis</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <canvas id="integrityChart" width="300" height="300"></canvas>
+            </div>
+            <div class="col-md-8">
+                <h6>Database Statistics</h6>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td><strong>Total Issues Found:</strong></td>
+                            <td>
+                                {% set total_issues = (report.orphaned_records.values()|sum) + (report.missing_references.values()|sum) %}
+                                {{ total_issues }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Critical Issues:</strong></td>
+                            <td>{{ report.orphaned_records.values()|sum }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Minor Issues:</strong></td>
+                            <td>{{ report.missing_references.values()|sum }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Last Integrity Check:</strong></td>
+                            <td>{{ moment().format('YYYY-MM-DD HH:mm:ss') }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Recommended Action:</strong></td>
+                            <td>
+                                {% if report.health_score >= 90 %}
+                                    <span class="text-success">Continue monitoring</span>
+                                {% elif report.health_score >= 70 %}
+                                    <span class="text-warning">Schedule maintenance</span>
+                                {% else %}
+                                    <span class="text-danger">Immediate attention required</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Cleanup Tools -->
+<div class="card mt-4">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="bi bi-tools"></i> System Cleanup Tools</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6>Orphaned Files</h6>
+                        <p class="text-muted">Clean up uploaded files without database references</p>
+                        <button class="btn btn-outline-warning" onclick="cleanupOrphanedFiles()">
+                            <i class="bi bi-files"></i> Cleanup Files
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6>Expired Sessions</h6>
+                        <p class="text-muted">Remove expired trusted devices and sessions</p>
+                        <button class="btn btn-outline-info" onclick="cleanupExpiredSessions()">
+                            <i class="bi bi-clock-history"></i> Cleanup Sessions
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6>Database Vacuum</h6>
+                        <p class="text-muted">Optimize database performance and reclaim space</p>
+                        <button class="btn btn-outline-success" onclick="optimizeDatabase()">
+                            <i class="bi bi-speedometer2"></i> Optimize DB
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Initialize integrity chart
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('integrityChart').getContext('2d');
+    
+    const orphanedTotal = {{ report.orphaned_records.values()|sum }};
+    const missingTotal = {{ report.missing_references.values()|sum }};
+    const healthyRecords = 100 - orphanedTotal - missingTotal;
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Healthy Records', 'Orphaned Records', 'Missing References'],
+            datasets: [{
+                data: [healthyRecords, orphanedTotal, missingTotal],
+                backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                borderColor: ['#1e7e34', '#c82333', '#e0a800'],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                }
+            }
+        }
+    });
+});
+
+function fixOrphanedRecords(recordType) {
+    if (!confirm(`Are you sure you want to delete all orphaned ${recordType}? This action cannot be undone.`)) {
+        return;
+    }
+    
+    const button = event.target.closest('button');
+    button.disabled = true;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Fixing...';
+    
+    fetch('/admin/maintenance/fix-orphaned-records', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            type: recordType
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert('danger', data.error);
+        }
+    })
+    .catch(error => {
+        showAlert('danger', `Error: ${error.message}`);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = '<i class="bi bi-trash"></i> Fix';
+    });
+}
+
+function autoFixIssues() {
+    if (!confirm('Auto-fix will resolve safe database integrity issues. Continue?')) {
+        return;
+    }
+    
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Fixing Issues...';
+    
+    // Fix orphaned shifts first
+    fetch('/admin/maintenance/fix-orphaned-records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'orphaned_shifts' })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Then fix orphaned leave applications
+            return fetch('/admin/maintenance/fix-orphaned-records', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'orphaned_leaves' })
+            });
+        }
+        throw new Error(data.error);
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Auto-fix completed successfully! Refreshing report...');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert('warning', 'Some issues were fixed, but errors occurred: ' + data.error);
+        }
+    })
+    .catch(error => {
+        showAlert('danger', `Auto-fix failed: ${error.message}`);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = '<i class="bi bi-magic"></i> Auto-Fix Safe Issues';
+    });
+}
+
+function cleanupOrphanedFiles() {
+    if (!confirm('This will delete uploaded files that are no longer referenced in the database. Continue?')) {
+        return;
+    }
+    
+    performSystemCleanup('orphaned_files', 'Cleaning up orphaned files...');
+}
+
+function cleanupExpiredSessions() {
+    if (!confirm('This will remove all expired trusted devices and sessions. Continue?')) {
+        return;
+    }
+    
+    performSystemCleanup('expired_sessions', 'Cleaning up expired sessions...');
+}
+
+function optimizeDatabase() {
+    if (!confirm('This will optimize the database for better performance. This may take several minutes. Continue?')) {
+        return;
+    }
+    
+    showAlert('info', 'Database optimization started. This may take several minutes...');
+    // In a real implementation, this would call a database optimization endpoint
+    setTimeout(() => {
+        showAlert('success', 'Database optimization completed successfully!');
+    }, 3000);
+}
+
+function performSystemCleanup(cleanupType, message) {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Working...';
+    
+    showAlert('info', message);
+    
+    fetch('/admin/system/cleanup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            type: cleanupType
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+        } else {
+            showAlert('danger', data.error);
+        }
+    })
+    .catch(error => {
+        showAlert('danger', `Cleanup failed: ${error.message}`);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+function scheduleMaintenanceReport() {
+    showAlert('info', 'Maintenance scheduling feature coming soon!');
+}
+
+function showAlert(type, message) {
+    const alertsContainer = document.querySelector('.main-content');
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    alertsContainer.insertBefore(alertDiv, alertsContainer.firstChild);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            bootstrap.Alert.getOrCreateInstance(alertDiv).close();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

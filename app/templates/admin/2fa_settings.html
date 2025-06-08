@@ -14,53 +14,63 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
-                <h5 class="card-title mb-0">2FA Configuration</h5>
+                <h5 class="card-title mb-0">System-wide 2FA Configuration</h5>
             </div>
             <div class="card-body">
-                <form method="POST">
+                <form method="POST" id="2fa-settings-form">
                     <div class="mb-4">
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="enable_2fa" name="enable_2fa">
-                            <label class="form-check-label" for="enable_2fa">
-                                <strong>Enable Two-Factor Authentication</strong>
+                            <input class="form-check-input" type="checkbox" id="system_2fa_enabled" 
+                                   name="system_2fa_enabled" {% if settings.system_2fa_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="system_2fa_enabled">
+                                <strong>Enable System-wide Two-Factor Authentication</strong>
                             </label>
                         </div>
-                        <small class="text-muted">Require all users to use 2FA for enhanced security</small>
+                        <small class="text-muted">When enabled, ALL users will be required to use 2FA. Users cannot disable this themselves.</small>
                     </div>
                     
-                    <div id="2fa_options" style="display: none;">
-                        <h6>2FA Methods</h6>
+                    <div id="2fa_options" style="display: {% if settings.system_2fa_enabled %}block{% else %}none{% endif %};">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Important:</strong> Once enabled, all users will be required to set up 2FA within the grace period. 
+                            Users cannot disable 2FA themselves when system-wide enforcement is active.
+                        </div>
+                        
+                        <h6>Available 2FA Methods</h6>
                         
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="totp_enabled" name="totp_enabled" checked>
+                                <input class="form-check-input" type="checkbox" id="totp_enabled" name="totp_enabled" 
+                                       {% if settings.totp_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="totp_enabled">
                                     <strong>TOTP (Time-based One-Time Password)</strong>
                                 </label>
                                 <br>
-                                <small class="text-muted">Google Authenticator, Authy, etc.</small>
+                                <small class="text-muted">Google Authenticator, Authy, Microsoft Authenticator, etc. <strong>(Recommended)</strong></small>
                             </div>
                         </div>
                         
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="sms_enabled" name="sms_enabled">
+                                <input class="form-check-input" type="checkbox" id="sms_enabled" name="sms_enabled"
+                                       {% if settings.sms_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="sms_enabled">
                                     <strong>SMS Verification</strong>
                                 </label>
                                 <br>
-                                <small class="text-muted">Send codes via text message (requires SMS provider)</small>
+                                <small class="text-muted">Send codes via text message (requires SMS provider configuration)</small>
                             </div>
                         </div>
                         
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="email_enabled" name="email_enabled">
+                                <input class="form-check-input" type="checkbox" id="email_enabled" name="email_enabled"
+                                       {% if settings.email_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="email_enabled">
                                     <strong>Email Verification</strong>
                                 </label>
                                 <br>
-                                <small class="text-muted">Send codes via email (less secure)</small>
+                                <small class="text-muted">Send codes via email (less secure than TOTP/SMS)</small>
                             </div>
                         </div>
                         
@@ -69,104 +79,308 @@
                         <h6>2FA Policies</h6>
                         
                         <div class="mb-3">
-                            <label for="grace_period" class="form-label">Grace Period (days)</label>
-                            <input type="number" class="form-control" id="grace_period" name="grace_period" 
-                                   value="7" min="0" max="30">
-                            <small class="text-muted">How long users have to set up 2FA after it's enabled</small>
+                            <label for="grace_period_days" class="form-label">Grace Period (days)</label>
+                            <input type="number" class="form-control" id="grace_period_days" name="grace_period_days" 
+                                   value="{{ settings.grace_period_days }}" min="0" max="30">
+                            <small class="text-muted">How long users have to set up 2FA after system-wide enforcement is enabled</small>
                         </div>
                         
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="remember_device" name="remember_device" checked>
-                                <label class="form-check-label" for="remember_device">
+                                <input class="form-check-input" type="checkbox" id="remember_device_enabled" 
+                                       name="remember_device_enabled" {% if settings.remember_device_enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="remember_device_enabled">
                                     Allow "Remember this device" option
                                 </label>
                                 <br>
-                                <small class="text-muted">Users can skip 2FA on trusted devices for 30 days</small>
+                                <small class="text-muted">Users can mark devices as trusted to skip 2FA for a specified period</small>
                             </div>
+                        </div>
+                        
+                        <div class="mb-3" id="remember_device_options" style="display: {% if settings.remember_device_enabled %}block{% else %}none{% endif %};">
+                            <label for="remember_device_days" class="form-label">Remember device duration (days)</label>
+                            <input type="number" class="form-control" id="remember_device_days" name="remember_device_days" 
+                                   value="{{ settings.remember_device_days }}" min="1" max="90">
+                            <small class="text-muted">How long devices remain trusted (1-90 days)</small>
                         </div>
                         
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="require_admin_2fa" name="require_admin_2fa" checked>
+                                <input class="form-check-input" type="checkbox" id="require_admin_2fa" name="require_admin_2fa" 
+                                       {% if settings.require_admin_2fa %}checked{% endif %}>
                                 <label class="form-check-label" for="require_admin_2fa">
-                                    Require 2FA for administrators (recommended)
+                                    Always require 2FA for administrators (recommended)
                                 </label>
                                 <br>
-                                <small class="text-muted">Admins must always use 2FA regardless of global setting</small>
+                                <small class="text-muted">Administrators must use 2FA regardless of system-wide setting</small>
                             </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <h6>Backup Codes</h6>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="backup_codes_enabled" 
+                                       name="backup_codes_enabled" {% if settings.backup_codes_enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="backup_codes_enabled">
+                                    Enable backup codes
+                                </label>
+                                <br>
+                                <small class="text-muted">Allow users to generate one-time backup codes for account recovery</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3" id="backup_codes_options" style="display: {% if settings.backup_codes_enabled %}block{% else %}none{% endif %};">
+                            <label for="backup_codes_count" class="form-label">Number of backup codes to generate</label>
+                            <input type="number" class="form-control" id="backup_codes_count" name="backup_codes_count" 
+                                   value="{{ settings.backup_codes_count }}" min="5" max="20">
+                            <small class="text-muted">How many backup codes to generate per user (5-20)</small>
                         </div>
                     </div>
                     
                     <div class="d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="save-btn">
                             <i class="bi bi-save"></i> Save 2FA Settings
                         </button>
                     </div>
                 </form>
             </div>
         </div>
+        
+        <!-- SMS Configuration (if SMS is enabled) -->
+        <div class="card mt-3" id="sms-config-card" style="display: {% if settings.sms_enabled %}block{% else %}none{% endif %};">
+            <div class="card-header">
+                <h6 class="card-title mb-0">SMS Provider Configuration</h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Note:</strong> SMS 2FA requires configuration of an SMS provider. 
+                    Contact your system administrator to set up Twilio, AWS SNS, or another SMS service.
+                </div>
+                
+                <form method="POST" action="{{ url_for('admin.update_sms_settings') }}">
+                    <div class="mb-3">
+                        <label for="sms_provider" class="form-label">SMS Provider</label>
+                        <select class="form-select" id="sms_provider" name="sms_provider">
+                            <option value="">Select a provider...</option>
+                            <option value="twilio" {% if settings.sms_provider == 'twilio' %}selected{% endif %}>Twilio</option>
+                            <option value="aws_sns" {% if settings.sms_provider == 'aws_sns' %}selected{% endif %}>AWS SNS</option>
+                            <option value="messagebird" {% if settings.sms_provider == 'messagebird' %}selected{% endif %}>MessageBird</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="sms_api_key" class="form-label">API Key/Account SID</label>
+                        <input type="password" class="form-control" id="sms_api_key" name="sms_api_key" 
+                               placeholder="Enter your SMS provider API key">
+                        <small class="text-muted">Will be encrypted when stored</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="sms_api_secret" class="form-label">API Secret/Auth Token</label>
+                        <input type="password" class="form-control" id="sms_api_secret" name="sms_api_secret" 
+                               placeholder="Enter your SMS provider secret">
+                        <small class="text-muted">Will be encrypted when stored</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="sms_from_number" class="form-label">From Phone Number</label>
+                        <input type="tel" class="form-control" id="sms_from_number" name="sms_from_number" 
+                               value="{{ settings.sms_from_number or '' }}" placeholder="+1234567890">
+                        <small class="text-muted">Phone number to send SMS from (with country code)</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-secondary">
+                        <i class="bi bi-save"></i> Save SMS Settings
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
     
     <div class="col-md-4">
+        <!-- 2FA Status Overview -->
         <div class="card">
             <div class="card-header">
-                <h6 class="card-title mb-0">2FA Status</h6>
+                <h6 class="card-title mb-0">2FA System Status</h6>
             </div>
             <div class="card-body">
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span>System 2FA Status:</span>
-                        <span class="badge bg-danger">Disabled</span>
+                        <span>System 2FA:</span>
+                        <span class="badge bg-{% if settings.system_2fa_enabled %}success{% else %}danger{% endif %}">
+                            {% if settings.system_2fa_enabled %}Enabled{% else %}Disabled{% endif %}
+                        </span>
                     </div>
                 </div>
                 
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <span>Users with 2FA:</span>
-                        <span class="badge bg-secondary">0 / {{ stats.total_users if stats else 0 }}</span>
+                        <span class="badge bg-info" id="users-with-2fa">Loading...</span>
                     </div>
                 </div>
                 
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span>Administrators:</span>
-                        <span class="badge bg-warning">0 / 1</span>
+                        <span>In Grace Period:</span>
+                        <span class="badge bg-warning" id="users-grace-period">Loading...</span>
                     </div>
                 </div>
                 
-                <button class="btn btn-sm btn-outline-primary w-100 mb-2" onclick="generateBackupCodes()">
-                    <i class="bi bi-key"></i> Generate Backup Codes
-                </button>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Trusted Devices:</span>
+                        <span class="badge bg-secondary" id="trusted-devices-count">Loading...</span>
+                    </div>
+                </div>
                 
-                <button class="btn btn-sm btn-outline-info w-100">
-                    <i class="bi bi-list-check"></i> View 2FA Users
-                </button>
+                <hr>
+                
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-outline-primary" onclick="force2FASetup()">
+                        <i class="bi bi-arrow-clockwise"></i> Force 2FA Setup for All
+                    </button>
+                    
+                    <button class="btn btn-sm btn-outline-info" onclick="view2FAUsers()">
+                        <i class="bi bi-list-check"></i> View User 2FA Status
+                    </button>
+                    
+                    <button class="btn btn-sm btn-outline-warning" onclick="cleanupExpiredDevices()">
+                        <i class="bi bi-trash"></i> Cleanup Expired Devices
+                    </button>
+                </div>
             </div>
         </div>
         
+        <!-- Setup Instructions -->
         <div class="card mt-3">
             <div class="card-header">
-                <h6 class="card-title mb-0">Setup Instructions</h6>
+                <h6 class="card-title mb-0">User Setup Instructions</h6>
             </div>
             <div class="card-body">
                 <h6 class="text-primary">For TOTP Apps:</h6>
                 <ol class="small">
-                    <li>Download Google Authenticator or Authy</li>
-                    <li>Scan the QR code provided</li>
+                    <li>Download an authenticator app (Google Authenticator, Authy, Microsoft Authenticator)</li>
+                    <li>Scan the QR code provided during setup</li>
                     <li>Enter the 6-digit code to verify</li>
+                    <li>Save backup codes in a secure location</li>
                 </ol>
                 
                 <h6 class="text-primary mt-3">For SMS:</h6>
                 <ol class="small">
-                    <li>Verify your phone number</li>
+                    <li>Enter and verify phone number</li>
                     <li>Receive codes via text message</li>
-                    <li>Enter code when prompted</li>
+                    <li>Enter code when logging in</li>
+                </ol>
+                
+                <h6 class="text-primary mt-3">For Email:</h6>
+                <ol class="small">
+                    <li>System sends codes to user's registered email</li>
+                    <li>Enter code when logging in</li>
+                    <li>Codes expire in 10 minutes</li>
                 </ol>
                 
                 <div class="alert alert-warning mt-3">
-                    <small><i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> TOTP is more secure than SMS verification.</small>
+                    <small>
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Security Note:</strong> TOTP is the most secure method. 
+                        SMS and email are less secure but more user-friendly.
+                    </small>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Emergency Actions -->
+        <div class="card mt-3">
+            <div class="card-header bg-danger text-white">
+                <h6 class="card-title mb-0">Emergency Actions</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Use these actions only in emergency situations.</p>
+                
+                <div class="d-grid gap-2">
+                    <button class="btn btn-sm btn-outline-danger" onclick="disableUser2FA()">
+                        <i class="bi bi-shield-x"></i> Disable User's 2FA
+                    </button>
+                    
+                    <button class="btn btn-sm btn-outline-danger" onclick="resetUser2FA()">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset User's 2FA
+                    </button>
+                    
+                    <button class="btn btn-sm btn-outline-warning" onclick="generateEmergencyCode()">
+                        <i class="bi bi-key"></i> Generate Emergency Access Code
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User 2FA Status Modal -->
+<div class="modal fade" id="user2faModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">User 2FA Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Status</th>
+                                <th>Method</th>
+                                <th>Last Verified</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-2fa-table">
+                            <tr>
+                                <td colspan="5" class="text-center">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Emergency Disable Modal -->
+<div class="modal fade" id="emergencyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Emergency 2FA Action</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action will affect user security. Only proceed if absolutely necessary.
+                </div>
+                
+                <div class="mb-3">
+                    <label for="emergency-username" class="form-label">Username or Email</label>
+                    <input type="text" class="form-control" id="emergency-username" 
+                           placeholder="Enter username or email">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="emergency-reason" class="form-label">Reason for Action</label>
+                    <textarea class="form-control" id="emergency-reason" rows="3" 
+                              placeholder="Explain why this emergency action is necessary"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="emergency-action-btn">Proceed</button>
             </div>
         </div>
     </div>
@@ -175,110 +389,352 @@
 
 {% block extra_js %}
 <script>
-// Toggle 2FA options visibility
-document.getElementById('enable_2fa').addEventListener('change', function() {
-    const options = document.getElementById('2fa_options');
-    if (this.checked) {
-        options.style.display = 'block';
-        // Update status badge
-        document.querySelector('.badge.bg-danger').className = 'badge bg-success';
-        document.querySelector('.badge.bg-success').textContent = 'Enabled';
-    } else {
-        options.style.display = 'none';
-        // Update status badge
-        document.querySelector('.badge.bg-success').className = 'badge bg-danger';
-        document.querySelector('.badge.bg-danger').textContent = 'Disabled';
-    }
-});
+let emergencyAction = null;
 
-// SMS provider dependency
-document.getElementById('sms_enabled').addEventListener('change', function() {
-    if (this.checked) {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-info alert-dismissible fade show mt-2';
-        alertDiv.innerHTML = `
-            <i class="bi bi-info-circle"></i> SMS verification requires configuring an SMS provider (Twilio, AWS SNS, etc.)
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        this.closest('.mb-3').appendChild(alertDiv);
+document.addEventListener('DOMContentLoaded', function() {
+    // Load 2FA statistics
+    load2FAStats();
+    
+    // Toggle 2FA options visibility
+    document.getElementById('system_2fa_enabled').addEventListener('change', function() {
+        const options = document.getElementById('2fa_options');
+        const smsCard = document.getElementById('sms-config-card');
         
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
+        if (this.checked) {
+            options.style.display = 'block';
+            // Show SMS config if SMS is enabled
+            if (document.getElementById('sms_enabled').checked) {
+                smsCard.style.display = 'block';
             }
-        }, 5000);
-    }
+        } else {
+            options.style.display = 'none';
+            smsCard.style.display = 'none';
+        }
+        updateStatusBadge();
+    });
+    
+    // Toggle SMS configuration card
+    document.getElementById('sms_enabled').addEventListener('change', function() {
+        const smsCard = document.getElementById('sms-config-card');
+        const systemEnabled = document.getElementById('system_2fa_enabled').checked;
+        
+        if (this.checked && systemEnabled) {
+            smsCard.style.display = 'block';
+        } else {
+            smsCard.style.display = 'none';
+        }
+    });
+    
+    // Toggle remember device options
+    document.getElementById('remember_device_enabled').addEventListener('change', function() {
+        const options = document.getElementById('remember_device_options');
+        options.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    // Toggle backup codes options
+    document.getElementById('backup_codes_enabled').addEventListener('change', function() {
+        const options = document.getElementById('backup_codes_options');
+        options.style.display = this.checked ? 'block' : 'none';
+    });
+    
+    // Form submission with confirmation
+    document.getElementById('2fa-settings-form').addEventListener('submit', function(e) {
+        const systemEnabled = document.getElementById('system_2fa_enabled').checked;
+        
+        if (systemEnabled) {
+            const confirmed = confirm(
+                'Are you sure you want to enable system-wide 2FA? ' +
+                'This will require ALL users to set up 2FA within the grace period. ' +
+                'Users will not be able to disable 2FA themselves.'
+            );
+            
+            if (!confirmed) {
+                e.preventDefault();
+                return;
+            }
+        }
+        
+        // Show loading state
+        const saveBtn = document.getElementById('save-btn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Saving...';
+        saveBtn.disabled = true;
+        
+        // Re-enable button after form submission
+        setTimeout(() => {
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }, 2000);
+    });
+    
+    // Emergency action handling
+    document.getElementById('emergency-action-btn').addEventListener('click', function() {
+        const username = document.getElementById('emergency-username').value;
+        const reason = document.getElementById('emergency-reason').value;
+        
+        if (!username || !reason) {
+            alert('Please fill in all fields.');
+            return;
+        }
+        
+        if (emergencyAction) {
+            performEmergencyAction(emergencyAction, username, reason);
+        }
+    });
 });
 
-function generateBackupCodes() {
-    // Show modal with backup codes
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.innerHTML = `
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Backup Codes Generated</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle"></i> <strong>Important:</strong> Save these codes in a secure location. Each code can only be used once.
-                    </div>
-                    <div class="row">
-                        <div class="col-6">
-                            <code class="d-block mb-2">ABC123-DEF456</code>
-                            <code class="d-block mb-2">GHI789-JKL012</code>
-                            <code class="d-block mb-2">MNO345-PQR678</code>
-                            <code class="d-block mb-2">STU901-VWX234</code>
-                            <code class="d-block mb-2">YZA567-BCD890</code>
-                        </div>
-                        <div class="col-6">
-                            <code class="d-block mb-2">EFG123-HIJ456</code>
-                            <code class="d-block mb-2">KLM789-NOP012</code>
-                            <code class="d-block mb-2">QRS345-TUV678</code>
-                            <code class="d-block mb-2">WXY901-ZAB234</code>
-                            <code class="d-block mb-2">CDE567-FGH890</code>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" onclick="downloadBackupCodes()">
-                        <i class="bi bi-download"></i> Download Codes
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    `;
+function updateStatusBadge() {
+    const systemEnabled = document.getElementById('system_2fa_enabled').checked;
+    const statusElements = document.querySelectorAll('.badge');
     
-    document.body.appendChild(modal);
-    const bootstrapModal = new bootstrap.Modal(modal);
-    bootstrapModal.show();
-    
-    // Clean up modal after it's hidden
-    modal.addEventListener('hidden.bs.modal', () => {
-        document.body.removeChild(modal);
+    // This would update the status badge in real-time
+    // Implementation depends on your specific UI needs
+}
+
+function load2FAStats() {
+    fetch('{{ url_for("admin.get_2fa_stats") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('users-with-2fa').textContent = 
+                    `${data.stats.users_with_2fa} / ${data.stats.total_users}`;
+                document.getElementById('users-grace-period').textContent = 
+                    data.stats.users_in_grace_period;
+                document.getElementById('trusted-devices-count').textContent = 
+                    data.stats.trusted_devices_count;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading 2FA stats:', error);
+        });
+}
+
+function force2FASetup() {
+    if (confirm('This will reset the grace period for all users and require them to set up 2FA. Continue?')) {
+        fetch('{{ url_for("admin.force_2fa_setup") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('2FA setup forced for all users', 'success');
+                load2FAStats();
+            } else {
+                showToast('Error: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Error forcing 2FA setup', 'danger');
+        });
+    }
+}
+
+function view2FAUsers() {
+    fetch('{{ url_for("admin.get_user_2fa_status") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const tbody = document.getElementById('user-2fa-table');
+                tbody.innerHTML = '';
+                
+                data.users.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${user.full_name}<br><small class="text-muted">${user.email}</small></td>
+                        <td><span class="badge" style="background-color: ${user.status_color}">${user.status}</span></td>
+                        <td>${user.primary_method || 'None'}</td>
+                        <td>${user.last_verified ? new Date(user.last_verified).toLocaleDateString() : 'Never'}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-warning" onclick="resetUser2FAById(${user.id})">
+                                    Reset
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="disableUser2FAById(${user.id})">
+                                    Disable
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                new bootstrap.Modal(document.getElementById('user2faModal')).show();
+            }
+        })
+        .catch(error => {
+            showToast('Error loading user 2FA status', 'danger');
+        });
+}
+
+function cleanupExpiredDevices() {
+    if (confirm('This will remove all expired trusted devices. Continue?')) {
+        fetch('{{ url_for("admin.cleanup_expired_devices") }}', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Cleaned up ${data.count} expired devices`, 'success');
+                load2FAStats();
+            } else {
+                showToast('Error cleaning up devices', 'danger');
+            }
+        });
+    }
+}
+
+function disableUser2FA() {
+    emergencyAction = 'disable';
+    document.querySelector('#emergencyModal .modal-title').textContent = 'Disable User 2FA';
+    new bootstrap.Modal(document.getElementById('emergencyModal')).show();
+}
+
+function resetUser2FA() {
+    emergencyAction = 'reset';
+    document.querySelector('#emergencyModal .modal-title').textContent = 'Reset User 2FA';
+    new bootstrap.Modal(document.getElementById('emergencyModal')).show();
+}
+
+function disableUser2FAById(userId) {
+    if (confirm('Are you sure you want to disable 2FA for this user?')) {
+        performEmergencyActionById('disable', userId, 'Admin action from user list');
+    }
+}
+
+function resetUser2FAById(userId) {
+    if (confirm('Are you sure you want to reset 2FA for this user? They will need to set it up again.')) {
+        performEmergencyActionById('reset', userId, 'Admin action from user list');
+    }
+}
+
+function generateEmergencyCode() {
+    const username = prompt('Enter username or email for emergency access:');
+    if (username) {
+        fetch('{{ url_for("admin.generate_emergency_code") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                username: username,
+                reason: 'Emergency access code generated by admin'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Emergency access code: ${data.code}\n\nThis code can be used once to bypass 2FA. Give this to the user securely.`);
+            } else {
+                showToast('Error generating emergency code: ' + data.message, 'danger');
+            }
+        });
+    }
+}
+
+function performEmergencyAction(action, username, reason) {
+    fetch('{{ url_for("admin.emergency_2fa_action") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: action,
+            username: username,
+            reason: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`Successfully ${action}d 2FA for user`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('emergencyModal')).hide();
+            load2FAStats();
+            
+            // Clear form
+            document.getElementById('emergency-username').value = '';
+            document.getElementById('emergency-reason').value = '';
+        } else {
+            showToast('Error: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        showToast('Error performing emergency action', 'danger');
     });
 }
 
-function downloadBackupCodes() {
-    const codes = [
-        'ABC123-DEF456', 'GHI789-JKL012', 'MNO345-PQR678', 'STU901-VWX234', 'YZA567-BCD890',
-        'EFG123-HIJ456', 'KLM789-NOP012', 'QRS345-TUV678', 'WXY901-ZAB234', 'CDE567-FGH890'
-    ];
-    
-    const content = `Employee Scheduling System - 2FA Backup Codes\nGenerated: ${new Date().toLocaleString()}\n\n${codes.join('\n')}\n\nIMPORTANT: Keep these codes secure. Each can only be used once.`;
-    
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '2fa-backup-codes.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+function performEmergencyActionById(action, userId, reason) {
+    fetch('{{ url_for("admin.emergency_2fa_action_by_id") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: action,
+            user_id: userId,
+            reason: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`Successfully ${action}d 2FA for user`, 'success');
+            view2FAUsers(); // Refresh the modal
+            load2FAStats();
+        } else {
+            showToast('Error: ' + data.message, 'danger');
+        }
+    });
 }
+
+function showToast(message, type) {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '1055';
+        document.body.appendChild(toastContainer);
+    }
+    
+    const toastId = 'toast-' + Date.now();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
+// Add spin animation
+const style = document.createElement('style');
+style.textContent = `
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}

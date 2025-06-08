@@ -1,0 +1,1411 @@
+<!-- CORRECTED app/templates/analytics/dashboard.html -->
+
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chart-container {
+        position: relative;
+        height: 400px;
+        margin-bottom: 30px;
+    }
+    
+    .analytics-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: var(--primary-color);
+        margin-bottom: 10px;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .controls-panel {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    }
+    
+    .chart-tabs {
+        border-bottom: 2px solid #f8f9fa;
+        margin-bottom: 20px;
+    }
+    
+    .chart-tabs .nav-link {
+        border: none;
+        border-bottom: 3px solid transparent;
+        color: #6c757d;
+        font-weight: 500;
+        padding: 12px 20px;
+    }
+    
+    .chart-tabs .nav-link.active {
+        border-bottom-color: var(--primary-color);
+        color: var(--primary-color);
+        background: none;
+    }
+    
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 300px;
+    }
+    
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 300px;
+        }
+        
+        .stats-grid {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-graph-up"></i> Analytics Dashboard
+    </h1>
+    <div class="btn-toolbar">
+        <button class="btn btn-primary me-2" onclick="refreshData()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Scope Information -->
+<div class="analytics-card">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-0">
+                <i class="bi bi-building"></i> Data Scope
+            </h4>
+            <p class="mb-0 opacity-75" id="scopeName">{{ scope.name }}</p>
+        </div>
+        <div class="text-end">
+            <small class="opacity-75">Access Level: {{ scope.type.title() }}</small>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Statistics -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.total_employees }}</div>
+        <div class="stat-label">Total Employees</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.current_month_extensions }}</div>
+        <div class="stat-label">Extensions This Month</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ "%.1f"|format(stats.current_month_extension_hours) }}</div>
+        <div class="stat-label">Extension Hours This Month</div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.pending_extensions }}</div>
+        <div class="stat-label">Pending Extensions</div>
+    </div>
+</div>
+
+<!-- Controls Panel -->
+<div class="controls-panel">
+    <div class="row">
+        <div class="col-md-3">
+            <label for="dateRange" class="form-label">Date Range</label>
+            <select class="form-select" id="dateRange" onchange="updateDateRange()">
+                {% for key, range in date_ranges.items() %}
+                <option value="{{ key }}" {% if key == 'current_month' %}selected{% endif %}>
+                    {{ range.name }}
+                </option>
+                {% endfor %}
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+        
+        <div class="col-md-2">
+            <label for="startDate" class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="startDate" value="{{ date_ranges.current_month.start.isoformat() }}">
+        </div>
+        
+        <div class="col-md-2">
+            <label for="endDate" class="form-label">End Date</label>
+            <input type="date" class="form-control" id="endDate" value="{{ date_ranges.current_month.end.isoformat() }}">
+        </div>
+        
+        <div class="col-md-2">
+            <label for="viewType" class="form-label">View Type</label>
+            <select class="form-select" id="viewType" onchange="updateCharts()">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+            </select>
+        </div>
+        
+        <div class="col-md-2">
+            <label for="groupBy" class="form-label">Group By</label>
+            <select class="form-select" id="groupBy" onchange="updateCharts()">
+                <option value="total">Total</option>
+                <!-- Options will be populated by JavaScript based on user scope -->
+            </select>
+        </div>
+        
+        <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-primary w-100" onclick="updateCharts()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Tabs -->
+<ul class="nav nav-tabs chart-tabs" id="chartTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="work-extension-tab" data-bs-toggle="tab" 
+                data-bs-target="#work-extension-panel" type="button" role="tab">
+            <i class="bi bi-clock-history"></i> Work Extension Hours
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="overtime-tab" data-bs-toggle="tab" 
+                data-bs-target="#overtime-panel" type="button" role="tab">
+            <i class="bi bi-graph-up"></i> Overtime Hours
+        </button>
+    </li>
+</ul>
+
+<!-- Chart Content -->
+<div class="tab-content" id="chartTabContent">
+    <!-- Work Extension Chart -->
+    <div class="tab-pane fade show active" id="work-extension-panel" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history"></i> Work Extension Hours Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="workExtensionChart"></canvas>
+                    <div id="workExtensionLoading" class="loading-spinner">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chart Summary -->
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-primary">Total Extensions</h6>
+                            <span id="totalExtensions" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-success">Total Hours</h6>
+                            <span id="totalExtensionHours" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-warning">Average per Day</h6>
+                            <span id="avgExtensionHours" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Overtime Chart -->
+    <div class="tab-pane fade" id="overtime-panel" role="tabpanel">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up"></i> Overtime Hours Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="overtimeChart"></canvas>
+                    <div id="overtimeLoading" class="loading-spinner">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chart Summary -->
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-primary">Total Shifts</h6>
+                            <span id="totalOvertimeShifts" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-success">Total Overtime Hours</h6>
+                            <span id="totalOvertimeHours" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h6 class="text-warning">Average per Day</h6>
+                            <span id="avgOvertimeHours" class="h4 text-muted">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Export Options -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-download"></i> Export & Reports
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <h6>Work Extension Data</h6>
+                <div class="btn-group-vertical w-100" role="group">
+                    <button class="btn btn-outline-primary" onclick="exportData('work-extension', 'csv')">
+                        <i class="bi bi-file-earmark-csv"></i> Export CSV
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="exportData('work-extension', 'excel')">
+                        <i class="bi bi-file-earmark-excel"></i> Export Excel
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="exportChart('workExtensionChart')">
+                        <i class="bi bi-image"></i> Export Chart PNG
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <h6>Overtime Data</h6>
+                <div class="btn-group-vertical w-100" role="group">
+                    <button class="btn btn-outline-success" onclick="exportData('overtime', 'csv')">
+                        <i class="bi bi-file-earmark-csv"></i> Export CSV
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportData('overtime', 'excel')">
+                        <i class="bi bi-file-earmark-excel"></i> Export Excel
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportChart('overtimeChart')">
+                        <i class="bi bi-image"></i> Export Chart PNG
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <h6>Summary Reports</h6>
+                <div class="btn-group-vertical w-100" role="group">
+                    <button class="btn btn-outline-info" onclick="generateSummaryReport()">
+                        <i class="bi bi-file-earmark-text"></i> Summary Report
+                    </button>
+                    <button class="btn btn-outline-info" onclick="exportDashboard()">
+                        <i class="bi bi-file-earmark-pdf"></i> Export Dashboard
+                    </button>
+                    <button class="btn btn-outline-info" onclick="scheduleReport()">
+                        <i class="bi bi-calendar-event"></i> Schedule Report
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-light">
+                    <small class="text-muted">
+                        <i class="bi bi-lightbulb"></i> <strong>Quick Actions:</strong>
+                        Press <kbd>Ctrl+S</kbd> for Summary Report | 
+                        Press <kbd>Ctrl+R</kbd> to Refresh Data |
+                        Press <kbd>Ctrl+E</kbd> to Export Current View
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data for JavaScript -->
+<script id="template-data" type="application/json">
+{
+    "dateRanges": {{ date_ranges | tojson }},
+    "scopeName": {{ scope.name | tojson }}
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js (removed date adapter since we're not using time scales) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+let workExtensionChart = null;
+let overtimeChart = null;
+let currentWorkExtensionData = null;
+let currentOvertimeData = null;
+
+// Get template data safely
+const templateData = JSON.parse(document.getElementById('template-data').textContent);
+
+// Chart color schemes
+const colorSchemes = {
+    primary: {
+        background: 'rgba(111, 66, 193, 0.1)',
+        border: 'rgba(111, 66, 193, 1)',
+        point: 'rgba(111, 66, 193, 1)'
+    },
+    success: {
+        background: 'rgba(25, 135, 84, 0.1)',
+        border: 'rgba(25, 135, 84, 1)',
+        point: 'rgba(25, 135, 84, 1)'
+    },
+    warning: {
+        background: 'rgba(255, 193, 7, 0.1)',
+        border: 'rgba(255, 193, 7, 1)',
+        point: 'rgba(255, 193, 7, 1)'
+    },
+    info: {
+        background: 'rgba(13, 202, 240, 0.1)',
+        border: 'rgba(13, 202, 240, 1)',
+        point: 'rgba(13, 202, 240, 1)'
+    },
+    danger: {
+        background: 'rgba(220, 53, 69, 0.1)',
+        border: 'rgba(220, 53, 69, 1)',
+        point: 'rgba(220, 53, 69, 1)'
+    }
+};
+
+const colors = [colorSchemes.primary, colorSchemes.success, colorSchemes.warning, colorSchemes.info, colorSchemes.danger];
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+    loadOrganizationalUnits();
+    updateCharts();
+    
+    // Set up tab event listeners
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function (event) {
+            // Refresh chart when tab is shown
+            setTimeout(() => {
+                if (event.target.id === 'work-extension-tab' && workExtensionChart) {
+                    workExtensionChart.resize();
+                } else if (event.target.id === 'overtime-tab' && overtimeChart) {
+                    overtimeChart.resize();
+                }
+            }, 100);
+        });
+    });
+});
+
+function initializeCharts() {
+    // Work Extension Chart
+    const workExtensionCtx = document.getElementById('workExtensionChart').getContext('2d');
+    workExtensionChart = new Chart(workExtensionCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Hours'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Work Extension Hours Over Time'
+                }
+            },
+            elements: {
+                point: {
+                    radius: 4,
+                    hoverRadius: 6
+                },
+                line: {
+                    tension: 0.1
+                }
+            }
+        }
+    });
+    
+    // Overtime Chart
+    const overtimeCtx = document.getElementById('overtimeChart').getContext('2d');
+    overtimeChart = new Chart(overtimeCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Hours'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Overtime Hours Over Time'
+                }
+            },
+            elements: {
+                point: {
+                    radius: 4,
+                    hoverRadius: 6
+                },
+                line: {
+                    tension: 0.1
+                }
+            }
+        }
+    });
+}
+
+async function loadOrganizationalUnits() {
+    try {
+        const response = await fetch('/analytics/api/organizational-units');
+        const data = await response.json();
+        
+        if (data.success) {
+            const groupBySelect = document.getElementById('groupBy');
+            groupBySelect.innerHTML = '';
+            
+            data.available_groups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group;
+                option.textContent = group.charAt(0).toUpperCase() + group.slice(1);
+                groupBySelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading organizational units:', error);
+    }
+}
+
+function updateDateRange() {
+    const dateRange = document.getElementById('dateRange').value;
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (dateRange !== 'custom') {
+        const ranges = templateData.dateRanges;
+        const selectedRange = ranges[dateRange];
+        
+        if (selectedRange) {
+            startDateInput.value = selectedRange.start;
+            endDateInput.value = selectedRange.end;
+            updateCharts();
+        }
+    }
+}
+
+function updateCharts() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    const viewType = document.getElementById('viewType').value;
+    const groupBy = document.getElementById('groupBy').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    
+    // Update work extension chart
+    updateWorkExtensionChart(startDate, endDate, viewType, groupBy);
+    
+    // Update overtime chart
+    updateOvertimeChart(startDate, endDate, viewType, groupBy);
+}
+
+async function updateWorkExtensionChart(startDate, endDate, viewType, groupBy) {
+    const loadingDiv = document.getElementById('workExtensionLoading');
+    const chartCanvas = document.getElementById('workExtensionChart');
+    
+    loadingDiv.style.display = 'flex';
+    chartCanvas.style.display = 'none';
+    
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        view_type: viewType,
+        group_by: groupBy
+    });
+    
+    try {
+        const response = await fetch(`/analytics/api/work-extension-data?${params}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            currentWorkExtensionData = data;
+            renderWorkExtensionChart(data.data);
+            updateWorkExtensionSummary(data.data);
+        } else {
+            alert('Error loading work extension data: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error loading work extension data');
+    } finally {
+        loadingDiv.style.display = 'none';
+        chartCanvas.style.display = 'block';
+    }
+}
+
+async function updateOvertimeChart(startDate, endDate, viewType, groupBy) {
+    const loadingDiv = document.getElementById('overtimeLoading');
+    const chartCanvas = document.getElementById('overtimeChart');
+    
+    loadingDiv.style.display = 'flex';
+    chartCanvas.style.display = 'none';
+    
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        view_type: viewType,
+        group_by: groupBy
+    });
+    
+    try {
+        const response = await fetch(`/analytics/api/overtime-data?${params}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            currentOvertimeData = data;
+            renderOvertimeChart(data.data);
+            updateOvertimeSummary(data.data);
+        } else {
+            alert('Error loading overtime data: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error loading overtime data');
+    } finally {
+        loadingDiv.style.display = 'none';
+        chartCanvas.style.display = 'block';
+    }
+}
+
+function renderWorkExtensionChart(data) {
+    // Group data by group
+    const groups = {};
+    data.forEach(item => {
+        if (!groups[item.group]) {
+            groups[item.group] = [];
+        }
+        groups[item.group].push(item);
+    });
+    
+    // Get unique labels (dates)
+    const labels = [...new Set(data.map(item => item.label))].sort();
+    
+    // Create datasets
+    const datasets = [];
+    let colorIndex = 0;
+    
+    Object.keys(groups).forEach(groupName => {
+        const groupData = groups[groupName];
+        const color = colors[colorIndex % colors.length];
+        
+        // Create data array aligned with labels
+        const chartData = labels.map(label => {
+            const item = groupData.find(d => d.label === label);
+            return item ? item.hours : 0;
+        });
+        
+        datasets.push({
+            label: groupName,
+            data: chartData,
+            backgroundColor: color.background,
+            borderColor: color.border,
+            pointBackgroundColor: color.point,
+            fill: false
+        });
+        
+        colorIndex++;
+    });
+    
+    workExtensionChart.data.labels = labels;
+    workExtensionChart.data.datasets = datasets;
+    workExtensionChart.update();
+}
+
+function renderOvertimeChart(data) {
+    // Group data by group
+    const groups = {};
+    data.forEach(item => {
+        if (!groups[item.group]) {
+            groups[item.group] = [];
+        }
+        groups[item.group].push(item);
+    });
+    
+    // Get unique labels (dates)
+    const labels = [...new Set(data.map(item => item.label))].sort();
+    
+    // Create datasets
+    const datasets = [];
+    let colorIndex = 0;
+    
+    Object.keys(groups).forEach(groupName => {
+        const groupData = groups[groupName];
+        const color = colors[colorIndex % colors.length];
+        
+        // Create data array aligned with labels
+        const chartData = labels.map(label => {
+            const item = groupData.find(d => d.label === label);
+            return item ? item.hours : 0;
+        });
+        
+        datasets.push({
+            label: groupName,
+            data: chartData,
+            backgroundColor: color.background,
+            borderColor: color.border,
+            pointBackgroundColor: color.point,
+            fill: false
+        });
+        
+        colorIndex++;
+    });
+    
+    overtimeChart.data.labels = labels;
+    overtimeChart.data.datasets = datasets;
+    overtimeChart.update();
+}
+
+function updateWorkExtensionSummary(data) {
+    const totalExtensions = data.length;
+    const totalHours = data.reduce((sum, item) => sum + item.hours, 0);
+    const avgHours = totalExtensions > 0 ? totalHours / totalExtensions : 0;
+    
+    document.getElementById('totalExtensions').textContent = totalExtensions;
+    document.getElementById('totalExtensionHours').textContent = totalHours.toFixed(1);
+    document.getElementById('avgExtensionHours').textContent = avgHours.toFixed(1);
+}
+
+function updateOvertimeSummary(data) {
+    const totalShifts = data.length;
+    const totalHours = data.reduce((sum, item) => sum + item.hours, 0);
+    const avgHours = totalShifts > 0 ? totalHours / totalShifts : 0;
+    
+    document.getElementById('totalOvertimeShifts').textContent = totalShifts;
+    document.getElementById('totalOvertimeHours').textContent = totalHours.toFixed(1);
+    document.getElementById('avgOvertimeHours').textContent = avgHours.toFixed(1);
+}
+
+function refreshData() {
+    updateCharts();
+}
+
+
+function exportChart(chartId) {
+    const chart = chartId === 'workExtensionChart' ? workExtensionChart : overtimeChart;
+    const chartType = chartId === 'workExtensionChart' ? 'work_extension' : 'overtime';
+    
+    // Create download link
+    const link = document.createElement('a');
+    link.download = `${chartType}_chart_${new Date().toISOString().split('T')[0]}.png`;
+    link.href = chart.toBase64Image();
+    link.click();
+}
+
+function exportData(dataType, format) {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates before exporting.');
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split"></i> Exporting...';
+    button.disabled = true;
+    
+    // Build URL for export
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        format: format
+    });
+    
+    let exportUrl;
+    if (dataType === 'work-extension') {
+        exportUrl = `/analytics/api/export-work-extension-data?${params}`;
+    } else if (dataType === 'overtime') {
+        exportUrl = `/analytics/api/export-overtime-data?${params}`;
+    } else {
+        alert('Invalid data type for export');
+        return;
+    }
+    
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = exportUrl;
+    link.download = `${dataType}_data_${startDate}_${endDate}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Reset button state after a delay
+    setTimeout(() => {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+    }, 3000);
+    
+    // Show success message
+    showSuccessMessage(`${dataType.replace('-', ' ')} data export initiated. Download should start shortly.`);
+}
+
+function showSuccessMessage(message) {
+    // Create and show a temporary success alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <i class="bi bi-check-circle-fill"></i> ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+// Add function to generate summary report
+function generateSummaryReport() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates.');
+        return;
+    }
+    
+    const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate
+    });
+    
+    fetch(`/analytics/api/summary-report?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSummaryModal(data.summary);
+            } else {
+                alert('Error generating summary report: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error generating summary report');
+        });
+}
+
+function showSummaryModal(summary) {
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="summaryModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="bi bi-file-earmark-text"></i> Analytics Summary Report
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <h6 class="text-primary">Period</h6>
+                                <p>${summary.period.start_date} to ${summary.period.end_date}<br>
+                                <small class="text-muted">${summary.period.days} days</small></p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-primary">Scope</h6>
+                                <p>${summary.scope.name}<br>
+                                <small class="text-muted">${summary.scope.type} level access</small></p>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <h6 class="text-success">Employee Statistics</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body text-center">
+                                                <h4 class="text-primary">${summary.employees.total}</h4>
+                                                <small>Total Employees</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body text-center">
+                                                <h4 class="text-warning">${summary.employees.confidential}</h4>
+                                                <small>Confidential Employees</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <h6 class="text-warning">Work Extensions</h6>
+                                <table class="table table-sm">
+                                    <tr><td>Total Extensions:</td><td><strong>${summary.work_extensions.total_extensions}</strong></td></tr>
+                                    <tr><td>Total Hours:</td><td><strong>${summary.work_extensions.total_hours.toFixed(1)}</strong></td></tr>
+                                    <tr><td>Average Hours:</td><td><strong>${summary.work_extensions.average_hours.toFixed(1)}</strong></td></tr>
+                                    <tr><td>Avg per Employee:</td><td><strong>${summary.work_extensions.average_per_employee.toFixed(1)}</strong></td></tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-info">Overtime</h6>
+                                <table class="table table-sm">
+                                    <tr><td>Overtime Shifts:</td><td><strong>${summary.overtime.total_shifts_with_overtime}</strong></td></tr>
+                                    <tr><td>Total OT Hours:</td><td><strong>${summary.overtime.total_overtime_hours}</strong></td></tr>
+                                    <tr><td>Avg per Shift:</td><td><strong>${summary.overtime.average_overtime_per_shift}</strong></td></tr>
+                                    <tr><td>Avg per Employee:</td><td><strong>${summary.overtime.average_per_employee}</strong></td></tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-primary" onclick="printSummary()">
+                            <i class="bi bi-printer"></i> Print
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('summaryModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Show modal
+    new bootstrap.Modal(document.getElementById('summaryModal')).show();
+}
+
+function printSummary() {
+    try {
+        // Check if modal exists
+        const modalElement = document.querySelector('#summaryModal .modal-body');
+        if (!modalElement) {
+            alert('Summary modal not found. Please generate a summary report first.');
+            return;
+        }
+        
+        // Create print-specific styles
+        const printCSS = `
+            @media print {
+                body * { visibility: hidden; }
+                .print-area, .print-area * { visibility: visible; }
+                .print-area { 
+                    position: absolute; 
+                    left: 0; 
+                    top: 0; 
+                    width: 100%; 
+                }
+                .no-print { display: none !important; }
+            }
+        `;
+        
+        // Add print styles to current document
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = printCSS;
+        document.head.appendChild(styleSheet);
+        
+        // Clone and prepare content for printing
+        const printContent = modalElement.cloneNode(true);
+        printContent.className = 'print-area';
+        
+        // Add print content to current document (hidden)
+        printContent.style.display = 'none';
+        document.body.appendChild(printContent);
+        
+        // Show print content and hide rest
+        printContent.style.display = 'block';
+        
+        // Trigger print
+        window.print();
+        
+        // Cleanup
+        document.body.removeChild(printContent);
+        document.head.removeChild(styleSheet);
+        
+    } catch (error) {
+        console.error('Error in printSummary:', error);
+        alert('An error occurred while preparing the print document. Please try again.');
+    }
+}
+
+function exportDashboard(event) {
+    try {
+        // Validate required elements
+        const requiredElements = {
+            startDate: document.getElementById('startDate'),
+            endDate: document.getElementById('endDate'),
+            totalExtensions: document.getElementById('totalExtensions'),
+            totalExtensionHours: document.getElementById('totalExtensionHours'),
+            avgExtensionHours: document.getElementById('avgExtensionHours'),
+            totalOvertimeShifts: document.getElementById('totalOvertimeShifts'),
+            totalOvertimeHours: document.getElementById('totalOvertimeHours'),
+            avgOvertimeHours: document.getElementById('avgOvertimeHours'),
+            viewType: document.getElementById('viewType'),
+            groupBy: document.getElementById('groupBy')
+        };
+
+        for (const [key, element] of Object.entries(requiredElements)) {
+            if (!element) {
+                console.error(`Required element '${key}' not found`);
+                alert(`Required element '${key}' not found. Please refresh the page and try again.`);
+                return;
+            }
+        }
+
+        const startDate = requiredElements.startDate.value;
+        const endDate = requiredElements.endDate.value;
+
+        if (!startDate || !endDate) {
+            console.error('Missing start or end date');
+            alert('Please select both start and end dates.');
+            return;
+        }
+
+        const startDateObj = new Date(startDate);
+        const endDateObj = new Date(endDate);
+
+        if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+            console.error('Invalid date format:', startDate, endDate);
+            alert('Invalid date format. Please select valid dates.');
+            return;
+        }
+
+        if (startDateObj > endDateObj) {
+            console.error('Start date is after end date');
+            alert('Start date must be before or equal to end date.');
+            return;
+        }
+
+        const button = event?.target?.closest('button');
+        let originalHTML = button ? button.innerHTML : 'Export Dashboard';
+        if (button) {
+            button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+            button.disabled = true;
+        }
+
+        // Ensure charts are rendered
+        if (workExtensionChart) workExtensionChart.resize();
+        if (overtimeChart) overtimeChart.resize();
+
+        // Create print window
+        const printWindow = window.open('', '_blank', 'width=1200,height=800');
+        if (!printWindow) {
+            console.error('Failed to open print window');
+            alert('Popup blocked. Please allow popups for this site to export the dashboard.');
+            if (button) {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }
+            return;
+        }
+
+        // Get chart images with delay to ensure rendering
+        setTimeout(() => {
+            let workExtensionChartImage = '';
+            let overtimeChartImage = '';
+            
+            try {
+                workExtensionChartImage = workExtensionChart?.toBase64Image() || '';
+            } catch (e) {
+                console.warn('Failed to get work extension chart image:', e);
+            }
+            
+            try {
+                overtimeChartImage = overtimeChart?.toBase64Image() || '';
+            } catch (e) {
+                console.warn('Failed to get overtime chart image:', e);
+            }
+
+            // Get stats
+            const stats = {
+                totalExtensions: requiredElements.totalExtensions.textContent || '0',
+                totalExtensionHours: requiredElements.totalExtensionHours.textContent || '0',
+                avgExtensionHours: requiredElements.avgExtensionHours.textContent || '0',
+                totalOvertimeShifts: requiredElements.totalOvertimeShifts.textContent || '0',
+                totalOvertimeHours: requiredElements.totalOvertimeHours.textContent || '0',
+                avgOvertimeHours: requiredElements.avgOvertimeHours.textContent || '0'
+            };
+
+            const currentDate = new Date().toLocaleDateString();
+            const scopeElement = document.querySelector('.analytics-card p');
+            const scopeName = scopeElement ? scopeElement.textContent.trim() : 'Unknown Scope';
+            const viewType = requiredElements.viewType.value || 'Unknown';
+            const groupBy = requiredElements.groupBy.value || 'Unknown';
+            const daysDifference = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
+
+            // Sanitization function
+            const sanitize = (str) => {
+                if (str == null) return '';
+                return String(str).replace(/[<>]/g, (c) => ({ '<': '&lt;', '>': '&gt;' })[c]);
+            };
+
+            const sanitizedStartDate = sanitize(startDate);
+            const sanitizedEndDate = sanitize(endDate);
+            const sanitizedScopeName = sanitize(scopeName);
+            const sanitizedViewType = sanitize(viewType);
+            const sanitizedGroupBy = sanitize(groupBy);
+
+            // HTML content for export
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Analytics Dashboard Export - ${sanitizedStartDate} to ${sanitizedEndDate}</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            margin: 20px; 
+                            line-height: 1.4; 
+                        }
+                        .chart-container { 
+                            margin: 20px 0; 
+                            text-align: center; 
+                        }
+                        .chart-container img { 
+                            max-width: 100%; 
+                            height: auto; 
+                            border: 1px solid #ddd; 
+                            border-radius: 4px; 
+                        }
+                        .header { 
+                            border-bottom: 3px solid #007bff; 
+                            padding-bottom: 10px; 
+                            margin-bottom: 30px; 
+                        }
+                        .section { 
+                            margin: 30px 0; 
+                        }
+                        .stats-row {
+                            display: flex;
+                            justify-content: space-around;
+                            margin: 20px 0;
+                        }
+                        .stat-box {
+                            text-align: center;
+                            padding: 15px;
+                            border: 1px solid #ddd;
+                            border-radius: 8px;
+                            flex: 1;
+                            margin: 0 10px;
+                        }
+                        .stat-number {
+                            font-size: 2em;
+                            font-weight: bold;
+                            margin-bottom: 5px;
+                        }
+                        .summary-box {
+                            border: 1px solid #17a2b8;
+                            padding: 15px;
+                            background-color: #e7f1fa;
+                            border-radius: 8px;
+                        }
+                        @media print {
+                            .no-print { display: none; }
+                            .page-break { page-break-before: always; }
+                            body { margin: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <button onclick="window.print()" class="no-print" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px;">
+                        Print Report
+                    </button>
+                    
+                    <div class="header">
+                        <h1>Analytics Dashboard Report</h1>
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <p><strong>Period:</strong> ${sanitizedStartDate} to ${sanitizedEndDate}</p>
+                                <p><strong>Scope:</strong> ${sanitizedScopeName}</p>
+                            </div>
+                            <div style="text-align: right;">
+                                <p><strong>Generated:</strong> ${currentDate}</p>
+                                <p><strong>View:</strong> ${sanitizedViewType} | <strong>Group:</strong> ${sanitizedGroupBy}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h2>Work Extension Analysis</h2>
+                        <div class="stats-row">
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #007bff;">${sanitize(stats.totalExtensions)}</div>
+                                <div>Total Extensions</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #28a745;">${sanitize(stats.totalExtensionHours)}</div>
+                                <div>Total Hours</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #ffc107;">${sanitize(stats.avgExtensionHours)}</div>
+                                <div>Average per Period</div>
+                            </div>
+                        </div>
+                        ${workExtensionChartImage ? `
+                        <div class="chart-container">
+                            <img src="${workExtensionChartImage}" alt="Work Extension Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                            <p style="display: none; color: #6c757d;">No work extension chart data available</p>
+                        </div>
+                        ` : '<p style="color: #6c757d; text-align: center;">No work extension chart data available</p>'}
+                    </div>
+                    
+                    <div class="section page-break">
+                        <h2>Overtime Analysis</h2>
+                        <div class="stats-row">
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #007bff;">${sanitize(stats.totalOvertimeShifts)}</div>
+                                <div>Total Overtime Shifts</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #28a745;">${sanitize(stats.totalOvertimeHours)}</div>
+                                <div>Total Overtime Hours</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number" style="color: #ffc107;">${sanitize(stats.avgOvertimeHours)}</div>
+                                <div>Average per Period</div>
+                            </div>
+                        </div>
+                        ${overtimeChartImage ? `
+                        <div class="chart-container">
+                            <img src="${overtimeChartImage}" alt="Overtime Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                            <p style="display: none; color: #6c757d;">No overtime chart data available</p>
+                        </div>
+                        ` : '<p style="color: #6c757d; text-align: center;">No overtime chart data available</p>'}
+                    </div>
+                    
+                    <div class="section">
+                        <h2>Report Summary</h2>
+                        <div class="summary-box">
+                            <h3>Key Insights:</h3>
+                            <ul>
+                                <li>Total work extension hours: ${sanitize(stats.totalExtensionHours)} hours across ${sanitize(stats.totalExtensions)} extensions</li>
+                                <li>Total overtime hours: ${sanitize(stats.totalOvertimeHours)} hours across ${sanitize(stats.totalOvertimeShifts)} shifts</li>
+                                <li>Data scope: ${sanitizedScopeName}</li>
+                                <li>Analysis period: ${daysDifference} days</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px;">
+                        <small style="color: #6c757d;">
+                            Generated by Employee Scheduling System Analytics - ${currentDate}
+                        </small>
+                    </div>
+                </body>
+                </html> `;
+
+            try {
+                console.log('Writing HTML content to print window');
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+            } catch (e) {
+                console.error('Failed to write to print window:', e);
+                alert('Failed to generate the dashboard export. Please try again.');
+                printWindow.close();
+                if (button) {
+                    button.innerHTML = originalHTML;
+                    button.disabled = false;
+                }
+                return;
+            }
+
+            // Reset button function
+            const resetButton = () => {
+                console.log('Resetting button');
+                if (button) {
+                    button.innerHTML = originalHTML;
+                    button.disabled = false;
+                }
+            };
+
+            // Event listeners for cleanup
+            printWindow.addEventListener('load', () => {
+                console.log('Print window loaded');
+                setTimeout(resetButton, 2000);
+            });
+            
+            printWindow.addEventListener('unload', resetButton);
+            setTimeout(resetButton, 5000); // Fallback timeout
+
+        }, 500); // Delay for chart rendering
+
+    } catch (error) {
+        console.error('Error in exportDashboard:', error);
+        alert('An error occurred while generating the dashboard export. Please try again.');
+        
+        // Reset button on error
+        if (event?.target?.closest('button')) {
+            const button = event.target.closest('button');
+            button.innerHTML = 'Export Dashboard';
+            button.disabled = false;
+        }
+    }
+}
+
+function scheduleReport() {
+    // Feature for scheduling automatic reports (future enhancement)
+    alert('Scheduled reporting feature coming soon! This will allow you to automatically generate and email reports on a regular basis.');
+}
+
+// Enhanced keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        refreshData();
+    }
+    
+    if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        generateSummaryReport();
+    }
+    
+    if (e.key === 'e' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        exportDashboard();
+    }
+    
+    if (e.key === '1' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        // Switch to work extension tab
+        document.getElementById('work-extension-tab').click();
+    }
+    
+    if (e.key === '2' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        // Switch to overtime tab
+        document.getElementById('overtime-tab').click();
+    }
+});
+
+// Auto-refresh every 10 minutes
+setInterval(function() {
+    if (document.visibilityState === 'visible') {
+        refreshData();
+    }
+}, 600000); // 10 minutes
+
+// Function to handle responsive chart resizing
+function handleChartResize() {
+    if (workExtensionChart) {
+        workExtensionChart.resize();
+    }
+    if (overtimeChart) {
+        overtimeChart.resize();
+    }
+}
+
+// Add window resize listener for charts
+window.addEventListener('resize', function() {
+    clearTimeout(window.resizeTimeout);
+    window.resizeTimeout = setTimeout(handleChartResize, 100);
+});
+</script>
+{% endblock %}

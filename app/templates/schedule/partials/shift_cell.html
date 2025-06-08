@@ -1,47 +1,113 @@
 {% set shifts = schedule_grid[member.id][date.isoformat()] %}
+{% set can_edit_this_shift = can_edit or (member.id == current_user.id) %}
+
 {% if shifts %}
-    <!-- Multiple shifts in one cell -->
-    {% for shift in shifts %}
-        <div class="shift-card mb-1" 
-             style="background-color: {{ shift.color or shift.status_color }};"
-             onclick="editShift({{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}')"
-             oncontextmenu="showShiftContextMenu(event, {{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}'); return false;">
-            <div class="fw-bold" style="font-size: 0.7rem;">{{ shift.time_display }}</div>
-            {% if shift.role %}
-                <div style="font-size: 0.65rem;">{{ shift.role }}</div>
-            {% endif %}
-            <div style="font-size: 0.65rem;">
-                {{ shift.status.value.replace('_', ' ').title() }}
+    <div class="d-flex h-100" style="min-height: 42px;">
+        {% for shift in shifts %}
+            <div class="shift-card flex-fill d-flex flex-column justify-content-center" 
+                 style="background-color: {{ shift.color or shift.status_color }}; padding: 2px 1px; border-radius: 3px; {% if not loop.last %}margin-right: 1px;{% endif %}"
+                 {% if can_edit_this_shift %}
+                 onclick="editShift({{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}')"
+                 oncontextmenu="showShiftContextMenu(event, {{ shift.id }}, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
+                 {% else %}
+                 onclick="viewShiftDetails({{ shift.id }})"
+                 {% endif %}
+                 style="cursor: {{ 'pointer' if can_edit_this_shift else 'default' }};">
+                
+                <div class="fw-bold text-center" style="font-size: 0.7rem; line-height: 1; white-space: nowrap; overflow: hidden;">
+                    {{ shift.time_display }}
+                </div>
+                
+                {% if shift.role %}
+                    <div class="text-center" style="font-size: 0.55rem; line-height: 1; white-space: nowrap; overflow: hidden;" title="{{ shift.role }}">
+                        {{ shift.role }}
+                    </div>
+                {% endif %}
+                
+                <div class="text-center" style="font-size: 0.55rem; line-height: 1; white-space: nowrap; overflow: hidden;" title="{{ shift.status.value.replace('_', ' ').title() }}">
+                    {% set status_value = shift.status.value %}
+                    {% if status_value == 'scheduled' %}
+                        Sched
+                    {% elif status_value == 'rest_day' %}
+                        Rest
+                    {% elif status_value == 'sick_leave' %}
+                        SL
+                    {% elif status_value == 'personal_leave' %}
+                        PL
+                    {% elif status_value == 'emergency_leave' %}
+                        EL
+                    {% elif status_value == 'annual_vacation' %}
+                        AVL
+                    {% elif status_value == 'holiday_off' %}
+                        Holiday
+                    {% elif status_value == 'offset' %}
+                        Offset
+                    {% elif status_value == 'bereavement_leave' %}
+                        BL
+                    {% elif status_value == 'paternity_leave' %}
+                        PatL
+                    {% elif status_value == 'maternity_leave' %}
+                        MatL
+                    {% elif status_value == 'union_leave' %}
+                        UL
+                    {% elif status_value == 'fire_calamity_leave' %}
+                        FCL
+                    {% elif status_value == 'solo_parent_leave' %}
+                        SPL
+                    {% elif status_value == 'special_leave_women' %}
+                        SLW
+                    {% elif status_value == 'vawc_leave' %}
+                        VAWC
+                    {% elif status_value == 'other' %}
+                        Other
+                    {% else %}
+                        {{ status_value.replace('_', ' ').title() }}
+                    {% endif %}
+                </div>
+                
+                {% if shift.work_arrangement and shift.work_arrangement.value != 'onsite' %}
+                    <div class="text-center" style="font-size: 0.5rem; opacity: 0.9; line-height: 1;">
+                        {{ shift.work_arrangement.value.upper() }}
+                    </div>
+                {% endif %}
+                
+                {% if shifts|length > 1 %}
+                    <div class="text-center" style="font-size: 0.5rem; opacity: 0.8; line-height: 1;">
+                        #{{ shift.sequence }}
+                    </div>
+                {% endif %}
+                
+                {# Show view-only indicator for other people's shifts #}
+                {% if not can_edit_this_shift %}
+                    <div class="text-center" style="font-size: 0.35rem; opacity: 0.7; line-height: 1;">
+                        <i class="bi bi-eye"></i>
+                    </div>
+                {% endif %}
             </div>
-            {% if shift.work_arrangement and shift.work_arrangement.value != 'onsite' %}
-                <div style="font-size: 0.6rem; opacity: 0.9;">
-                    {{ shift.work_arrangement.value.upper() }}
-                </div>
-            {% endif %}
-            {% if shifts|length > 1 %}
-                <div class="shift-sequence" style="font-size: 0.6rem; opacity: 0.8;">
-                    #{{ shift.sequence }}
-                </div>
-            {% endif %}
-        </div>
-    {% endfor %}
-    
-    <!-- Add another shift button -->
-    {% if can_edit %}
-        <div class="add-shift-btn" 
-             onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
-             oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
-             style="cursor: pointer; text-align: center; padding: 4px; border: 1px dashed #ccc; border-radius: 4px; color: #666; font-size: 0.7rem;">
-            <i class="bi bi-plus"></i> Add
-        </div>
-    {% endif %}
+        {% endfor %}
+        
+        <!-- Compact add button -->
+        {% if can_edit_this_shift and shifts|length < 3 %}
+            <div class="add-shift-btn d-flex align-items-center justify-content-center" 
+                 onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
+                 oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
+                 style="cursor: pointer; min-width: 16px; max-width: 20px; border: 1px dashed #ccc; border-radius: 2px; color: #666; background: rgba(255,255,255,0.7);">
+                <i class="bi bi-plus" style="font-size: 0.45rem;"></i>
+            </div>
+        {% endif %}
+    </div>
 {% else %}
-    {% if can_edit %}
-        <div class="shift-card bg-light text-dark border border-dashed" 
+    {% if can_edit_this_shift %}
+        <div class="shift-card bg-light text-dark border border-dashed h-100" 
              onclick="createShift({{ member.id }}, '{{ date.isoformat() }}')"
              oncontextmenu="showCellContextMenu(event, {{ member.id }}, '{{ date.isoformat() }}'); return false;"
-             style="min-height: 50px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-            <i class="bi bi-plus"></i>
+             style="min-height: 42px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 3px;">
+            <i class="bi bi-plus" style="font-size: 0.55rem;"></i>
+        </div>
+    {% else %}
+        <div class="shift-card bg-light text-muted border h-100" 
+             style="min-height: 42px; display: flex; align-items: center; justify-content: center; cursor: default; border-radius: 3px;">
+            <small style="font-size: 0.5rem;">—</small>
         </div>
     {% endif %}
 {% endif %}

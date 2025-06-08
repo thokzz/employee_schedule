@@ -7,7 +7,7 @@
                         <tr>
                             <th style="min-width: 120px;">Team Member</th>
                             {% for date in dates %}
-                                <th class="text-center" style="min-width: 150px;">
+                                <th class="text-center" style="min-width: 135px;">
                                     {% include 'schedule/partials/date_header.html' %}
                                 </th>
                             {% endfor %}
@@ -15,16 +15,16 @@
                     </thead>
                     <tbody>
                         {% for member in team_members %}
-                        <tr>
-                            <td class="align-middle">
-                                {% include 'schedule/partials/employee_cell.html' %}
-                            </td>
-                            {% for date in dates %}
-                                <td class="align-top p-2" style="min-height: 80px;">
-                                    {% include 'schedule/partials/shift_cell.html' %}
+                            <tr>
+                                <td class="align-middle">
+                                    {% include 'schedule/partials/employee_cell.html' %}
                                 </td>
-                            {% endfor %}
-                        </tr>
+                                {% for date in dates %}
+                                    <td class="align-top" style="min-height: 42px; padding: 2px; vertical-align: top;">
+                                        {% include 'schedule/partials/shift_cell.html' %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>

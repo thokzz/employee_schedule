@@ -1,0 +1,211 @@
+<!-- app/templates/auth/backup_codes.html -->
+{% extends "base.html" %}
+
+{% block title %}Save Your Backup Codes{% endblock %}
+
+{% block content %}
+<div class="container-fluid vh-100">
+    <div class="row h-100">
+        <div class="col-md-8 d-flex align-items-center justify-content-center">
+            <div class="card shadow-lg border-0" style="max-width: 600px; width: 100%;">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-key display-4 text-warning mb-3"></i>
+                        <h3 class="fw-bold text-primary">Save Your Backup Codes</h3>
+                        <p class="text-muted">Keep these codes safe - they're your backup access method</p>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Important:</strong> Each backup code can only be used once. 
+                        Store them in a secure location like a password manager or safe.
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Your Backup Codes:</h6>
+                            <div class="backup-codes p-3 bg-light rounded">
+                                {% for code in backup_codes %}
+                                <div class="code-item mb-2">
+                                    <code class="fs-5">{{ code }}</code>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>What to do with these codes:</h6>
+                            <ul class="list-unstyled">
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success me-2"></i>
+                                    Save them in a password manager
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success me-2"></i>
+                                    Print and store in a safe place
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle text-success me-2"></i>
+                                    Share with a trusted person
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-x-circle text-danger me-2"></i>
+                                    Don't store in plain text files
+                                </li>
+                                <li class="mb-2">
+                                    <i class="bi bi-x-circle text-danger me-2"></i>
+                                    Don't share publicly
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" onclick="downloadCodes()">
+                            <i class="bi bi-download"></i> Download Codes
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="printCodes()">
+                            <i class="bi bi-printer"></i> Print Codes
+                        </button>
+                        <button type="button" class="btn btn-outline-info" onclick="copyCodes()">
+                            <i class="bi bi-clipboard"></i> Copy All
+                        </button>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-success btn-lg">
+                            <i class="bi bi-check-circle"></i> I've Saved My Codes - Continue
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 d-none d-md-flex align-items-center justify-content-center bg-success text-white">
+            <div class="text-center p-4">
+                <i class="bi bi-shield-check display-1 mb-4"></i>
+                <h2 class="fw-bold mb-4">Setup Complete!</h2>
+                <p class="lead">
+                    Your account is now protected with two-factor authentication. 
+                    You'll need your authenticator app or these backup codes to sign in.
+                </p>
+                
+                <div class="mt-4">
+                    <div class="alert alert-light text-dark">
+                        <small>
+                            <i class="bi bi-lightbulb"></i>
+                            <strong>Pro Tip:</strong> You can generate new backup codes anytime 
+                            from your account settings.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const backupCodes = {{ backup_codes | tojson }};
+
+function downloadCodes() {
+    const content = `Employee Scheduling System - 2FA Backup Codes
+Generated: ${new Date().toLocaleString()}
+User: {{ current_user.full_name }} ({{ current_user.email }})
+
+BACKUP CODES:
+${backupCodes.join('\n')}
+
+IMPORTANT NOTES:
+- Each code can only be used once
+- Store these codes in a secure location
+- Use these codes if you lose access to your authenticator app
+- Generate new codes from your account settings if needed
+
+Keep these codes secure and confidential!`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '2fa-backup-codes.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+
+function printCodes() {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>2FA Backup Codes</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .codes { font-size: 18px; line-height: 2; font-family: monospace; }
+                .warning { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Employee Scheduling System</h1>
+                <h2>Two-Factor Authentication Backup Codes</h2>
+                <p>Generated: ${new Date().toLocaleString()}</p>
+                <p>User: {{ current_user.full_name }} ({{ current_user.email }})</p>
+            </div>
+            
+            <div class="codes">
+                ${backupCodes.map(code => `<div>${code}</div>`).join('')}
+            </div>
+            
+            <div class="warning">
+                <strong>IMPORTANT:</strong>
+                <ul>
+                    <li>Each code can only be used once</li>
+                    <li>Store these codes in a secure location</li>
+                    <li>Use if you lose access to your authenticator app</li>
+                    <li>Keep these codes confidential</li>
+                </ul>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+function copyCodes() {
+    const text = backupCodes.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Backup codes copied to clipboard!', 'success');
+    }).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showToast('Backup codes copied to clipboard!', 'success');
+    });
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+</script>
+{% endblock %}

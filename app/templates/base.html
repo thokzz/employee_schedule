@@ -1,5 +1,3 @@
-<!-- Update your existing app/templates/base.html - Fixed version -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -125,12 +123,26 @@
         }
         
         .date-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            /* Background color now set inline in template for conditional weekday/weekend colors */
             color: white;
             padding: 12px;
             border-radius: 8px;
             text-align: center;
             margin-bottom: 10px;
+            position: relative;
+        }
+
+        /* Optional: Add hover effects for date headers */
+        .date-header:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
+
+        /* Style for the date action button */
+        .date-action-btn:hover {
+            background: rgba(255, 255, 255, 0.3) !important;
+            opacity: 1 !important;
         }
         
         .stats-card {
@@ -167,6 +179,27 @@
             align-items: center;
             justify-content: center;
         }
+
+        /* 2FA Security Reminder Styles */
+        .security-reminder {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+        }
+
+        .security-reminder .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-weight: 600;
+        }
+
+        .security-reminder .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            color: white;
+        }
         
         @media (max-width: 768px) {
             .sidebar {
@@ -202,13 +235,15 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Mobile Navigation Toggle -->
+    <!-- Mobile Navigation Toggle - Only show when authenticated -->
+    {% if current_user.is_authenticated %}
     <div class="d-md-none p-3 bg-white border-bottom">
         <button class="btn btn-outline-primary" id="sidebar-toggle">
             <i class="bi bi-list"></i> Menu
         </button>
         <span class="ms-3 fw-bold">Employee Scheduling</span>
     </div>
+    {% endif %}
 
     <div class="container-fluid">
         <div class="row">
@@ -239,6 +274,16 @@
                                 Schedule
                             </a>
                         </li>
+                        
+                        {% if current_user.can_edit_schedule() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'schedule.calendar_view' %}active{% endif %}" 
+                               href="{{ url_for('schedule.calendar_view') }}">
+                                <i class="bi bi-calendar-month"></i>
+                                Calendar View
+                            </a>
+                        </li>
+                        {% endif %}
 
                         <!-- LEAVE MANAGEMENT SECTION -->
                         <hr class="text-white-50">
@@ -341,6 +386,16 @@
                         </li>
                         {% endif %}
 
+                        {% if current_user.can_approve_leaves() or current_user.can_edit_schedule() %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint.startswith('analytics.') %}active{% endif %}" 
+                               href="{{ url_for('analytics.analytics_dashboard') }}">
+                                <i class="bi bi-graph-up"></i>
+                                Analytics
+                            </a>
+                        </li>
+                        {% endif %}
+
                         <hr class="text-white-50">
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('auth.logout') }}">
@@ -367,6 +422,25 @@
                     {% endif %}
                 {% endwith %}
 
+                <!-- Simple 2FA reminder that won't break during migration -->
+                {% if current_user.is_authenticated and show_2fa_reminder %}
+                <div class="alert security-reminder alert-dismissible fade show mb-4" role="alert">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-shield-exclamation fs-4 me-3"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1 fw-bold">🔐 Security Notice: Two-Factor Authentication</h6>
+                            <p class="mb-0 small">Please set up two-factor authentication to enhance your account security.</p>
+                        </div>
+                        <div class="ms-3">
+                            <a href="#" class="btn btn-sm me-2">
+                                <i class="bi bi-shield-plus"></i> Set Up Now
+                            </a>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
                 {% block content %}{% endblock %}
             </main>
         </div>
@@ -383,11 +457,11 @@
         
         // Auto-hide alerts after 5 seconds
         setTimeout(function() {
-            var alerts = document.querySelectorAll('.alert');
+            var alerts = document.querySelectorAll('.alert:not(.security-reminder)');
             alerts.forEach(function(alert) {
                 var bsAlert = new bootstrap.Alert(alert);
                 bsAlert.close();
-            });  // ← FIXED: Proper closing
+            });
         }, 5000);
     </script>
     

@@ -1,41 +1,160 @@
-<!-- Template Selection Modal -->
-<div class="modal fade" id="templateModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Template Management Modal -->
+<div class="modal fade" id="templateManagementModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Apply Schedule Template</h5>
+                <h5 class="modal-title">
+                    <i class="bi bi-files"></i> Schedule Templates
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="list-group">
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Standard Weekday Template</h6>
-                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('standard')">Apply</button>
+                <!-- Template Actions Tabs -->
+                <ul class="nav nav-tabs mb-3" id="templateTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="browse-tab" data-bs-toggle="tab" data-bs-target="#browse-templates">
+                            <i class="bi bi-search"></i> Browse Templates
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="create-tab" data-bs-toggle="tab" data-bs-target="#create-template">
+                            <i class="bi bi-camera"></i> Create Snapshot
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- Browse Templates Tab -->
+                    <div class="tab-pane fade show active" id="browse-templates">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="input-group" style="max-width: 300px;">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="templateSearch" placeholder="Search templates...">
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-outline-secondary btn-sm active" onclick="filterTemplates('all')">All</button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterTemplates('mine')">My Templates</button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="filterTemplates('public')">Public</button>
+                            </div>
                         </div>
-                        <p class="mb-1">Mon-Fri: 9am-5pm shifts</p>
-                        <small>Standard business hours template</small>
+
+                        <div id="templatesGrid" class="row">
+                            <!-- Templates will be loaded here -->
+                            <div class="col-12 text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading templates...</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Retail Template</h6>
-                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('retail')">Apply</button>
-                        </div>
-                        <p class="mb-1">7 days: 10am-9pm shifts with rotating staff</p>
-                        <small>Retail store schedule with weekend coverage</small>
-                    </div>
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Restaurant Template</h6>
-                            <button class="btn btn-sm btn-outline-primary" onclick="applyTemplate('restaurant')">Apply</button>
-                        </div>
-                        <p class="mb-1">Split shifts: 11am-3pm & 5pm-10pm</p>
-                        <small>Restaurant service with lunch and dinner shifts</small>
+
+                    <!-- Create Template Tab -->
+                    <div class="tab-pane fade" id="create-template">
+                        <form id="createTemplateForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Template Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" name="name" required placeholder="e.g., Standard Weekly Schedule">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Description</label>
+                                        <textarea class="form-control" name="description" rows="3" placeholder="Describe when and how this template should be used..."></textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" name="is_public" id="templatePublic">
+                                            <label class="form-check-label" for="templatePublic">
+                                                <i class="bi bi-globe"></i> Make template public (others can use it)
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Source Date Range <span class="text-danger">*</span></label>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <input type="date" class="form-control" name="start_date" required>
+                                                <small class="text-muted">Start Date</small>
+                                            </div>
+                                            <div class="col-6">
+                                                <input type="date" class="form-control" name="end_date" required>
+                                                <small class="text-muted">End Date</small>
+                                            </div>
+                                        </div>
+                                        <small class="form-text text-muted">Maximum 14 days allowed</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Organizational Scope</label>
+                                        <select class="form-select" name="scope_type" onchange="updateScopeOptions()">
+                                            <option value="">Use Current User's Scope</option>
+                                            <option value="department">Department</option>
+                                            <option value="division">Division</option>
+                                            <option value="section">Section</option>
+                                            <option value="unit">Unit</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3" id="scopeSelection" style="display: none;">
+                                        <select class="form-select" name="scope_id">
+                                            <!-- Options will be populated dynamically -->
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Snapshot Creation:</strong> This will capture all shifts in the selected date range and organizational scope, creating a reusable template pattern.
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div id="templateActions">
+                    <!-- Action buttons will appear here based on active tab -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Apply Template Modal -->
+<div class="modal fade" id="quickApplyTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-lightning"></i> Quick Apply Template
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Select Template <span class="text-danger">*</span></label>
+                    <select class="form-select" id="quickTemplateSelect" required>
+                        <option value="">Choose a template...</option>
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Target Start Date <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="quickTargetDate" required>
+                    <small class="form-text text-muted">Template will be applied starting from this date</small>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="quickReplaceExisting">
+                    <label class="form-check-label" for="quickReplaceExisting">
+                        <i class="bi bi-arrow-clockwise"></i> Replace existing shifts
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="quickApplyTemplate()">
+                    <i class="bi bi-check"></i> Apply
+                </button>
             </div>
         </div>
     </div>
