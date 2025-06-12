@@ -1,4 +1,3 @@
-# Updated docker-compose.yml - PRESERVING all existing volumes and adding backup support
 services:
   web:
     build: .
@@ -6,14 +5,13 @@ services:
       - "5002:5000"
     environment:
       - FLASK_ENV=production
-      - SECRET_KEY=your-production-secret-key-change-this
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/scheduling_db
+      - SECRET_KEY=5dJcmv1vX4mSQEQh6RSXlccV2jukwLiW
+      - DATABASE_URL=postgresql://postgres:d7tm3YJJJ7RHVgovPtFzwhK4TsrSbOpT@db:5432/scheduling_db
     volumes:
-      # PRESERVING EXISTING UPLOAD VOLUMES
       - uploads:/app/app/static/uploads
       - instance_uploads:/app/instance/uploads
-      # NEW: Adding backup volume for database backups
       - backup_data:/app/backups
+      - instance_data:/app/instance
     depends_on:
       db:
         condition: service_healthy
@@ -23,13 +21,15 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    # UPDATED: Add automatic deploy command on startup
+    command: ["sh", "-c", "while ! pg_isready -h db -p 5432 -U postgres; do sleep 1; done && flask deploy && gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 run:app"]
 
   db:
     image: postgres:15-alpine
     environment:
       - POSTGRES_DB=scheduling_db
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=d7tm3YJJJ7RHVgovPtFzwhK4TsrSbOpT
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -42,13 +42,13 @@ services:
     restart: unless-stopped
 
 volumes:
-  # PRESERVING ALL EXISTING VOLUMES
   postgres_data:
     driver: local
   uploads:
     driver: local
   instance_uploads:
     driver: local
-  # NEW: Adding backup volume
   backup_data:
+    driver: local
+  instance_data:
     driver: local

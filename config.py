@@ -2,11 +2,11 @@ import os
 from datetime import timedelta
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or '5dJcmv1vX4mSQEQh6RSXlccV2jukwLiW'
     
     # PostgreSQL Configuration
     DATABASE_URL = os.environ.get('DATABASE_URL') or \
-        'postgresql://postgres:postgres@db:5432/scheduling_db'
+        'postgresql://postgres:d7tm3YJJJ7RHVgovPtFzwhK4TsrSbOpT@db:5432/scheduling_db'
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -36,7 +36,7 @@ class ProductionConfig(Config):
     DEBUG = False
     # Production PostgreSQL URL
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'postgresql://postgres:postgres@db:5432/scheduling_db'
+        'postgresql://postgres:d7tm3YJJJ7RHVgovPtFzwhK4TsrSbOpT@db:5432/scheduling_db'
 
 config = {
     'development': DevelopmentConfig,
