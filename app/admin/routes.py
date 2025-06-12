@@ -1372,12 +1372,27 @@ Employee Scheduling System
             'message': f'Error testing email settings: {str(e)}'
         })
 
+# ------------- DEF EXPORT/IMPORT DATABASE
 
+# Updated routes for enhanced employee import/export functionality
+# Add these updated functions to your routes.py file
+
+def _format_schedule_display(schedule_format):
+    """Format schedule format for display in exports"""
+    if not schedule_format:
+        return ''
+    
+    format_display = {
+        '8_hour_shift': '8-hour shift',
+        '9_hour_shift': '9-hour shift',
+        'others': 'Others'
+    }
+    return format_display.get(schedule_format.value, schedule_format.value)
 
 @bp.route('/employees/export')
 @login_required
 def export_employee_database():
-    """Export employee database as CSV"""
+    """Export employee database as CSV with all new fields"""
     # Check permissions
     if not (current_user.can_approve_leaves() or current_user.can_edit_schedule()):
         flash('Access denied. You need approver or manager privileges.', 'danger')
@@ -1409,11 +1424,28 @@ def export_employee_database():
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write header
+    # Write comprehensive header with all fields
     writer.writerow([
-        'Last Name', 'First Name', 'Date Hired', 'Section', 'Unit', 
-        'Job Title', 'Rank', 'Employee Type', 'ID Number', 'Years of Service',
-        'Contact Number', 'Email Address', 'Personnel Number', 'Division/Department'
+        # Basic Information
+        'Username', 'Email Address', 'First Name', 'Last Name', 'Role', 'Status',
+        
+        # 4-Level Hierarchy
+        'Department', 'Division', 'Section', 'Unit',
+        
+        # Employment Details
+        'Employee Type', 'Schedule Format', 'Date Hired', 'Years of Service',
+        
+        # Job Information
+        'Job Title', 'Rank', 'Personnel Number', 'ID Number', 'Type Code', 'Div/Dept',
+        
+        # Contact Information
+        'Contact Number',
+        
+        # Approver Status
+        'Is Department Approver', 'Is Division Approver', 'Is Section Approver', 'Is Unit Approver',
+        
+        # System Information
+        'Has Signature', 'Has Avatar', 'Account Created', 'Last Updated'
     ])
     
     # Write employee data
@@ -1421,21 +1453,57 @@ def export_employee_database():
         # Calculate years of service
         years_service = emp.years_of_service if emp.years_of_service is not None else 'N/A'
         
+        # Get hierarchy information
+        department_name = ''
+        division_name = ''
+        if hasattr(emp, 'department') and emp.department:
+            department_name = emp.department.name
+        if hasattr(emp, 'division') and emp.division:
+            division_name = emp.division.name
+        
         writer.writerow([
-            emp.last_name,
+            # Basic Information
+            emp.username,
+            emp.email,
             emp.first_name,
-            emp.hiring_date.strftime('%Y-%m-%d') if emp.hiring_date else '',
+            emp.last_name,
+            emp.role.value if emp.role else '',
+            'Active' if emp.is_active else 'Inactive',
+            
+            # 4-Level Hierarchy
+            department_name,
+            division_name,
             emp.section.name if emp.section else '',
             emp.unit.name if emp.unit else '',
+            
+            # Employment Details
+            emp.employee_type.value.replace('_', ' ').title() if emp.employee_type else '',
+            _format_schedule_display(emp.schedule_format) if emp.schedule_format else '',
+            emp.hiring_date.strftime('%Y-%m-%d') if emp.hiring_date else '',
+            years_service,
+            
+            # Job Information
             emp.job_title or '',
             emp.rank or '',
-            emp.employee_type.value.replace('_', ' ').title() if emp.employee_type else '',
-            emp.id_number or '',
-            years_service,
-            emp.contact_number or '',
-            emp.email,
             emp.personnel_number or '',
-            emp.div_department or ''
+            emp.id_number or '',
+            emp.typecode or '',
+            emp.div_department or '',
+            
+            # Contact Information
+            emp.contact_number or '',
+            
+            # Approver Status
+            'TRUE' if getattr(emp, 'is_department_approver', False) else 'FALSE',
+            'TRUE' if getattr(emp, 'is_division_approver', False) else 'FALSE',
+            'TRUE' if emp.is_section_approver else 'FALSE',
+            'TRUE' if emp.is_unit_approver else 'FALSE',
+            
+            # System Information
+            'TRUE' if emp.signature else 'FALSE',
+            'TRUE' if (emp.avatar and emp.avatar != 'default_avatar.png') else 'FALSE',
+            emp.created_at.strftime('%Y-%m-%d %H:%M') if hasattr(emp, 'created_at') and emp.created_at else '',
+            ''  # Last Updated - could be added if you track this
         ])
     
     # Create response
@@ -1449,7 +1517,7 @@ def export_employee_database():
 @login_required
 @admin_required
 def import_employee_database():
-    """Import employee database from CSV - Admin only"""
+    """Import employee database from CSV with enhanced field support - Admin only"""
     if request.method == 'GET':
         sections = Section.query.all()
         units = Unit.query.all()
@@ -1463,33 +1531,21 @@ def import_employee_database():
                              divisions=divisions)
     
     # POST request - handle file upload
-    print("DEBUG: POST request received")
-    print("DEBUG: request.files keys:", list(request.files.keys()))
-    print("DEBUG: request.form keys:", list(request.form.keys()))
-    
     try:
         # Check if file was uploaded
         if 'csv_file' not in request.files:
-            print("DEBUG: 'csv_file' not found in request.files")
             flash('No file selected. Please choose a CSV file.', 'danger')
             return redirect(url_for('admin.import_employee_database'))
         
         file = request.files['csv_file']
-        print("DEBUG: file object:", file)
-        print("DEBUG: file.filename:", repr(file.filename))
-        print("DEBUG: file.content_type:", getattr(file, 'content_type', 'No content_type'))
         
         if not file or file.filename == '' or file.filename is None:
-            print("DEBUG: File is empty or filename is empty")
             flash('No file selected. Please choose a CSV file.', 'danger')
             return redirect(url_for('admin.import_employee_database'))
         
         if not file.filename.lower().endswith('.csv'):
-            print("DEBUG: File is not CSV:", file.filename)
             flash('Invalid file type. Please upload a CSV file.', 'danger')
             return redirect(url_for('admin.import_employee_database'))
-        
-        print("DEBUG: File validation passed, proceeding with import...")
         
         # Read and process CSV
         import csv
@@ -1506,13 +1562,13 @@ def import_employee_database():
         error_count = 0
         errors = []
         
-        # Get sections and units for lookup
+        # Get lookup dictionaries for hierarchy
         sections_dict = {s.name: s.id for s in Section.query.all()}
         units_dict = {u.name: u.id for u in Unit.query.all()}
         departments_dict = {d.name: d.id for d in Department.query.all()} if Department else {}
         divisions_dict = {d.name: d.id for d in Division.query.all()} if Division else {}
 
-        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 because row 1 is header
+        for row_num, row in enumerate(csv_reader, start=2):
             try:
                 # Required fields
                 username = row.get('Username', '').strip()
@@ -1538,47 +1594,53 @@ def import_employee_database():
                     # Create new user
                     user = User()
                     # Set default password for new users
-                    user.set_password('password123')  # They should change this on first login
+                    user.set_password('password123')
                     imported_count += 1
                 
-                # Update user fields
+                # Update basic user fields
                 user.username = username
                 user.email = email
                 user.first_name = first_name
                 user.last_name = last_name
                 
-                # Optional fields
-                user.personnel_number = row.get('Personnel Number', '').strip() or None
-                user.div_department = row.get('Division/Department', '').strip() or None
-                user.id_number = row.get('ID Number', '').strip() or None
-                user.job_title = row.get('Job Title', '').strip() or None
-                user.rank = row.get('Rank', '').strip() or None
-                user.contact_number = row.get('Contact Number', '').strip() or None
+                # Handle role
+                role_value = row.get('Role', '').strip().lower()
+                if role_value:
+                    try:
+                        user.role = UserRole(role_value)
+                    except ValueError:
+                        user.role = UserRole.EMPLOYEE  # Default
+                elif not existing_user:
+                    user.role = UserRole.EMPLOYEE  # Default for new users
                 
+                # Handle status
+                status_value = row.get('Status', '').strip().lower()
+                if status_value:
+                    user.is_active = status_value in ['active', 'true', '1', 'yes']
+                elif not existing_user:
+                    user.is_active = True  # Default for new users
+                
+                # Handle 4-level hierarchy
                 department_name = row.get('Department', '').strip()
                 if department_name and department_name in departments_dict:
                     if hasattr(user, 'department_id'):
                         user.department_id = departments_dict[department_name]
-                elif department_name:
+                elif department_name and Department:
                     errors.append(f"Row {row_num}: Department '{department_name}' not found")
                 
-                # Handle division
                 division_name = row.get('Division', '').strip()
                 if division_name and division_name in divisions_dict:
                     if hasattr(user, 'division_id'):
                         user.division_id = divisions_dict[division_name]
-                elif division_name:
+                elif division_name and Division:
                     errors.append(f"Row {row_num}: Division '{division_name}' not found")
 
-                
-                # Handle section
                 section_name = row.get('Section', '').strip()
                 if section_name and section_name in sections_dict:
                     user.section_id = sections_dict[section_name]
                 elif section_name:
                     errors.append(f"Row {row_num}: Section '{section_name}' not found")
                 
-                # Handle unit
                 unit_name = row.get('Unit', '').strip()
                 if unit_name and unit_name in units_dict:
                     user.unit_id = units_dict[unit_name]
@@ -1590,10 +1652,38 @@ def import_employee_database():
                 if emp_type_str:
                     try:
                         # Convert display name back to enum value
-                        emp_type_value = emp_type_str.lower().replace(' ', '_')
+                        emp_type_value = emp_type_str.lower().replace(' ', '_').replace('(', '').replace(')', '')
+                        if emp_type_value == 'rank_and_file_probationary':
+                            emp_type_value = 'rank_and_file_probationary'
+                        elif emp_type_value == 'confidential_probationary':
+                            emp_type_value = 'confidential_probationary'
                         user.employee_type = EmployeeType(emp_type_value)
                     except ValueError:
                         errors.append(f"Row {row_num}: Invalid employee type '{emp_type_str}'")
+                
+                # Handle schedule format
+                schedule_format_str = row.get('Schedule Format', '').strip()
+                if schedule_format_str:
+                    try:
+                        # Map display values to enum values
+                        format_mapping = {
+                            '8-hour shift': '8_hour_shift',
+                            '8 hour shift': '8_hour_shift',
+                            '8_hour_shift': '8_hour_shift',
+                            '9-hour shift': '9_hour_shift',
+                            '9 hour shift': '9_hour_shift',
+                            '9_hour_shift': '9_hour_shift',
+                            'others': 'others',
+                            'other': 'others'
+                        }
+                        
+                        schedule_format_key = schedule_format_str.lower()
+                        if schedule_format_key in format_mapping:
+                            user.schedule_format = ScheduleFormat(format_mapping[schedule_format_key])
+                        else:
+                            user.schedule_format = ScheduleFormat(schedule_format_str)
+                    except ValueError:
+                        errors.append(f"Row {row_num}: Invalid schedule format '{schedule_format_str}'. Valid options: 8-hour shift, 9-hour shift, others")
                 
                 # Handle hiring date
                 date_hired_str = row.get('Date Hired', '').strip()
@@ -1606,9 +1696,53 @@ def import_employee_database():
                         except ValueError:
                             errors.append(f"Row {row_num}: Invalid date format '{date_hired_str}' (use YYYY-MM-DD or MM/DD/YYYY)")
                 
-                # Set default role if new user
-                if not existing_user:
-                    user.role = UserRole.EMPLOYEE
+                # Handle job information
+                user.job_title = row.get('Job Title', '').strip() or None
+                user.rank = row.get('Rank', '').strip() or None
+                user.personnel_number = row.get('Personnel Number', '').strip() or None
+                user.id_number = row.get('ID Number', '').strip() or None
+                user.typecode = row.get('Type Code', '').strip() or None
+                user.div_department = row.get('Div/Dept', '').strip() or None
+                
+                # Handle contact information
+                user.contact_number = row.get('Contact Number', '').strip() or None
+                
+                # Handle approver status
+                def parse_boolean(value):
+                    if not value:
+                        return False
+                    return str(value).strip().lower() in ['true', '1', 'yes', 'on']
+                
+                # Validate approver assignments
+                is_department_approver = parse_boolean(row.get('Is Department Approver', ''))
+                is_division_approver = parse_boolean(row.get('Is Division Approver', ''))
+                is_section_approver = parse_boolean(row.get('Is Section Approver', ''))
+                is_unit_approver = parse_boolean(row.get('Is Unit Approver', ''))
+                
+                # Validation for approver permissions
+                if is_department_approver and not getattr(user, 'department_id', None):
+                    errors.append(f"Row {row_num}: Department approver requires department assignment")
+                    is_department_approver = False
+                
+                if is_division_approver and not getattr(user, 'division_id', None):
+                    errors.append(f"Row {row_num}: Division approver requires division assignment")
+                    is_division_approver = False
+                
+                if is_section_approver and not user.section_id:
+                    errors.append(f"Row {row_num}: Section approver requires section assignment")
+                    is_section_approver = False
+                
+                if is_unit_approver and not user.unit_id:
+                    errors.append(f"Row {row_num}: Unit approver requires unit assignment")
+                    is_unit_approver = False
+                
+                # Set approver status
+                if hasattr(user, 'is_department_approver'):
+                    user.is_department_approver = is_department_approver
+                if hasattr(user, 'is_division_approver'):
+                    user.is_division_approver = is_division_approver
+                user.is_section_approver = is_section_approver
+                user.is_unit_approver = is_unit_approver
                 
                 db.session.add(user)
                 
@@ -1636,7 +1770,6 @@ def import_employee_database():
             flash('No valid data found in the CSV file.', 'warning')
         
     except Exception as e:
-        print("DEBUG: Exception occurred:", str(e))
         db.session.rollback()
         flash(f'Error processing CSV file: {str(e)}', 'danger')
         current_app.logger.error(f"CSV import error: {str(e)}")
@@ -1647,7 +1780,7 @@ def import_employee_database():
 @login_required
 @admin_required
 def download_employee_template():
-    """Download CSV template for employee import"""
+    """Download enhanced CSV template for employee import"""
     import io
     import csv
     from flask import make_response
@@ -1655,40 +1788,123 @@ def download_employee_template():
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write header with departments and divisions
+    # Write comprehensive header with all available fields
     writer.writerow([
-        'Username', 'Email Address', 'First Name', 'Last Name', 'Date Hired',
-        'Department', 'Division', 'Section', 'Unit', 'Job Title', 'Rank', 
-        'Employee Type', 'ID Number', 'Contact Number', 'Personnel Number', 
-        'Division/Department'
+        # Required Fields
+        'Username', 'Email Address', 'First Name', 'Last Name',
+        
+        # System Fields
+        'Role', 'Status',
+        
+        # 4-Level Hierarchy
+        'Department', 'Division', 'Section', 'Unit',
+        
+        # Employment Details
+        'Employee Type', 'Schedule Format', 'Date Hired',
+        
+        # Job Information
+        'Job Title', 'Rank', 'Personnel Number', 'ID Number', 'Type Code', 'Div/Dept',
+        
+        # Contact Information
+        'Contact Number',
+        
+        # Approver Status
+        'Is Department Approver', 'Is Division Approver', 'Is Section Approver', 'Is Unit Approver'
     ])
     
-    # Write sample data
+    # Write sample data with examples of all field types
     writer.writerow([
-        'hgspecter', 'hgspecter@email.com', 'Harvey', 'Specter', '2023-01-15',
-        'Post Production', 'TMSSD', 'IT Solutions and Data Center Operations', 'IT Infrastructure', 
-        'IT Specialist', 'B2', 'confidential', '001D', 
-        '+639101234567', '1289000', 'TMSSD/POST'
+        # Required Fields
+        'hgspecter', 'hgspecter@email.com', 'Harvey', 'Specter',
+        
+        # System Fields
+        'employee', 'Active',
+        
+        # 4-Level Hierarchy
+        'Post Production', 'TMSSD', 'IT Solutions and Data Center Operations', 'IT Infrastructure',
+        
+        # Employment Details
+        'confidential', '8_hour_shift', '2023-01-15',
+        
+        # Job Information
+        'IT Specialist', 'B2', '1289000', '001D', 'TC001', 'TMSSD/POST',
+        
+        # Contact Information
+        '+639101234567',
+        
+        # Approver Status
+        'FALSE', 'FALSE', 'TRUE', 'FALSE'
+    ])
+    
+    writer.writerow([
+        # Required Fields
+        'ymhanna', 'ymhanna@email.com', 'Yuna', 'Hanna',
+        
+        # System Fields
+        'employee', 'Active',
+        
+        # 4-Level Hierarchy
+        'Post Production', 'Operations Division', 'Video Editing', '',
+        
+        # Employment Details
+        'rank_and_file', '9_hour_shift', '2022-06-01',
+        
+        # Job Information
+        'Video Editor 3', 'C1', '1290001', '002E', 'TC002', 'OPS/POST',
+        
+        # Contact Information
+        '+639187654321',
+        
+        # Approver Status
+        'FALSE', 'FALSE', 'FALSE', 'FALSE'
+    ])
+    
+    writer.writerow([
+        # Required Fields
+        'jmanager', 'jmanager@email.com', 'Jane', 'Manager',
+        
+        # System Fields
+        'manager', 'Active',
+        
+        # 4-Level Hierarchy
+        'Post Production', 'TMSSD', 'IT Solutions and Data Center Operations', '',
+        
+        # Employment Details
+        'confidential', 'others', '2020-03-15',
+        
+        # Job Information
+        'Section Manager', 'A1', '1288000', '003M', 'TC003', 'TMSSD/POST',
+        
+        # Contact Information
+        '+639201234567',
+        
+        # Approver Status
+        'FALSE', 'TRUE', 'TRUE', 'FALSE'
     ])
     
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-    response.headers['Content-Disposition'] = 'attachment; filename=employee_import_template.csv'
+    response.headers['Content-Disposition'] = 'attachment; filename=employee_import_template_enhanced.csv'
     
     return response
 
 @bp.route('/api/employees/filter')
 @login_required
 def filter_employees():
-    """API endpoint for filtering employees"""
+    """Enhanced API endpoint for filtering employees with all new fields"""
     # Check permissions
     if not (current_user.can_approve_leaves() or current_user.can_edit_schedule()):
         return jsonify({'error': 'Access denied'}), 403
     
     # Get filter parameters
+    department_id = request.args.get('department_id', type=int)
+    division_id = request.args.get('division_id', type=int)
     section_id = request.args.get('section_id', type=int)
     unit_id = request.args.get('unit_id', type=int)
     employee_type = request.args.get('employee_type')
+    schedule_format = request.args.get('schedule_format')
+    role = request.args.get('role')
+    status = request.args.get('status')
     search_term = request.args.get('search', '').strip()
     
     # Start with base query based on user's access
@@ -1699,13 +1915,20 @@ def filter_employees():
         employee_ids = [emp.id for emp in approvable_employees]
         query = User.query.filter(User.id.in_(employee_ids), User.is_active == True)
     
-    # Apply filters
+    # Apply hierarchy filters
+    if department_id and hasattr(User, 'department_id'):
+        query = query.filter_by(department_id=department_id)
+    
+    if division_id and hasattr(User, 'division_id'):
+        query = query.filter_by(division_id=division_id)
+    
     if section_id:
         query = query.filter_by(section_id=section_id)
     
     if unit_id:
         query = query.filter_by(unit_id=unit_id)
     
+    # Apply other filters
     if employee_type:
         try:
             emp_type_enum = EmployeeType(employee_type)
@@ -1713,21 +1936,44 @@ def filter_employees():
         except ValueError:
             pass
     
+    if schedule_format:
+        try:
+            schedule_enum = ScheduleFormat(schedule_format)
+            query = query.filter_by(schedule_format=schedule_enum)
+        except ValueError:
+            pass
+    
+    if role:
+        try:
+            role_enum = UserRole(role)
+            query = query.filter_by(role=role_enum)
+        except ValueError:
+            pass
+    
+    if status:
+        is_active = status.lower() == 'active'
+        query = query.filter_by(is_active=is_active)
+    
     if search_term:
-        # Build search filter with safe field access
+        # Build comprehensive search filter
         search_filters = [
             User.first_name.ilike(f'%{search_term}%'),
             User.last_name.ilike(f'%{search_term}%'),
+            User.username.ilike(f'%{search_term}%'),
             User.email.ilike(f'%{search_term}%'),
         ]
         
-        # Add optional fields only if they exist
+        # Add optional fields safely
         if hasattr(User, 'job_title') and User.job_title is not None:
             search_filters.append(User.job_title.ilike(f'%{search_term}%'))
         if hasattr(User, 'personnel_number') and User.personnel_number is not None:
             search_filters.append(User.personnel_number.ilike(f'%{search_term}%'))
         if hasattr(User, 'id_number') and User.id_number is not None:
             search_filters.append(User.id_number.ilike(f'%{search_term}%'))
+        if hasattr(User, 'rank') and User.rank is not None:
+            search_filters.append(User.rank.ilike(f'%{search_term}%'))
+        if hasattr(User, 'typecode') and User.typecode is not None:
+            search_filters.append(User.typecode.ilike(f'%{search_term}%'))
             
         search_filter = db.or_(*search_filters)
         query = query.filter(search_filter)
@@ -1735,26 +1981,51 @@ def filter_employees():
     # Order by last name, first name
     employees = query.order_by(User.last_name, User.first_name).all()
     
-    # Convert to JSON
+    # Convert to JSON with all fields
     employee_data = []
     for emp in employees:
         employee_data.append({
             'id': emp.id,
+            'username': emp.username,
             'last_name': emp.last_name,
             'first_name': emp.first_name,
             'full_name': emp.full_name,
             'email': emp.email,
-            'hiring_date': emp.hiring_date.strftime('%Y-%m-%d') if emp.hiring_date else '',
+            'role': emp.role.value if emp.role else '',
+            'is_active': emp.is_active,
+            
+            # Hierarchy
+            'department': emp.department.name if hasattr(emp, 'department') and emp.department else '',
+            'division': emp.division.name if hasattr(emp, 'division') and emp.division else '',
             'section': emp.section.name if emp.section else '',
             'unit': emp.unit.name if emp.unit else '',
+            
+            # Employment details
+            'employee_type': emp.employee_type.value.replace('_', ' ').title() if emp.employee_type else '',
+            'schedule_format': emp.schedule_format.value.replace('_', ' ').title() if emp.schedule_format else '',
+            'hiring_date': emp.hiring_date.strftime('%Y-%m-%d') if emp.hiring_date else '',
+            'years_of_service': emp.years_of_service if emp.years_of_service is not None else 'N/A',
+            
+            # Job information
             'job_title': emp.job_title or '',
             'rank': emp.rank or '',
-            'employee_type': emp.employee_type.value.replace('_', ' ').title() if emp.employee_type else '',
-            'id_number': emp.id_number or '',
-            'years_of_service': emp.years_of_service if emp.years_of_service is not None else 'N/A',
-            'contact_number': getattr(emp, 'contact_number', '') or '',  # Safe access
             'personnel_number': emp.personnel_number or '',
-            'div_department': emp.div_department or ''
+            'id_number': emp.id_number or '',
+            'typecode': emp.typecode or '',
+            'div_department': emp.div_department or '',
+            
+            # Contact
+            'contact_number': getattr(emp, 'contact_number', '') or '',
+            
+            # Approver status
+            'is_department_approver': getattr(emp, 'is_department_approver', False),
+            'is_division_approver': getattr(emp, 'is_division_approver', False),
+            'is_section_approver': emp.is_section_approver,
+            'is_unit_approver': emp.is_unit_approver,
+            
+            # System information
+            'has_signature': bool(emp.signature),
+            'has_avatar': bool(emp.avatar and emp.avatar != 'default_avatar.png'),
         })
     
     return jsonify({
@@ -1762,6 +2033,8 @@ def filter_employees():
         'employees': employee_data,
         'total_count': len(employee_data)
     })
+
+# -------------- EXPORT DATA SECTION
 
 @bp.route('/sections/<int:section_id>/export')
 @login_required

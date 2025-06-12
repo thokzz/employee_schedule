@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from app.main import bp
 from app.models import User, Shift, Section, Unit, db, EmployeeType, ScheduleFormat
+from app.auth.two_factor import require_2fa_verification, require_complete_2fa, TwoFactorManager
 from datetime import datetime, timedelta, date
 import calendar
 import os
@@ -75,9 +76,46 @@ def require_2fa(f):
     
     return decorated_function
 
+@bp.before_request
+def check_2fa_status():
+    """Check 2FA status before processing requests"""
+    # Skip 2FA checks for auth routes and static files
+    if (request.endpoint and 
+        (request.endpoint.startswith('auth.') or 
+         request.endpoint.startswith('static') or
+         request.endpoint in ['main.auth_status', 'main.uploaded_signature', 'main.uploaded_avatar'])):
+        return
+    
+    # Skip for non-authenticated users
+    if not current_user.is_authenticated:
+        return
+    
+    # Check if this is a protected route
+    protected_endpoints = [
+        'main.dashboard', 'main.profile', 'main.update_profile', 
+        'main.update_employment_info', 'main.change_password'
+    ]
+    
+    if request.endpoint in protected_endpoints:
+        # Check authentication status
+        try:
+            status = TwoFactorManager.get_authentication_status(current_user)
+            
+            if not status['fully_authenticated']:
+                if status['next_action'] == 'setup_2fa':
+                    flash('Two-factor authentication setup is required.', 'warning')
+                    return redirect(url_for('auth.setup_2fa'))
+                elif status['next_action'] == 'verify_2fa':
+                    flash('Please complete two-factor authentication.', 'warning')
+                    return redirect(url_for('auth.verify_2fa'))
+        except (ImportError, AttributeError):
+            # 2FA not available yet
+            pass
+
 @bp.route('/')
 @bp.route('/dashboard')
 @login_required
+@require_2fa_verification  # ADD THIS LINE
 def dashboard():
     # Show 2FA status if relevant
     show_2fa_reminder = False
@@ -137,8 +175,46 @@ def dashboard():
 
 @bp.route('/profile')
 @login_required
+@require_2fa_verification
 def profile():
     return render_template('main/profile.html')
+
+@bp.route('/api/auth-status')
+@login_required
+def auth_status():
+    """API endpoint to check authentication status"""
+    try:
+        status = TwoFactorManager.get_authentication_status(current_user)
+        return jsonify(status)
+    except (ImportError, AttributeError):
+        # 2FA not available yet
+        return jsonify({
+            'authenticated': True,
+            'password_verified': True,
+            '2fa_required': False,
+            '2fa_verified': True,
+            'fully_authenticated': True,
+            'next_action': 'proceed'
+        })
+
+@bp.context_processor
+def inject_auth_status():
+    """Inject authentication status into all templates"""
+    if current_user.is_authenticated:
+        try:
+            status = TwoFactorManager.get_authentication_status(current_user)
+            return dict(auth_status=status)
+        except (ImportError, AttributeError):
+            # 2FA not available yet
+            return dict(auth_status={
+                'authenticated': True,
+                'password_verified': True,
+                '2fa_required': False,
+                '2fa_verified': True,
+                'fully_authenticated': True,
+                'next_action': 'proceed'
+            })
+    return dict(auth_status=None)
 
 def allowed_file(filename, allowed_extensions):
     """Check if file has allowed extension"""
@@ -172,8 +248,10 @@ def save_uploaded_file(file, upload_folder, prefix="", allowed_extensions={'png'
         current_app.logger.error(f"Error saving file: {str(e)}")
         return None
 
+
 @bp.route('/profile/update', methods=['POST'])
 @login_required
+@require_2fa_verification  # ADD THIS LINE
 def update_profile():
     try:
         current_user.first_name = request.form['first_name']
@@ -244,6 +322,7 @@ def update_profile():
 
 @bp.route('/profile/employment', methods=['POST'])
 @login_required
+@require_2fa_verification  # ADD THIS LINE
 def update_employment_info():
     try:
         current_user.personnel_number = request.form.get('personnel_number') or None
@@ -294,6 +373,7 @@ def update_employment_info():
 
 @bp.route('/profile/password', methods=['POST'])
 @login_required
+@require_2fa_verification  # ADD THIS LINE
 def change_password():
     try:
         current_password = request.form['current_password']
@@ -326,6 +406,7 @@ def change_password():
         current_app.logger.error(f"Password change error: {str(e)}")
     
     return redirect(url_for('main.profile'))
+
 
 @bp.route('/signature/<filename>')
 @login_required

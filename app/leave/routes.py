@@ -15,34 +15,37 @@ def get_user_approver(user):
     """Get the designated approver for a user based on their section/unit"""
     approver = None
     
-    # First, try to find a section approver
+    # First, try to find a section approver (but EXCLUDE the user themselves)
     if user.section_id:
         section_approver = User.query.filter(
             User.section_id == user.section_id,
             User.is_section_approver == True,
-            User.is_active == True
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if section_approver:
             approver = section_approver
     
-    # If no section approver, try unit approver
+    # If no section approver, try unit approver (but EXCLUDE the user themselves)
     if not approver and user.unit_id:
         unit_approver = User.query.filter(
             User.unit_id == user.unit_id,
             User.is_unit_approver == True,
-            User.is_active == True
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if unit_approver:
             approver = unit_approver
     
-    # If still no approver, try to find a manager in the same section (EXCLUDE ADMINISTRATOR)
+    # If still no approver, try to find a manager in the same section (but EXCLUDE the user themselves)
     if not approver and user.section_id:
         manager_approver = User.query.filter(
             User.section_id == user.section_id,
-            User.role == UserRole.MANAGER,  # CHANGED: Only MANAGER, not ADMINISTRATOR
-            User.is_active == True
+            User.role == UserRole.MANAGER,
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if manager_approver:
@@ -50,24 +53,263 @@ def get_user_approver(user):
     
     return approver
 
+# REPLACE the entire get_available_approvers_for_user function in app/leave/routes.py with this:
+
+def get_available_approvers_for_user(user):
+    """Get all available approvers for a specific user based on their section/unit
+    EXCLUDES administrators who are not part of the same section/unit"""
+    print(f"DEBUG LEAVE: Finding approvers for user {user.full_name}")
+    print(f"DEBUG LEAVE: User section_id: {user.section_id}, unit_id: {user.unit_id}")
+    
+    available_approvers = []
+    
+    # Get approvers from the same section
+    if user.section_id:
+        print(f"DEBUG LEAVE: Searching for section approvers in section {user.section_id}")
+        section_approvers = User.query.filter(
+            User.section_id == user.section_id,
+            db.or_(
+                User.is_section_approver == True,
+                db.and_(
+                    User.role == UserRole.MANAGER,
+                    User.section_id == user.section_id  # Only managers in same section
+                ),
+                db.and_(
+                    User.role == UserRole.ADMINISTRATOR,
+                    User.section_id == user.section_id,  # Only admins in same section
+                    User.email != 'post_it@gmanetwork.com'  # Exclude global admin from section filtering
+                )
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG LEAVE: Found {len(section_approvers)} section approvers: {[a.full_name for a in section_approvers]}")
+        available_approvers.extend(section_approvers)
+    
+    # Get approvers from the same unit (if different from section)
+    if user.unit_id:
+        print(f"DEBUG LEAVE: Searching for unit approvers in unit {user.unit_id}")
+        unit_approvers = User.query.filter(
+            User.unit_id == user.unit_id,
+            db.or_(
+                User.is_unit_approver == True,
+                db.and_(
+                    User.role == UserRole.MANAGER,
+                    User.unit_id == user.unit_id  # Only managers in same unit
+                ),
+                db.and_(
+                    User.role == UserRole.ADMINISTRATOR,
+                    User.unit_id == user.unit_id,  # Only admins in same unit
+                    User.email != 'post_it@gmanetwork.com'  # Exclude global admin from unit filtering
+                )
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG LEAVE: Found {len(unit_approvers)} unit approvers: {[a.full_name for a in unit_approvers]}")
+        
+        # Add unit approvers that aren't already in the list
+        for approver in unit_approvers:
+            if approver not in available_approvers:
+                available_approvers.append(approver)
+    
+    # ALWAYS include the global admin (post_it@gmanetwork.com) as an option
+    global_admin = User.query.filter(
+        User.email == 'post_it@gmanetwork.com',
+        User.role == UserRole.ADMINISTRATOR,
+        User.is_active == True,
+        User.id != user.id
+    ).first()
+    
+    if global_admin and global_admin not in available_approvers:
+        available_approvers.append(global_admin)
+        print(f"DEBUG LEAVE: Added global admin: {global_admin.full_name}")
+    
+    # Remove duplicates and sort by name
+    unique_approvers = list(set(available_approvers))
+    unique_approvers.sort(key=lambda x: x.full_name)
+    
+    print(f"DEBUG LEAVE: Final unique leave approvers: {[a.full_name for a in unique_approvers]}")
+    return unique_approvers
+
+
+def format_leave_dates_for_filename(start_date_str):
+    """Convert leave dates to filename format (JAN1, FEB2, etc.)"""
+    if not start_date_str:
+        return ''
+    
+    from datetime import datetime
+    import re
+    
+    # Handle multiple dates separated by commas or multiple lines
+    if ',' in start_date_str or '\n' in start_date_str:
+        # Multiple dates case
+        # Split by commas or newlines
+        date_parts = re.split(r'[,\n]', start_date_str)
+        date_parts = [part.strip() for part in date_parts if part.strip()]
+        
+        # Remove any (1), (2), (3) markers
+        cleaned_parts = []
+        for part in date_parts:
+            cleaned = re.sub(r'\(\d+\)', '', part).strip()
+            if cleaned:
+                cleaned_parts.append(cleaned)
+        
+        formatted_dates = []
+        
+        for date_part in cleaned_parts:
+            try:
+                # Try to parse the date
+                for fmt in ['%m/%d/%Y', '%Y-%m-%d', '%B %d, %Y', '%b %d, %Y']:
+                    try:
+                        parsed_date = datetime.strptime(date_part, fmt)
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    continue
+                
+                # Get month abbreviation and day
+                month_abbr = parsed_date.strftime('%b').upper()  # JAN, FEB, etc.
+                formatted_date = f"{month_abbr}{parsed_date.day}"
+                formatted_dates.append(formatted_date)
+                
+            except Exception:
+                continue
+        
+        return ','.join(formatted_dates)
+    
+    else:
+        # Single date case - this is what your database has
+        try:
+            # Parse single date in MM/dd/yyyy format
+            parsed_date = datetime.strptime(start_date_str.strip(), '%m/%d/%Y')
+            
+            # Get month abbreviation and day
+            month_abbr = parsed_date.strftime('%b').upper()  # JAN, FEB, etc.
+            day = parsed_date.day
+            
+            return f"{month_abbr}{day}"
+            
+        except ValueError:
+            # Try other formats as fallback
+            for fmt in ['%Y-%m-%d', '%B %d, %Y', '%b %d, %Y']:
+                try:
+                    parsed_date = datetime.strptime(start_date_str.strip(), fmt)
+                    month_abbr = parsed_date.strftime('%b').upper()
+                    day = parsed_date.day
+                    return f"{month_abbr}{day}"
+                except ValueError:
+                    continue
+            
+            # If all parsing fails, return empty string
+            return ''
+
+def get_leave_type_abbreviation(leave_type):
+    """Get abbreviation for leave type"""
+    leave_type_mapping = {
+        'SICK_LEAVE': 'SL',
+        'PERSONAL_LEAVE': 'PL', 
+        'EMERGENCY_LEAVE': 'EL',
+        'ANNUAL_VACATION': 'AVL',
+        'BEREAVEMENT_LEAVE': 'BL',
+        'PATERNITY_LEAVE': 'PatL',
+        'MATERNITY_LEAVE': 'MatL',
+        'UNION_LEAVE': 'UL',
+        'FIRE_CALAMITY_LEAVE': 'FCL',
+        'SOLO_PARENT_LEAVE': 'SPL',
+        'SPECIAL_LEAVE_WOMEN': 'SLW',
+        'VAWC_LEAVE': 'VAWC',
+        'OTHER': 'OFFSET'
+    }
+    
+    # Handle enum values
+    if hasattr(leave_type, 'value'):
+        leave_type_str = leave_type.value
+    else:
+        leave_type_str = str(leave_type)
+    
+    return leave_type_mapping.get(leave_type_str, 'OFFSET')
+
+def format_work_extension_date_for_filename(extension_date):
+    """Format work extension date for filename (JAN1, FEB2, etc.)"""
+    if not extension_date:
+        return ''
+    
+    try:
+        # Get month abbreviation and day
+        month_abbr = extension_date.strftime('%b').upper()  # JAN, FEB, etc.
+        day = extension_date.day
+        return f"{month_abbr}{day}"
+    except Exception:
+        return ''
+
+
+# ----- TEMPORARY DEBUG FOR APPROVER SELECTION
+
+def get_available_approvers_for_user(user):
+    """Get all available approvers for a specific user based on their section/unit"""
+    print(f"DEBUG: Finding approvers for user {user.full_name}")
+    print(f"DEBUG: User section_id: {user.section_id}, unit_id: {user.unit_id}")
+    
+    available_approvers = []
+    
+    # Get approvers from the same section
+    if user.section_id:
+        print(f"DEBUG: Searching for section approvers in section {user.section_id}")
+        section_approvers = User.query.filter(
+            User.section_id == user.section_id,
+            db.or_(
+                User.is_section_approver == True,
+                User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR])
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG: Found {len(section_approvers)} section approvers: {[a.full_name for a in section_approvers]}")
+        available_approvers.extend(section_approvers)
+    
+    # Get approvers from the same unit (if different from section)
+    if user.unit_id:
+        print(f"DEBUG: Searching for unit approvers in unit {user.unit_id}")
+        unit_approvers = User.query.filter(
+            User.unit_id == user.unit_id,
+            db.or_(
+                User.is_unit_approver == True,
+                User.role.in_([UserRole.MANAGER, UserRole.ADMINISTRATOR])
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG: Found {len(unit_approvers)} unit approvers: {[a.full_name for a in unit_approvers]}")
+        
+        # Add unit approvers that aren't already in the list
+        for approver in unit_approvers:
+            if approver not in available_approvers:
+                available_approvers.append(approver)
+    
+    
+    # Remove duplicates and sort by name
+    unique_approvers = list(set(available_approvers))
+    unique_approvers.sort(key=lambda x: x.full_name)
+    
+    print(f"DEBUG: Final unique approvers: {[a.full_name for a in unique_approvers]}")
+    return unique_approvers
 
 @bp.route('/')
 @bp.route('/request')
 @login_required
 def request_leave():
     """Display leave request form"""
+    print(f"DEBUG: Current user: {current_user.full_name}")
+    
     # Get the designated approver for current user
     approver = get_user_approver(current_user)
+    print(f"DEBUG: Designated approver: {approver.full_name if approver else 'None'}")
     
-    # Get all available approvers as fallback (EXCLUDE ADMINISTRATOR)
-    available_approvers = User.query.filter(
-        db.or_(
-            User.is_section_approver == True,
-            User.is_unit_approver == True,
-            User.role == UserRole.MANAGER  # CHANGED: Only MANAGER, not ADMINISTRATOR
-        ),
-        User.is_active == True
-    ).all()
+    # Get all available approvers for this specific user
+    available_approvers = get_available_approvers_for_user(current_user)
+    print(f"DEBUG: Available approvers count: {len(available_approvers)}")
     
     # Get approved work extensions for confidential employees
     approved_work_extensions = []
@@ -291,7 +533,7 @@ def get_application(app_id):
 @bp.route('/api/application/<int:app_id>/download-pdf')
 @login_required
 def download_application_pdf(app_id):
-    """Download leave application as PDF in ALAF format"""
+    """Download leave application as PDF in ALAF format with new filename"""
     try:
         application = LeaveApplication.query.get(app_id)
         if not application:
@@ -309,15 +551,40 @@ def download_application_pdf(app_id):
         # Convert HTML to PDF using wkhtmltopdf
         pdf_data = html_to_pdf(html_content)
         
+        # Get employee information - use username
+        employee = User.query.get(application.employee_id)
+        username = employee.username or employee.id_number or f"USER{employee.id}"
+        username = username.upper().replace(' ', '')  # Remove spaces and make uppercase
+        
+        # Format leave dates for filename
+        formatted_dates = format_leave_dates_for_filename(application.start_date)
+        
+        # Get leave type abbreviation
+        leave_abbr = get_leave_type_abbreviation(application.leave_type)
+        
+        # Build filename components
+        filename_parts = [
+            'ALAF',
+            username,
+            formatted_dates,
+            leave_abbr,
+            application.reference_code
+        ]
+        
+        # Remove empty parts and join
+        filename_parts = [part for part in filename_parts if part]
+        filename = '_'.join(filename_parts) + '.pdf'
+        
         # Create response
         response = make_response(pdf_data)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=ALAF_{application.reference_code}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
         
         return response
         
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error generating PDF: {str(e)}'}), 500
+
 
 @bp.route('/api/approve/<int:app_id>', methods=['POST'])
 @login_required
@@ -587,8 +854,6 @@ def create_populated_alaf_html(application):
     reason_1 = reason_lines[0][:60] if len(reason_lines) > 0 else ''
     reason_2 = reason_lines[1][:60] if len(reason_lines) > 1 else ''
     reason_3 = reason_lines[2][:60] if len(reason_lines) > 2 else ''
-    reason_4 = reason_lines[3][:60] if len(reason_lines) > 3 else ''
-    reason_5 = reason_lines[4][:60] if len(reason_lines) > 4 else ''
     
     # If reason is one long line, split it into chunks
     if len(reason_lines) == 1 and len(reason_lines[0]) > 60:
@@ -596,8 +861,6 @@ def create_populated_alaf_html(application):
         reason_1 = full_reason[:60]
         reason_2 = full_reason[60:120] if len(full_reason) > 60 else ''
         reason_3 = full_reason[120:180] if len(full_reason) > 120 else ''
-        reason_4 = full_reason[180:240] if len(full_reason) > 180 else ''
-        reason_5 = full_reason[240:300] if len(full_reason) > 240 else ''
     
     # Clean the leave dates
     cleaned_leave_dates = clean_leave_dates(application.start_date)
@@ -867,11 +1130,8 @@ def create_populated_alaf_html(application):
                 <div class="details-line">{reason_1}</div>
                 <div class="details-line">{reason_2}</div>
                 <div class="details-line">{reason_3}</div>
-                <div class="details-line">{reason_4}</div>
-                <div class="details-line">{reason_5}</div>
                 <div class="label">I can be contacted at:</div>
                 <div class="details-line">{application.employee_contact or ''}</div>
-                <div class="details-line"></div>
             </div>
         </div>
 
@@ -946,24 +1206,40 @@ def create_populated_alaf_html(application):
 
 # Enhanced routes.py - Add work extension download functionality
 
-# Add this new route to your routes.py file
 @bp.route('/api/work-extension/<int:extension_id>/download')
 @login_required
 def download_work_extension(extension_id):
-    """Download work extension document/PDF"""
+    """Download work extension document/PDF with new filename format"""
     try:
         extension = WorkExtension.query.get(extension_id)
         if not extension:
             return jsonify({'success': False, 'error': 'Work extension not found'}), 404
         
-        # Check permissions - only allow downloading if:
-        # 1. Current user is the employee who filed the extension
-        # 2. Current user is an approver for the employee
-        # 3. Current user is viewing a leave application that references this extension
+        # Check permissions
         if (extension.employee_id != current_user.id and 
             not current_user.can_approve_leaves() and 
             not current_user.can_admin()):
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        # Get employee information - use username
+        employee = User.query.get(extension.employee_id)
+        username = employee.username or employee.id_number or f"USER{employee.id}"
+        username = username.upper().replace(' ', '')  # Remove spaces and make uppercase
+        
+        # Format extension date for filename
+        formatted_date = format_work_extension_date_for_filename(extension.extension_date)
+        
+        # Build filename: WORKEXTENSION_USERNAME_DATE_REFERENCECODE
+        filename_parts = [
+            'WORKEXTENSION',
+            username,
+            formatted_date,
+            extension.reference_code
+        ]
+        
+        # Remove empty parts and join
+        filename_parts = [part for part in filename_parts if part]
+        filename = '_'.join(filename_parts) + '.pdf'
         
         # If the work extension has an attached file
         if hasattr(extension, 'document_path') and extension.document_path:
@@ -972,8 +1248,7 @@ def download_work_extension(extension_id):
             
             file_path = os.path.join(current_app.instance_path, 'uploads', 'work_extensions', extension.document_path)
             if os.path.exists(file_path):
-                return send_file(file_path, as_attachment=True, 
-                               download_name=f"WorkExtension_{extension.reference_code}.pdf")
+                return send_file(file_path, as_attachment=True, download_name=filename)
         
         # If no file is attached, generate a PDF summary of the work extension
         html_content = create_work_extension_summary_html(extension)
@@ -981,12 +1256,13 @@ def download_work_extension(extension_id):
         
         response = make_response(pdf_data)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=WorkExtension_{extension.reference_code}_Summary.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
         
         return response
         
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error downloading work extension: {str(e)}'}), 500
+
 
 @bp.route('/api/leave-application/<int:app_id>/work-extensions')
 @login_required
@@ -1367,3 +1643,51 @@ def get_enhanced_application_details_js():
         }, 2000);
     }
     """;
+
+def get_updated_download_js():
+    """Return updated JavaScript for download functionality"""
+    return """
+    function downloadWorkExtension(extensionId) {
+        // Show loading state
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+        button.disabled = true;
+        
+        // Create a temporary link to trigger download
+        const link = document.createElement('a');
+        link.href = `/leave/api/work-extension/${extensionId}/download`;
+        // Note: The actual filename will be determined by the server
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Reset button state after a short delay
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+        }, 2000);
+    }
+    
+    function downloadALAF(applicationId) {
+        // Show loading state
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating PDF...';
+        button.disabled = true;
+        
+        // Create a temporary link to trigger download
+        const link = document.createElement('a');
+        link.href = `/leave/api/application/${applicationId}/download-pdf`;
+        // Note: The actual filename will be determined by the server
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Reset button state after a short delay
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.disabled = false;
+        }, 2000);
+    }
+    """

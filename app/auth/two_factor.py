@@ -8,6 +8,11 @@ import hashlib
 import hmac
 import time
 import re
+import pyotp
+import qrcode
+from io import BytesIO
+import base64
+import string
 
 class TwoFactorManager:
     """Manager class for 2FA operations with enhanced security"""
@@ -16,7 +21,7 @@ class TwoFactorManager:
     MAX_ATTEMPTS_PER_HOUR = 5
     MAX_CODE_REQUESTS_PER_HOUR = 3
     CODE_EXPIRY_MINUTES = 5  # Reduced from 10
-    SESSION_TIMEOUT_MINUTES = 30
+    SESSION_TIMEOUT_MINUTES = 480
     
     @staticmethod
     def is_2fa_required():
@@ -33,6 +38,16 @@ class TwoFactorManager:
         return settings.is_2fa_required_for_user(user)
     
     @staticmethod
+    def get_session_timeout():
+        """Get session timeout from app settings"""
+        try:
+            from app.models import AppSettings
+            settings = AppSettings.get_settings()
+            return settings.session_timeout_minutes
+        except:
+            return 480 #default to 8 hours
+    
+    @staticmethod
     def _get_session_fingerprint():
         """Generate session fingerprint for additional security"""
         user_agent = request.headers.get('User-Agent', '')
@@ -40,6 +55,15 @@ class TwoFactorManager:
         # Create a fingerprint without storing sensitive data
         fingerprint_data = f"{user_agent}{ip_address}"
         return hashlib.sha256(fingerprint_data.encode()).hexdigest()[:16]
+    
+    @staticmethod
+    def refresh_2fa_session(user_id):
+        """Refresh 2FA session if user is active"""
+        if session.get('2fa_verified') and session.get('2fa_user_id') == user_id:
+            # Update the verified timestamp
+            session['2fa_verified_at'] = datetime.utcnow().isoformat()
+            return True
+        return False
     
     @staticmethod
     def _is_session_valid(user_id):
@@ -61,7 +85,8 @@ class TwoFactorManager:
         
         try:
             verified_time = datetime.fromisoformat(verified_at)
-            expiry_time = verified_time + timedelta(minutes=TwoFactorManager.SESSION_TIMEOUT_MINUTES)
+            timeout_minutes = TwoFactorManager.get_session_timeout()
+            expiry_time = verified_time + timedelta(minutes=timeout_minutes)
             if datetime.utcnow() > expiry_time:
                 return False
         except (ValueError, TypeError):
@@ -321,6 +346,145 @@ class TwoFactorManager:
         except Exception as e:
             current_app.logger.error(f"Email sending failed: {e}")
             return False, "Failed to send email"
+
+    @staticmethod
+    def is_user_fully_authenticated(user):
+        """Check if user is fully authenticated (password + 2FA if required)"""
+        if not user or not user.is_authenticated:
+            return False
+        
+        # Check if 2FA is required
+        settings = TwoFactorSettings.get_settings()
+        if not settings.is_2fa_required_for_user(user):
+            return True  # 2FA not required
+        
+        # 2FA is required - check verification status
+        return TwoFactorManager._is_session_valid(user.id)
+    
+    @staticmethod
+    def get_authentication_status(user):
+        """Get detailed authentication status"""
+        if not user or not user.is_authenticated:
+            return {
+                'authenticated': False,
+                'password_verified': False,
+                '2fa_required': False,
+                '2fa_verified': False,
+                'fully_authenticated': False,
+                'next_action': 'login'
+            }
+        
+        settings = TwoFactorSettings.get_settings()
+        is_2fa_required = settings.is_2fa_required_for_user(user)
+        is_2fa_verified = TwoFactorManager._is_session_valid(user.id) if is_2fa_required else True
+        
+        status = {
+            'authenticated': True,
+            'password_verified': True,
+            '2fa_required': is_2fa_required,
+            '2fa_verified': is_2fa_verified,
+            'fully_authenticated': is_2fa_verified,
+            'next_action': 'proceed' if is_2fa_verified else ('verify_2fa' if is_2fa_required else 'proceed')
+        }
+        
+        # Check if setup is needed
+        if is_2fa_required and not user.is_2fa_enabled():
+            user_2fa = user.two_factor
+            if user_2fa and user_2fa.is_in_grace_period():
+                status['next_action'] = 'grace_period'
+            else:
+                status['next_action'] = 'setup_2fa'
+                status['fully_authenticated'] = False
+        
+        return status
+
+def require_2fa_verification(f):
+    """Decorator to require COMPLETE 2FA verification (not just setup)"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        
+        try:
+            # Check if 2FA is required for this user
+            settings = TwoFactorSettings.get_settings()
+            if not settings.is_2fa_required_for_user(current_user):
+                return f(*args, **kwargs)
+            
+            # Check 2FA status
+            status_check = TwoFactorManager.check_2fa_status(current_user)
+            
+            # Handle different 2FA states
+            if status_check['action'] == 'setup':
+                flash('You must complete two-factor authentication setup.', 'warning')
+                return redirect(url_for('auth.setup_2fa'))
+            
+            elif status_check['action'] == 'verify':
+                flash('Please complete two-factor authentication verification.', 'warning')
+                return redirect(url_for('auth.verify_2fa'))
+            
+            elif status_check['action'] == 'remind_setup':
+                # Show reminder but allow access during grace period
+                if not session.get('2fa_reminder_shown'):
+                    flash('Please set up two-factor authentication soon. Your grace period will expire.', 'info')
+                    session['2fa_reminder_shown'] = True
+                return f(*args, **kwargs)
+            
+            elif status_check['action'] == 'proceed':
+                # 2FA fully verified - allow access
+                return f(*args, **kwargs)
+            
+            else:
+                # Unknown state - redirect to verification
+                flash('Authentication verification required.', 'warning')
+                return redirect(url_for('auth.verify_2fa'))
+                
+        except Exception as e:
+            current_app.logger.error(f"2FA verification check failed: {e}")
+            flash('Authentication error. Please try again.', 'error')
+            return redirect(url_for('auth.login'))
+    
+    return decorated_function
+
+def require_complete_2fa(f):
+    """Stricter decorator - requires COMPLETE 2FA verification (no grace period)"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        
+        # Check if 2FA is required
+        settings = TwoFactorSettings.get_settings()
+        if not settings.is_2fa_required_for_user(current_user):
+            return f(*args, **kwargs)
+        
+        # Must have 2FA enabled
+        if not current_user.is_2fa_enabled():
+            flash('Two-factor authentication setup is required for this action.', 'error')
+            return redirect(url_for('auth.setup_2fa'))
+        
+        # Must be verified in current session
+        if not TwoFactorManager._is_session_valid(current_user.id):
+            flash('Two-factor authentication verification required.', 'warning')
+            return redirect(url_for('auth.verify_2fa'))
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+def csrf_exempt_for_2fa(f):
+    """Decorator to exempt 2FA routes from CSRF validation"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Store original CSRF validation function
+        if hasattr(request, '_csrf_exempt'):
+            return f(*args, **kwargs)
+        
+        # Mark this request as CSRF exempt
+        request._csrf_exempt = True
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 def require_2fa_setup(f):
     """Decorator to require 2FA setup before accessing protected routes"""
