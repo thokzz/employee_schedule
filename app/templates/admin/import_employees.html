@@ -1,5 +1,3 @@
-<!-- Fixed import_employees.html -->
-
 {% extends "base.html" %}
 
 {% block title %}Import Employees{% endblock %}
@@ -7,7 +5,7 @@
 {% block extra_css %}
 <style>
     .import-card {
-        max-width: 800px;
+        max-width: 900px;
         margin: 0 auto;
     }
     
@@ -78,7 +76,7 @@
     }
     
     .sample-table {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
     
     .requirements-list {
@@ -86,6 +84,24 @@
         border-left: 4px solid #6f42c1;
         padding: 1rem;
         margin: 1rem 0;
+    }
+    
+    .field-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+    
+    .field-category {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .field-category h6 {
+        color: #6f42c1;
+        margin-bottom: 0.5rem;
     }
 </style>
 {% endblock %}
@@ -145,7 +161,9 @@
                         <li><strong>Hierarchy:</strong> Department/Division/Section/Unit must exist in the system before import</li>
                         <li><strong>New Users:</strong> Will be created with default password "password123"</li>
                         <li><strong>Existing Users:</strong> Will be updated with new information</li>
-                        <li><strong>Hierarchy Rules:</strong> Users will be assigned to the 4-level hierarchy (Department → Division → Section → Unit)</li>        
+                        <li><strong>Employee Types:</strong> rank_and_file, rank_and_file_probationary, confidential, confidential_probationary, contractual</li>
+                        <li><strong>Schedule Formats:</strong> 8_hour_shift, 9_hour_shift, others (or display names: "8-hour shift", "9-hour shift", "Others")</li>
+                        <li><strong>Roles:</strong> employee, manager, administrator</li>
                     </ul>
                 </div>
 
@@ -157,17 +175,87 @@
                 </div>
             </div>
 
+            <!-- Field Categories -->
+            <div class="mb-4">
+                <h6>Available Fields by Category:</h6>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="field-category">
+                            <h6><i class="bi bi-person"></i> Required Fields</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-danger">Username*</span>
+                                <span class="badge bg-danger">Email Address*</span>
+                                <span class="badge bg-danger">First Name*</span>
+                                <span class="badge bg-danger">Last Name*</span>
+                            </div>
+                        </div>
+                        
+                        <div class="field-category">
+                            <h6><i class="bi bi-building"></i> Organizational Hierarchy</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-dark">Department</span>
+                                <span class="badge bg-warning text-dark">Division</span>
+                                <span class="badge bg-primary">Section</span>
+                                <span class="badge bg-info">Unit</span>
+                            </div>
+                        </div>
+                        
+                        <div class="field-category">
+                            <h6><i class="bi bi-briefcase"></i> Employment Information</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-secondary">Employee Type</span>
+                                <span class="badge bg-light text-dark">Schedule Format</span>
+                                <span class="badge bg-success">Date Hired</span>
+                                <span class="badge bg-secondary">Job Title</span>
+                                <span class="badge bg-secondary">Rank</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="field-category">
+                            <h6><i class="bi bi-card-text"></i> Identification</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-primary">Personnel Number</span>
+                                <span class="badge bg-info">ID Number</span>
+                                <span class="badge bg-secondary">Type Code</span>
+                                <span class="badge bg-light text-dark">Div/Dept</span>
+                            </div>
+                        </div>
+                        
+                        <div class="field-category">
+                            <h6><i class="bi bi-telephone"></i> Contact Information</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-success">Contact Number</span>
+                            </div>
+                        </div>
+                        
+                        <div class="field-category">
+                            <h6><i class="bi bi-shield-check"></i> System & Permissions</h6>
+                            <div class="field-grid">
+                                <span class="badge bg-warning text-dark">Role</span>
+                                <span class="badge bg-primary">Is Department Approver</span>
+                                <span class="badge bg-primary">Is Division Approver</span>
+                                <span class="badge bg-primary">Is Section Approver</span>
+                                <span class="badge bg-primary">Is Unit Approver</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Sample Data Preview -->
             <div class="mb-4">
-                <h6>Sample CSV Format:</h6>
+                <h6>Sample CSV Format (showing key fields):</h6>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered sample-table">
                         <thead class="table-light">
                             <tr>
-                                <th>Username</th>
-                                <th>Email Address</th>
-                                <th>First Name</th>
-                                <th>Last Name</th>
+                                <th>Username*</th>
+                                <th>Email Address*</th>
+                                <th>First Name*</th>
+                                <th>Last Name*</th>
                                 <th>Date Hired</th>
                                 <th>Department</th>
                                 <th>Division</th>
@@ -175,6 +263,12 @@
                                 <th>Unit</th>
                                 <th>Job Title</th>
                                 <th>Employee Type</th>
+                                <th>Schedule Format</th>
+                                <th>Role</th>
+                                <th>Contact Number</th>
+                                <th>Personnel Number</th>
+                                <th>ID Number</th>
+                                <th>Is Section Approver</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -186,10 +280,16 @@
                                 <td>2023-01-15</td>
                                 <td>Post Production</td>
                                 <td>TMSSD</td>
-                                <td>IT Solutions and Data Center Operations</td>
+                                <td>IT Solutions</td>
                                 <td>IT Infrastructure</td>
                                 <td>IT Specialist</td>
                                 <td>confidential</td>
+                                <td>8-hour shift</td>
+                                <td>employee</td>
+                                <td>+639101234567</td>
+                                <td>1289000</td>
+                                <td>001D</td>
+                                <td>TRUE</td>
                             </tr>
                             <tr>
                                 <td>ymhanna</td>
@@ -203,10 +303,17 @@
                                 <td></td>
                                 <td>Video Editor 3</td>
                                 <td>rank_and_file</td>
+                                <td>9-hour shift</td>
+                                <td>employee</td>
+                                <td>+639187654321</td>
+                                <td>1290001</td>
+                                <td>002E</td>
+                                <td>FALSE</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <small class="text-muted">* Required fields. For boolean fields (approver status), use TRUE/FALSE or 1/0.</small>
             </div>
 
             <!-- Upload Form -->
@@ -232,7 +339,6 @@
                         </div>
                     </div>
                     
-                    <!-- IMPORTANT: Make sure the file input is properly structured -->
                     <input type="file" 
                            name="csv_file" 
                            id="csv_file" 
@@ -262,7 +368,7 @@
         </div>
     </div>
 
-    <!-- Available Departments, Divisions, Sections and Units -->
+    <!-- Available Organizations Display -->
     <div class="row mt-4">
         <div class="col-md-3">
             <div class="card">
@@ -273,13 +379,14 @@
                 </div>
                 <div class="card-body">
                     {% if departments %}
-                        <div class="row">
-                            {% for department in departments %}
-                            <div class="col-12 mb-2">
-                                <span class="badge bg-success">{{ department.name }}</span>
-                            </div>
-                            {% endfor %}
+                        {% for department in departments %}
+                        <div class="mb-2">
+                            <span class="badge bg-dark">{{ department.name }}</span>
+                            {% if department.description %}
+                            <br><small class="text-muted">{{ department.description }}</small>
+                            {% endif %}
                         </div>
+                        {% endfor %}
                     {% else %}
                         <p class="text-muted mb-0">No departments available. Create departments first.</p>
                     {% endif %}
@@ -295,14 +402,12 @@
                 </div>
                 <div class="card-body">
                     {% if divisions %}
-                        <div class="row">
-                            {% for division in divisions %}
-                            <div class="col-12 mb-2">
-                                <span class="badge bg-warning">{{ division.name }}</span>
-                                <br><small class="text-muted">{{ division.department.name }}</small>
-                            </div>
-                            {% endfor %}
+                        {% for division in divisions %}
+                        <div class="mb-2">
+                            <span class="badge bg-warning text-dark">{{ division.name }}</span>
+                            <br><small class="text-muted">{{ division.department.name }}</small>
                         </div>
+                        {% endfor %}
                     {% else %}
                         <p class="text-muted mb-0">No divisions available. Create divisions first.</p>
                     {% endif %}
@@ -318,16 +423,14 @@
                 </div>
                 <div class="card-body">
                     {% if sections %}
-                        <div class="row">
-                            {% for section in sections %}
-                            <div class="col-12 mb-2">
-                                <span class="badge bg-primary">{{ section.name }}</span>
-                                {% if section.division %}
-                                <br><small class="text-muted">{{ section.division.name }}</small>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
+                        {% for section in sections %}
+                        <div class="mb-2">
+                            <span class="badge bg-primary">{{ section.name }}</span>
+                            {% if section.division %}
+                            <br><small class="text-muted">{{ section.division.name }}</small>
+                            {% endif %}
                         </div>
+                        {% endfor %}
                     {% else %}
                         <p class="text-muted mb-0">No sections available. Create sections first.</p>
                     {% endif %}
@@ -343,14 +446,12 @@
                 </div>
                 <div class="card-body">
                     {% if units %}
-                        <div class="row">
-                            {% for unit in units %}
-                            <div class="col-12 mb-2">
-                                <span class="badge bg-info">{{ unit.name }}</span>
-                                <br><small class="text-muted">{{ unit.section.name }}</small>
-                            </div>
-                            {% endfor %}
+                        {% for unit in units %}
+                        <div class="mb-2">
+                            <span class="badge bg-info">{{ unit.name }}</span>
+                            <br><small class="text-muted">{{ unit.section.name }}</small>
                         </div>
+                        {% endfor %}
                     {% else %}
                         <p class="text-muted mb-0">No units available. Create units first.</p>
                     {% endif %}
@@ -377,7 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // File upload area click handler
     fileUploadArea.addEventListener('click', function(e) {
-        // Only trigger file input if clicking on the upload area itself, not buttons
         if (e.target === fileUploadArea || e.target.closest('#upload-content')) {
             fileInput.click();
         }
@@ -417,12 +517,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (files.length > 0) {
             const file = files[0];
             if (validateFile(file)) {
-                // Properly set the file to the input
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 fileInput.files = dt.files;
-                
-                // Trigger change event
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
         }
@@ -436,7 +533,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (validateFile(file)) {
                 handleFileSelection(file);
             } else {
-                // Clear the input if validation fails
                 this.value = '';
             }
         } else {
@@ -503,7 +599,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    // Form submission handler - CRITICAL FIX
+    // Form submission handler
     document.getElementById('import-form').addEventListener('submit', function(e) {
         console.log('Form submission triggered');
         console.log('File input files:', fileInput.files);
@@ -526,7 +622,6 @@ document.addEventListener('DOMContentLoaded', function() {
         importBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Importing...';
         importBtn.disabled = true;
         
-        // Let the form submit normally - DO NOT prevent default here
         console.log('Form validation passed, submitting...');
         return true;
     });

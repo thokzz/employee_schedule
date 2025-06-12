@@ -1,108 +1,229 @@
-<!-- app/templates/auth/verify_2fa.html -->
-{% extends "base.html" %}
-
-{% block title %}Two-Factor Authentication{% endblock %}
-
-{% block content %}
-<div class="container-fluid vh-100">
-    <div class="row h-100">
-        <div class="col-md-6 d-flex align-items-center justify-content-center">
-            <div class="card shadow-lg border-0" style="max-width: 450px; width: 100%;">
-                <div class="card-body p-5">
-                    <div class="text-center mb-4">
-                        <i class="bi bi-shield-lock display-4 text-primary mb-3"></i>
-                        <h3 class="fw-bold text-primary">Two-Factor Authentication</h3>
-                        <p class="text-muted">Enter your verification code to continue</p>
+<!-- app/templates/auth/verify_2fa_secure.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two-Factor Authentication - Employee Scheduling System</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .verification-input {
+            font-size: 2rem;
+            letter-spacing: 0.8em;
+            text-align: center;
+            padding: 15px;
+            border: 3px solid #e9ecef;
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .verification-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            transform: scale(1.02);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 15px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .security-notice {
+            background: rgba(255, 193, 7, 0.1);
+            border: 2px solid #ffc107;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
 
-                    <div class="alert alert-info text-center">
-                        {% if user_2fa.primary_method.value == 'totp' %}
-                        <i class="bi bi-phone"></i>
-                        Open your <strong>authenticator app</strong> and enter the 6-digit code
-                        {% elif user_2fa.primary_method.value == 'sms' %}
-                        <i class="bi bi-chat-dots"></i>
-                        Check your <strong>text messages</strong> for the verification code
-                        {% elif user_2fa.primary_method.value == 'email' %}
-                        <i class="bi bi-envelope"></i>
-                        Check your <strong>email</strong> for the verification code
-                        {% endif %}
-                    </div>
-
-                    <form method="POST" id="verify-form">
-                        <div class="mb-3">
-                            <label for="verification_code" class="form-label">Verification Code</label>
-                            <input type="text" class="form-control form-control-lg text-center" 
-                                   id="verification_code" name="verification_code" 
-                                   placeholder="000000" maxlength="6" required
-                                   style="letter-spacing: 0.5em; font-size: 1.5rem;">
-                        </div>
-
-                        {% if settings.remember_device_enabled %}
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="remember_device" name="remember_device">
-                                <label class="form-check-label" for="remember_device">
-                                    Remember this device for {{ settings.remember_device_days }} days
-                                </label>
+    <div class="container-fluid min-vh-100 d-flex align-items-center">
+        <div class="row w-100 g-0">
+            <!-- Main Content -->
+            <div class="col-lg-8 d-flex align-items-center justify-content-center p-4">
+                <div class="card fade-in" style="max-width: 500px; width: 100%;">
+                    <div class="card-body p-5">
+                        <!-- Security Notice -->
+                        <div class="security-notice text-center">
+                            <i class="bi bi-shield-exclamation text-warning" style="font-size: 2rem;"></i>
+                            <div class="mt-2">
+                                <strong>Security Checkpoint</strong>
+                                <p class="mb-0 small text-muted">
+                                    Complete verification to access your account
+                                </p>
                             </div>
                         </div>
-                        {% endif %}
 
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="bi bi-check-circle"></i> Verify
-                            </button>
-                        </div>
-                    </form>
-
-                    <hr class="my-4">
-
-                    <!-- Backup code option -->
-                    <div class="text-center">
-                        <button type="button" class="btn btn-link" onclick="toggleBackupCode()">
-                            <i class="bi bi-key"></i> Use backup code instead
-                        </button>
-                    </div>
-
-                    <div id="backup-code-form" style="display: none;">
-                        <form method="POST">
+                        <!-- Header -->
+                        <div class="text-center mb-4">
                             <div class="mb-3">
-                                <label for="backup_code" class="form-label">Backup Code</label>
-                                <input type="text" class="form-control" id="backup_code" 
-                                       name="verification_code" placeholder="XXXX-XXXX">
-                                <input type="hidden" name="use_backup" value="true">
+                                <i class="bi bi-shield-lock" style="font-size: 4rem; color: #667eea;"></i>
                             </div>
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-warning">
-                                    <i class="bi bi-unlock"></i> Use Backup Code
+                            <h2 class="fw-bold text-primary mb-2">Two-Factor Authentication</h2>
+                            <p class="text-muted">Enter your verification code to continue</p>
+                        </div>
+
+                        <!-- Method Info -->
+                        <div class="alert alert-info text-center mb-4">
+                            {% if user_2fa.primary_method.value == 'totp' %}
+                            <i class="bi bi-phone"></i>
+                            Open your <strong>authenticator app</strong> and enter the 6-digit code
+                            {% elif user_2fa.primary_method.value == 'sms' %}
+                            <i class="bi bi-chat-dots"></i>
+                            Check your <strong>text messages</strong> for the verification code
+                            {% elif user_2fa.primary_method.value == 'email' %}
+                            <i class="bi bi-envelope"></i>
+                            Check your <strong>email</strong> for the verification code
+                            {% endif %}
+                        </div>
+
+                        <!-- Main Verification Form -->
+                        <form method="POST" id="verify-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <div class="mb-4">
+                                <label for="verification_code" class="form-label fw-semibold">Verification Code</label>
+                                <input type="text" class="form-control verification-input" 
+                                       id="verification_code" name="verification_code" 
+                                       placeholder="000000" maxlength="6" required
+                                       autocomplete="one-time-code" inputmode="numeric">
+                            </div>
+
+                            {% if settings.remember_device_enabled %}
+                            <div class="mb-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="remember_device" name="remember_device">
+                                    <label class="form-check-label" for="remember_device">
+                                        Remember this device for {{ settings.remember_device_days }} days
+                                    </label>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="bi bi-check-circle me-2"></i>
+                                    Verify and Continue
                                 </button>
                             </div>
                         </form>
-                    </div>
 
-                    <!-- Resend code option for SMS/Email -->
-                    {% if user_2fa.primary_method.value in ['sms', 'email'] %}
-                    <div class="text-center mt-3">
-                        <button type="button" class="btn btn-outline-secondary" onclick="resendCode()">
-                            <i class="bi bi-arrow-repeat"></i> Resend Code
-                        </button>
+                        <hr class="my-4">
+
+                        <!-- Backup Code Option -->
+                        <div class="text-center">
+                            <button type="button" class="btn btn-link" onclick="toggleBackupCode()">
+                                <i class="bi bi-key"></i> Use backup code instead
+                            </button>
+                        </div>
+
+                        <!-- Backup Code Form -->
+                        <div id="backup-code-form" style="display: none;">
+                            <form method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                
+                                <div class="mb-3">
+                                    <label for="backup_code" class="form-label fw-semibold">Backup Code</label>
+                                    <input type="text" class="form-control form-control-lg text-center" 
+                                           id="backup_code" name="verification_code" 
+                                           placeholder="XXXX-XXXX" style="letter-spacing: 0.3em;">
+                                    <input type="hidden" name="use_backup" value="true">
+                                </div>
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-warning btn-lg">
+                                        <i class="bi bi-unlock"></i> Use Backup Code
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Resend Code Option -->
+                        {% if user_2fa.primary_method.value in ['sms', 'email'] %}
+                        <div class="text-center mt-3">
+                            <button type="button" class="btn btn-outline-secondary" onclick="resendCode()">
+                                <i class="bi bi-arrow-repeat"></i> Resend Code
+                            </button>
+                        </div>
+                        {% endif %}
+
+                        <!-- Logout Option -->
+                        <div class="text-center mt-4">
+                            <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-box-arrow-right"></i> Sign Out
+                            </a>
+                        </div>
                     </div>
-                    {% endif %}
                 </div>
             </div>
-        </div>
 
-        <div class="col-md-6 d-none d-md-flex align-items-center justify-content-center" 
-             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <div class="text-center text-white p-4">
-                <i class="bi bi-shield-check display-1 mb-4"></i>
-                <h2 class="fw-bold mb-4">Almost There!</h2>
-                <p class="lead">
-                    You're just one step away from accessing your account securely.
-                </p>
-                
-                <div class="mt-5">
-                    <div class="row">
+            <!-- Right Side Info -->
+            <div class="col-lg-4 d-none d-lg-flex align-items-center justify-content-center p-4">
+                <div class="text-center text-white">
+                    <i class="bi bi-shield-check" style="font-size: 6rem; opacity: 0.8;"></i>
+                    <h2 class="fw-bold mb-4 mt-3">Almost There!</h2>
+                    <p class="lead mb-4">
+                        You're just one step away from accessing your account securely.
+                    </p>
+                    
+                    <div class="row mt-5">
                         <div class="col-6 text-center">
                             <i class="bi bi-check-circle display-4 mb-3"></i>
                             <h6>Password ✓</h6>
@@ -114,103 +235,132 @@
                             <small>Waiting for verification</small>
                         </div>
                     </div>
+
+                    <div class="mt-5 p-3" style="background: rgba(255,255,255,0.1); border-radius: 15px;">
+                        <i class="bi bi-info-circle text-info" style="font-size: 2rem;"></i>
+                        <p class="mt-2 mb-0 small">
+                            <strong>Security Note:</strong> You must complete 2FA verification before accessing your dashboard.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<script>
-// Auto-format and submit verification code
-document.getElementById('verification_code').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/\D/g, '');
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    if (value.length > 6) {
-        value = value.substring(0, 6);
+    <script>
+    // Get CSRF token for AJAX requests
+    function getCSRFToken() {
+        return document.querySelector('input[name="csrf_token"]').value;
     }
-    
-    e.target.value = value;
-    
-    if (value.length === 6) {
-        setTimeout(() => {
-            document.getElementById('verify-form').submit();
-        }, 500);
-    }
-});
 
-// Format backup code input
-document.getElementById('backup_code').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/[^A-Z0-9]/g, '');
-    
-    // Add dash after 4 characters
-    if (value.length > 4) {
-        value = value.substring(0, 4) + '-' + value.substring(4, 8);
-    }
-    
-    e.target.value = value;
-});
-
-function toggleBackupCode() {
-    const backupForm = document.getElementById('backup-code-form');
-    const verifyForm = document.getElementById('verify-form');
-    
-    if (backupForm.style.display === 'none') {
-        backupForm.style.display = 'block';
-        verifyForm.style.display = 'none';
-        document.getElementById('backup_code').focus();
-    } else {
-        backupForm.style.display = 'none';
-        verifyForm.style.display = 'block';
-        document.getElementById('verification_code').focus();
-    }
-}
-
-function resendCode() {
-    const method = '{{ user_2fa.primary_method.value }}';
-    
-    fetch('{{ url_for("auth.send_2fa_code") }}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            method: method
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Code sent successfully!', 'success');
+    // Auto-format verification code
+    document.getElementById('verification_code').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        
+        if (value.length > 6) {
+            value = value.substring(0, 6);
+        }
+        
+        e.target.value = value;
+        
+        // Visual feedback
+        if (value.length === 6) {
+            this.style.borderColor = '#28a745';
+            this.style.background = '#f8fff9';
+            
+            // Auto-submit after short delay
+            setTimeout(() => {
+                document.getElementById('verify-form').submit();
+            }, 500);
         } else {
-            showToast('Failed to send code. Please try again.', 'danger');
+            this.style.borderColor = '#e9ecef';
+            this.style.background = 'white';
         }
-    })
-    .catch(error => {
-        showToast('Error sending code. Please try again.', 'danger');
     });
-}
 
-function showToast(message, type) {
-    // Simple toast implementation
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type} position-fixed`;
-    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    toast.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
-    `;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.remove();
+    // Format backup code input
+    document.getElementById('backup_code').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/[^A-Z0-9]/g, '').toUpperCase();
+        
+        // Add dash after 4 characters
+        if (value.length > 4) {
+            value = value.substring(0, 4) + '-' + value.substring(4, 8);
         }
-    }, 5000);
-}
+        
+        e.target.value = value;
+    });
 
-// Focus input on page load
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('verification_code').focus();
-});
-</script>
-{% endblock %}
+    function toggleBackupCode() {
+        const backupForm = document.getElementById('backup-code-form');
+        const verifyForm = document.getElementById('verify-form');
+        
+        if (backupForm.style.display === 'none') {
+            backupForm.style.display = 'block';
+            verifyForm.style.display = 'none';
+            document.getElementById('backup_code').focus();
+        } else {
+            backupForm.style.display = 'none';
+            verifyForm.style.display = 'block';
+            document.getElementById('verification_code').focus();
+        }
+    }
+
+    function resendCode() {
+        const method = '{{ user_2fa.primary_method.value }}';
+        
+        fetch('{{ url_for("auth.send_2fa_code") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                method: method
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Code sent successfully!', 'success');
+            } else {
+                showToast('Failed to send code. Please try again.', 'danger');
+            }
+        })
+        .catch(error => {
+            showToast('Error sending code. Please try again.', 'danger');
+        });
+    }
+
+    function showToast(message, type) {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} position-fixed`;
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 5000);
+    }
+
+    // Focus input on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('verification_code').focus();
+    });
+
+    // Prevent back button exploitation
+    window.history.pushState(null, null, window.location.href);
+    window.onpopstate = function() {
+        window.history.pushState(null, null, window.location.href);
+    };
+    </script>
+</body>
+</html>

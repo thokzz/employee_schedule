@@ -10,44 +10,126 @@ import os
 from werkzeug.utils import secure_filename
 import pdfkit
 
+# Replace the approver functions in app/work_extension/routes.py
+
 def get_user_approver(user):
     """Get the designated approver for a user (reuse from leave module)"""
     approver = None
     
-    # First, try to find a section approver
+    # First, try to find a section approver (but EXCLUDE the user themselves)
     if user.section_id:
         section_approver = User.query.filter(
             User.section_id == user.section_id,
             User.is_section_approver == True,
-            User.is_active == True
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if section_approver:
             approver = section_approver
     
-    # If no section approver, try unit approver
+    # If no section approver, try unit approver (but EXCLUDE the user themselves)
     if not approver and user.unit_id:
         unit_approver = User.query.filter(
             User.unit_id == user.unit_id,
             User.is_unit_approver == True,
-            User.is_active == True
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if unit_approver:
             approver = unit_approver
     
-    # If still no approver, try to find a manager in the same section (EXCLUDE ADMINISTRATOR)
+    # If still no approver, try to find a manager in the same section (but EXCLUDE the user themselves)
     if not approver and user.section_id:
         manager_approver = User.query.filter(
             User.section_id == user.section_id,
-            User.role == UserRole.MANAGER,  # CHANGED: Only MANAGER, not ADMINISTRATOR
-            User.is_active == True
+            User.role == UserRole.MANAGER,  # Only MANAGER, not ADMINISTRATOR
+            User.is_active == True,
+            User.id != user.id  # Don't let users approve themselves
         ).first()
         
         if manager_approver:
             approver = manager_approver
     
     return approver
+
+def get_available_approvers_for_user(user):
+    """Get all available approvers for a specific user based on their section/unit
+    EXCLUDES administrators who are not part of the same section/unit"""
+    print(f"DEBUG WORK EXT: Finding approvers for user {user.full_name}")
+    print(f"DEBUG WORK EXT: User section_id: {user.section_id}, unit_id: {user.unit_id}")
+    
+    available_approvers = []
+    
+    # Get approvers from the same section
+    if user.section_id:
+        print(f"DEBUG WORK EXT: Searching for section approvers in section {user.section_id}")
+        section_approvers = User.query.filter(
+            User.section_id == user.section_id,
+            db.or_(
+                User.is_section_approver == True,
+                db.and_(
+                    User.role == UserRole.MANAGER,
+                    User.section_id == user.section_id  # Only managers in same section
+                ),
+                db.and_(
+                    User.role == UserRole.ADMINISTRATOR,
+                    User.section_id == user.section_id,  # Only admins in same section
+                    User.email != 'post_it@gmanetwork.com'  # Exclude global admin from section filtering
+                )
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG WORK EXT: Found {len(section_approvers)} section approvers: {[a.full_name for a in section_approvers]}")
+        available_approvers.extend(section_approvers)
+    
+    # Get approvers from the same unit (if different from section)
+    if user.unit_id:
+        print(f"DEBUG WORK EXT: Searching for unit approvers in unit {user.unit_id}")
+        unit_approvers = User.query.filter(
+            User.unit_id == user.unit_id,
+            db.or_(
+                User.is_unit_approver == True,
+                db.and_(
+                    User.role == UserRole.MANAGER,
+                    User.unit_id == user.unit_id  # Only managers in same unit
+                ),
+                db.and_(
+                    User.role == UserRole.ADMINISTRATOR,
+                    User.unit_id == user.unit_id,  # Only admins in same unit
+                    User.email != 'post_it@gmanetwork.com'  # Exclude global admin from unit filtering
+                )
+            ),
+            User.is_active == True,
+            User.id != user.id  # Exclude the user themselves
+        ).all()
+        print(f"DEBUG WORK EXT: Found {len(unit_approvers)} unit approvers: {[a.full_name for a in unit_approvers]}")
+        
+        # Add unit approvers that aren't already in the list
+        for approver in unit_approvers:
+            if approver not in available_approvers:
+                available_approvers.append(approver)
+    
+    # ALWAYS include the global admin (post_it@gmanetwork.com) as an option
+    global_admin = User.query.filter(
+        User.email == 'post_it@gmanetwork.com',
+        User.role == UserRole.ADMINISTRATOR,
+        User.is_active == True,
+        User.id != user.id
+    ).first()
+    
+    if global_admin and global_admin not in available_approvers:
+        available_approvers.append(global_admin)
+        print(f"DEBUG WORK EXT: Added global admin: {global_admin.full_name}")
+    
+    # Remove duplicates and sort by name
+    unique_approvers = list(set(available_approvers))
+    unique_approvers.sort(key=lambda x: x.full_name)
+    
+    print(f"DEBUG WORK EXT: Final unique work extension approvers: {[a.full_name for a in unique_approvers]}")
+    return unique_approvers
 
 @bp.route('/')
 @bp.route('/request')
@@ -62,15 +144,8 @@ def request_work_extension():
     # Get the designated approver for current user
     approver = get_user_approver(current_user)
     
-    # Get all available approvers as fallback (EXCLUDE ADMINISTRATOR)
-    available_approvers = User.query.filter(
-        db.or_(
-            User.is_section_approver == True,
-            User.is_unit_approver == True,
-            User.role == UserRole.MANAGER  # CHANGED: Only MANAGER, not ADMINISTRATOR
-        ),
-        User.is_active == True
-    ).all()
+    # Get all available approvers using the new restricted function
+    available_approvers = get_available_approvers_for_user(current_user)
     
     return render_template('work_extension/request_form.html', 
                          approver=approver,

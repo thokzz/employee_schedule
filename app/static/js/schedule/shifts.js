@@ -275,6 +275,7 @@ function saveShiftRange() {
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
     const selectedDays = Array.from(document.querySelectorAll('input[name="days[]"]:checked')).map(cb => parseInt(cb.value));
+    const status = formData.get('status'); // GET THE STATUS TO CHECK WHAT TYPE OF SHIFT
     
     if (!startDate || !endDate) {
         alert('Please select both start and end dates for the range.');
@@ -317,17 +318,28 @@ function saveShiftRange() {
     showSuccessMessage(`Creating ${dates.length} shifts...`);
     
     const promises = dates.map(date => {
+        // FIX: Build shift data conditionally based on status
         const shiftData = {
             employee_id: formData.get('employee_id'),
             date: date,
-            start_time: formData.get('start_time'),
-            end_time: formData.get('end_time'),
-            role: formData.get('role'),
-            status: formData.get('status'),
+            status: status,
             notes: formData.get('notes'),
-            color: formData.get('color'),
-            work_arrangement: formData.get('work_arrangement')
+            color: formData.get('color')
         };
+        
+        // FIXED: Only add time and work-related fields for scheduled shifts
+        if (status === 'scheduled') {
+            shiftData.start_time = formData.get('start_time');
+            shiftData.end_time = formData.get('end_time');
+            shiftData.role = formData.get('role');
+            shiftData.work_arrangement = formData.get('work_arrangement');
+        } else if (['sick_leave', 'personal_leave', 'emergency_leave', 'annual_vacation', 'holiday_off', 'bereavement_leave', 'paternity_leave', 'maternity_leave', 'union_leave', 'fire_calamity_leave', 'solo_parent_leave', 'special_leave_women', 'vawc_leave', 'other', 'offset'].includes(status)) {
+            // FIXED: For leave types, include work arrangement but no times or role
+            shiftData.work_arrangement = formData.get('work_arrangement');
+            // start_time, end_time, and role are intentionally omitted
+        }
+        // FIXED: For rest_day, only include basic fields (employee_id, date, status, notes, color)
+        // No times, role, or work_arrangement needed for rest days
         
         return fetch('/schedule/api/shift', {
             method: 'POST',
@@ -345,7 +357,10 @@ function saveShiftRange() {
             if (failed === 0) {
                 showSuccessMessage(`Successfully created ${successful} shifts!`);
             } else {
-                showSuccessMessage(`Created ${successful} shifts, ${failed} failed.`);
+                // IMPROVED: Show detailed error information
+                const errors = results.filter(r => !r.success).map(r => r.error).join(', ');
+                console.error('Failed shift creation errors:', errors);
+                showSuccessMessage(`Created ${successful} shifts, ${failed} failed. Check console for details.`);
             }
             
             bootstrap.Modal.getInstance(document.getElementById('shiftModal')).hide();

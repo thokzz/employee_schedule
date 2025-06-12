@@ -235,15 +235,13 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Mobile Navigation Toggle - Only show when authenticated -->
-    {% if current_user.is_authenticated %}
+    <!-- Mobile Navigation Toggle -->
     <div class="d-md-none p-3 bg-white border-bottom">
         <button class="btn btn-outline-primary" id="sidebar-toggle">
             <i class="bi bi-list"></i> Menu
         </button>
         <span class="ms-3 fw-bold">Employee Scheduling</span>
     </div>
-    {% endif %}
 
     <div class="container-fluid">
         <div class="row">
@@ -291,19 +289,18 @@
                             <a class="nav-link {% if request.endpoint == 'leave.request_leave' %}active{% endif %}" 
                                href="{{ url_for('leave.request_leave') }}">
                                 <i class="bi bi-calendar-plus"></i>
-                                Request Leave
+                                Request Leave (ALAF)
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'leave.my_applications' %}active{% endif %}" 
                                href="{{ url_for('leave.my_applications') }}">
                                 <i class="bi bi-file-text"></i>
-                                My Applications
+                                My Filed ALAFs
                             </a>
                         </li>
 
                         {% if current_user.can_file_work_extension() %}
-                        <hr class="text-white-50">
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'work_extension.request_work_extension' %}active{% endif %}" 
                                href="{{ url_for('work_extension.request_work_extension') }}">
@@ -315,12 +312,13 @@
                             <a class="nav-link {% if request.endpoint == 'work_extension.my_work_extensions' %}active{% endif %}" 
                                href="{{ url_for('work_extension.my_work_extensions') }}">
                                 <i class="bi bi-file-text"></i>
-                                My Work Extensions
+                                My Filed Work Extensions
                             </a>
                         </li>
                         {% endif %}
 
                         {% if current_user.can_approve_leaves() %}
+                        <hr class="text-white-50">
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'work_extension.work_extension_management' %}active{% endif %}" 
                                href="{{ url_for('work_extension.work_extension_management') }}">
@@ -340,11 +338,12 @@
                         </li>
                         {% endif %}
 
+                        <hr class="text-white-50">
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'main.profile' %}active{% endif %}" 
                                href="{{ url_for('main.profile') }}">
                                 <i class="bi bi-person"></i>
-                                Profile
+                                My Profile
                             </a>
                         </li>
                         

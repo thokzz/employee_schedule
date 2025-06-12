@@ -5,6 +5,166 @@
 {% block extra_css %}
 <link href="{{ url_for('static', filename='css/schedule.css') }}" rel="stylesheet">
 <style>
+/* Fixed Employee Column Styles */
+.schedule-grid {
+    overflow-x: auto;
+}
+
+.schedule-grid table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 900px; /* Ensure minimum table width */
+}
+
+/* FIXED EMPLOYEE COLUMN - Set exact width */
+.schedule-grid th:first-child,
+.schedule-grid td:first-child {
+    width: 200px !important; /* Fixed width for employee column */
+    min-width: 200px !important;
+    max-width: 200px !important;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background-color: #fff;
+    border-right: 2px solid #dee2e6;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+/* Ensure employee cell content doesn't overflow */
+.schedule-grid td:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 8px !important;
+}
+
+/* Employee info container */
+.employee-info {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0; /* Allow flex item to shrink */
+}
+
+/* Employee initials circle */
+.employee-initials {
+    width: 32px;
+    height: 32px;
+    min-width: 32px; /* Prevent shrinking */
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.7rem;
+    margin-right: 8px;
+    flex-shrink: 0; /* Don't allow to shrink */
+}
+
+/* Employee text container */
+.employee-text {
+    flex: 1;
+    min-width: 0; /* Allow shrinking */
+    overflow: hidden;
+}
+
+/* Employee name */
+.employee-name {
+    font-weight: 500;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Employee unit/section */
+.employee-unit {
+    font-size: 0.65rem;
+    color: #6c757d;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Date columns - flexible width */
+.schedule-grid th:not(:first-child),
+.schedule-grid td:not(:first-child) {
+    width: auto;
+    min-width: 135px;
+}
+
+/* Header styling for sticky employee column */
+.schedule-grid thead th:first-child {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .schedule-grid th:first-child,
+    .schedule-grid td:first-child {
+        width: 150px !important;
+        min-width: 150px !important;
+        max-width: 150px !important;
+    }
+    
+    .employee-name {
+        font-size: 0.75rem;
+    }
+    
+    .employee-unit {
+        font-size: 0.6rem;
+    }
+    
+    .employee-initials {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        font-size: 0.65rem;
+        margin-right: 6px;
+    }
+}
+
+@media (max-width: 576px) {
+    .schedule-grid th:first-child,
+    .schedule-grid td:first-child {
+        width: 120px !important;
+        min-width: 120px !important;
+        max-width: 120px !important;
+    }
+    
+    .employee-name {
+        font-size: 0.7rem;
+    }
+    
+    .employee-unit {
+        display: none; /* Hide unit on very small screens */
+    }
+    
+    .employee-initials {
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        font-size: 0.6rem;
+        margin-right: 4px;
+    }
+}
+
+/* Table hover effects */
+.schedule-grid tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.schedule-grid tbody tr:hover td:first-child {
+    background-color: #f8f9fa !important;
+}
+
 /* Template-specific styles */
 .template-card {
     transition: all 0.3s ease;
@@ -190,6 +350,64 @@
 #applicationPreview .card-header {
     background-color: #e3f2fd;
     border-bottom: 1px solid #bbdefb;
+}
+
+/* Today Date Header Highlighting */
+.date-header.today {
+    background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffd700 100%) !important;
+    color: white !important;
+    border: 3px solid #ff4500 !important;
+    box-shadow: 
+        0 0 20px rgba(255, 107, 53, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    animation: todayPulse 2s ease-in-out infinite alternate;
+    position: relative;
+    overflow: visible;
+}
+
+@keyframes todayPulse {
+    0% {
+        box-shadow: 
+            0 0 20px rgba(255, 107, 53, 0.6),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    100% {
+        box-shadow: 
+            0 0 30px rgba(255, 107, 53, 0.8),
+            inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+}
+
+.date-header.today::before {
+    content: "TODAY";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ff4500;
+    color: white;
+    font-size: 0.6rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+
+@media (max-width: 768px) {
+    .date-header.today::before {
+        font-size: 0.5rem;
+        padding: 1px 4px;
+        top: -6px;
+        right: -6px;
+    }
+}
+
+@media (max-width: 576px) {
+    .date-header.today::before {
+        display: none;
+    }
 }
 </style>
 {% endblock %}
@@ -562,6 +780,7 @@ window.currentUser = {
     name: '{{ current_user.full_name }}',
     role: '{{ current_user.role.value }}'
 };
+
 </script>
 
 <!-- Load JavaScript modules -->

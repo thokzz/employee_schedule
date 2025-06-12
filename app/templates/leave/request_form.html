@@ -285,7 +285,7 @@
             <input type="hidden" id="end_date" name="end_date">
         </div>
     </div>
-    
+
     <!-- Approver Information Section -->
     <div class="card mb-4">
         <div class="card-header bg-warning text-white">
@@ -294,46 +294,99 @@
         <div class="card-body">
             {% if approver %}
                 <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> Your leave request will be automatically sent to your designated approver.
+                    <i class="bi bi-info-circle"></i> Your designated approver has been automatically selected. You can change it if needed.
                 </div>
                 
-                <div class="row">
+                <div class="row mb-3">
                     <div class="col-md-6">
                         <div class="form-group mb-3">
-                            <label class="form-label">Approver Name</label>
+                            <label class="form-label">Designated Approver</label>
                             <input type="text" class="form-control" value="{{ approver.full_name }}" readonly>
                             {% if approver.job_title %}
-                                <small class="text-muted">{{ approver.job_title }}</small>
+                                <small class="text-muted">{{ approver.job_title }} - {{ approver.approver_scope }}</small>
                             {% endif %}
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-group mb-3">
-                            <label class="form-label">Approval Authority</label>
-                            <input type="text" class="form-control" value="{{ approver.approver_scope }}" readonly>
+                            <label class="form-label">Email</label>
+                            <input type="text" class="form-control" value="{{ approver.email }}" readonly>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Hidden fields for approver info -->
+                <!-- ALWAYS show the approver selection if there are available approvers -->
+                {% if available_approvers|length > 0 %}
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="change_approver">
+                    <label class="form-check-label" for="change_approver">
+                        <strong>Select a different approver from your unit/section ({{ available_approvers|length }} available)</strong>
+                    </label>
+                </div>
+                
+                <div id="approver_selection_section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group mb-3">
+                                <label for="manager_id" class="form-label">Available Approvers in Your Unit/Section <span class="text-danger">*</span></label>
+                                <select id="manager_id" name="manager_id" class="form-select">
+                                    <!-- Always include the designated approver as the first option -->
+                                    <option value="{{ approver.id }}" selected
+                                        data-email="{{ approver.email }}"
+                                        data-signature="{{ approver.signature_path or '' }}">
+                                        {{ approver.full_name }}
+                                        {% if approver.job_title %} - {{ approver.job_title }}{% endif %}
+                                        ({{ approver.approver_scope if approver.approver_scope else 'No Scope' }}) [Designated]
+                                    </option>
+                                    <!-- Add all other available approvers -->
+                                    {% for manager in available_approvers %}
+                                        {% if manager.is_active and manager.id != approver.id %}
+                                        <option value="{{ manager.id }}"
+                                            data-email="{{ manager.email }}"
+                                            data-signature="{{ manager.signature_path or '' }}">
+                                            {{ manager.full_name }}
+                                            {% if manager.job_title %} - {{ manager.job_title }}{% endif %}
+                                            ({{ manager.approver_scope if manager.approver_scope else 'No Scope' }})
+                                            {% if manager.section_id == current_user.section_id %}[Same Section]{% endif %}
+                                            {% if manager.unit_id == current_user.unit_id %}[Same Unit]{% endif %}
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                
+                                <!-- Hidden fields for approver selection -->
+                                <input type="hidden" id="approver_email" name="approver_email" value="{{ approver.email }}">
+                                <input type="hidden" id="approver_name" name="approver_name" value="{{ approver.full_name }}">
+                                <input type="hidden" id="approver_id" name="approver_id" value="{{ approver.id }}">
+                                <input type="hidden" id="appr_sign" name="appr_sign" value="{{ approver.signature_path or '' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>Only One Approver Available:</strong> No other approvers found in your unit/section.
+                </div>
+                <!-- Still need hidden fields for the designated approver -->
                 <input type="hidden" id="manager_id" name="manager_id" value="{{ approver.id }}">
                 <input type="hidden" id="approver_email" name="approver_email" value="{{ approver.email }}">
                 <input type="hidden" id="approver_name" name="approver_name" value="{{ approver.full_name }}">
                 <input type="hidden" id="approver_id" name="approver_id" value="{{ approver.id }}">
                 <input type="hidden" id="appr_sign" name="appr_sign" value="{{ approver.signature_path or '' }}">
+                {% endif %}
                 
             {% else %}
+                {% if available_approvers %}
                 <div class="alert alert-warning">
                     <i class="bi bi-exclamation-triangle"></i> 
-                    <strong>No Approver Assigned:</strong> You don't have a designated approver for your section/unit. 
-                    Please contact your administrator to assign an approver before submitting leave requests.
+                    <strong>No Designated Approver:</strong> You don't have a specific designated approver. Please select from {{ available_approvers|length }} available approvers in your unit/section below.
                 </div>
                 
-                <!-- If no auto-approver, show manual selection -->
                 <div class="row">
                     <div class="col-md-12">
                         <div class="form-group mb-3">
-                            <label for="manager_id" class="form-label">Select Available Approver <span class="text-danger">*</span></label>
+                            <label for="manager_id" class="form-label">Select Approver from Your Unit/Section <span class="text-danger">*</span></label>
                             <select id="manager_id" name="manager_id" required class="form-select">
                                 <option value="" disabled selected>Select approver</option>
                                 {% for manager in available_approvers %}
@@ -343,7 +396,9 @@
                                         data-signature="{{ manager.signature_path or '' }}">
                                         {{ manager.full_name }}
                                         {% if manager.job_title %} - {{ manager.job_title }}{% endif %}
-                                        ({{ manager.approver_scope }})
+                                        ({{ manager.approver_scope if manager.approver_scope else 'No Scope' }})
+                                        {% if manager.section_id == current_user.section_id %}[Same Section]{% endif %}
+                                        {% if manager.unit_id == current_user.unit_id %}[Same Unit]{% endif %}
                                     </option>
                                     {% endif %}
                                 {% endfor %}
@@ -357,10 +412,16 @@
                         </div>
                     </div>
                 </div>
+                {% else %}
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <strong>No Available Approvers:</strong> There are no available approvers in your unit/section. 
+                    Please contact your administrator to assign approvers before submitting leave requests.
+                </div>
+                {% endif %}
             {% endif %}
         </div>
-    </div>
-    
+    </div>        
     <div class="form-actions text-center mb-4">
         <button type="submit" class="btn btn-primary btn-lg me-3" {{ 'disabled' if not approver and not available_approvers }}>
             <i class="bi bi-send"></i> Submit Leave Request
@@ -375,6 +436,12 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== LEAVE REQUEST FORM INITIALIZED ===');
+    
+    // ========================================
+    // FORM INITIALIZATION
+    // ========================================
+    
     // Format and set current date
     const today = new Date();
     const formattedDate = (today.getMonth() + 1).toString().padStart(2, '0') + '/' +
@@ -392,36 +459,139 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     document.getElementById('unique_code').value = code;
     
-    // Handle leave type change
-    document.getElementById('leave_type').addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        const requiresExtensions = selectedOption.dataset.requiresExtensions === 'true';
+    // ========================================
+    // APPROVER SELECTION LOGIC - SINGLE IMPLEMENTATION
+    // ========================================
+    
+    const approverCheckbox = document.getElementById('change_approver');
+    const approverDropdownSection = document.getElementById('approver_selection_section');
+    const managerSelectElement = document.getElementById('manager_id');
+    
+    console.log('🔍 Approver Elements Check:');
+    console.log('  - Checkbox found:', !!approverCheckbox);
+    console.log('  - Dropdown section found:', !!approverDropdownSection);
+    console.log('  - Manager select found:', !!managerSelectElement);
+    
+    // Setup approver toggle functionality
+    if (approverCheckbox && approverDropdownSection) {
+        console.log('✅ Setting up approver toggle');
         
-        // Show/hide work extensions section
-        const extensionsSection = document.getElementById('work_extensions_section');
-        const noExtensionsWarning = document.getElementById('no_extensions_warning');
-        const reasonHelpText = document.getElementById('reason_help_text');
-        
-        if (requiresExtensions) {
-            if (extensionsSection) {
-                extensionsSection.style.display = 'block';
-                reasonHelpText.textContent = 'Explain why you need to offset the selected work extensions';
-            } else if (noExtensionsWarning) {
-                noExtensionsWarning.style.display = 'block';
-                reasonHelpText.textContent = 'You need approved work extensions to file "Other" leave type';
-            }
-        } else {
-            if (extensionsSection) extensionsSection.style.display = 'none';
-            if (noExtensionsWarning) noExtensionsWarning.style.display = 'none';
-            reasonHelpText.textContent = 'Provide the reason for your leave request';
+        approverCheckbox.addEventListener('change', function() {
+            console.log('🔄 Approver toggle changed to:', this.checked);
             
-            // Clear selected work extensions
-            document.querySelectorAll('.work-extension-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            updateExtensionsSummary();
+            if (this.checked) {
+                approverDropdownSection.style.display = 'block';
+                console.log('👆 Showing approver dropdown');
+            } else {
+                approverDropdownSection.style.display = 'none';
+                console.log('👇 Hiding approver dropdown');
+                
+                // Reset to designated approver (first option)
+                if (managerSelectElement && managerSelectElement.options.length > 0) {
+                    managerSelectElement.selectedIndex = 0;
+                    managerSelectElement.dispatchEvent(new Event('change'));
+                    console.log('🔄 Reset to designated approver');
+                }
+            }
+        });
+        
+        // Test toggle functionality
+        console.log('🧪 Testing toggle...');
+        setTimeout(() => {
+            approverCheckbox.checked = true;
+            approverCheckbox.dispatchEvent(new Event('change'));
+            
+            setTimeout(() => {
+                approverCheckbox.checked = false;
+                approverCheckbox.dispatchEvent(new Event('change'));
+                console.log('✅ Toggle test completed');
+            }, 1000);
+        }, 500);
+        
+    } else {
+        console.log('❌ Approver toggle elements missing');
+        if (!approverCheckbox) console.log('  - Missing: change_approver checkbox');
+        if (!approverDropdownSection) console.log('  - Missing: approver_selection_section div');
+    }
+    
+    // Setup manager selection functionality
+    if (managerSelectElement) {
+        console.log('✅ Setting up manager selection');
+        
+        managerSelectElement.addEventListener('change', function() {
+            console.log('📋 Manager selection changed');
+            const selectedOption = this.options[this.selectedIndex];
+            
+            if (selectedOption && selectedOption.value) {
+                const approverEmail = selectedOption.dataset.email || '';
+                const approverName = selectedOption.textContent.split(' - ')[0].split(' (')[0].trim();
+                const approverId = selectedOption.value;
+                const approverSignature = selectedOption.dataset.signature || '';
+                
+                console.log('📝 Updating hidden fields:', {
+                    name: approverName,
+                    email: approverEmail,
+                    id: approverId
+                });
+                
+                // Update hidden fields
+                const emailField = document.getElementById('approver_email');
+                const nameField = document.getElementById('approver_name');
+                const idField = document.getElementById('approver_id');
+                const signField = document.getElementById('appr_sign');
+                
+                if (emailField) emailField.value = approverEmail;
+                if (nameField) nameField.value = approverName;
+                if (idField) idField.value = approverId;
+                if (signField) signField.value = approverSignature;
+                
+                console.log('✅ Hidden fields updated');
+            }
+        });
+        
+        // Trigger initial setup
+        if (managerSelectElement.value) {
+            managerSelectElement.dispatchEvent(new Event('change'));
         }
-    });
+    }
+    
+    // ========================================
+    // LEAVE TYPE AND WORK EXTENSIONS
+    // ========================================
+    
+    // Handle leave type change
+    const leaveTypeSelect = document.getElementById('leave_type');
+    if (leaveTypeSelect) {
+        leaveTypeSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const requiresExtensions = selectedOption.dataset.requiresExtensions === 'true';
+            
+            // Show/hide work extensions section
+            const extensionsSection = document.getElementById('work_extensions_section');
+            const noExtensionsWarning = document.getElementById('no_extensions_warning');
+            const reasonHelpText = document.getElementById('reason_help_text');
+            
+            if (requiresExtensions) {
+                if (extensionsSection) {
+                    extensionsSection.style.display = 'block';
+                    if (reasonHelpText) reasonHelpText.textContent = 'Explain why you need to offset the selected work extensions';
+                } else if (noExtensionsWarning) {
+                    noExtensionsWarning.style.display = 'block';
+                    if (reasonHelpText) reasonHelpText.textContent = 'You need approved work extensions to file "Other" leave type';
+                }
+            } else {
+                if (extensionsSection) extensionsSection.style.display = 'none';
+                if (noExtensionsWarning) noExtensionsWarning.style.display = 'none';
+                if (reasonHelpText) reasonHelpText.textContent = 'Provide the reason for your leave request';
+                
+                // Clear selected work extensions
+                document.querySelectorAll('.work-extension-checkbox').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                updateExtensionsSummary();
+            }
+        });
+    }
     
     // Handle work extension selection
     document.querySelectorAll('.work-extension-checkbox').forEach(checkbox => {
@@ -432,6 +602,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedCheckboxes = document.querySelectorAll('.work-extension-checkbox:checked');
         const summaryDiv = document.getElementById('selected_extensions_summary');
         const totalHoursInput = document.getElementById('total_extension_hours');
+        
+        if (!summaryDiv || !totalHoursInput) return;
         
         if (selectedCheckboxes.length === 0) {
             summaryDiv.innerHTML = '<small class="text-muted">No extensions selected</small>';
@@ -444,17 +616,23 @@ document.addEventListener('DOMContentLoaded', function() {
         
         selectedCheckboxes.forEach(checkbox => {
             const label = document.querySelector(`label[for="${checkbox.id}"]`);
-            const hours = parseFloat(checkbox.dataset.hours) || 0;
-            const date = checkbox.dataset.date;
-            const refCode = label.textContent.split(' - ')[0];
-            
-            summaryHTML += `<small class="d-block"><strong>${refCode}</strong> - ${date} (${hours}hrs)</small>`;
-            totalHours += hours;
+            if (label) {
+                const hours = parseFloat(checkbox.dataset.hours) || 0;
+                const date = checkbox.dataset.date;
+                const refCode = label.textContent.split(' - ')[0];
+                
+                summaryHTML += `<small class="d-block"><strong>${refCode}</strong> - ${date} (${hours}hrs)</small>`;
+                totalHours += hours;
+            }
         });
         
         summaryDiv.innerHTML = summaryHTML;
         totalHoursInput.value = `${totalHours.toFixed(1)} hours`;
     }
+    
+    // ========================================
+    // DATE AND TIME HANDLING
+    // ========================================
     
     // Initialize toggle sections based on checkboxes
     function updateToggleSections() {
@@ -470,13 +648,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const totalDaysInput = document.getElementById('total_days');
         const singleDateInput = document.getElementById('leave_date_single');
 
+        if (!singleDateSection || !timeRangeSection || !multipleDatesSection) return;
+
         // Hide all sections and remove required attributes
         singleDateSection.style.display = 'none';
         timeRangeSection.style.display = 'none';
         multipleDatesSection.style.display = 'none';
         
-        totalDaysInput.removeAttribute('required');
-        singleDateInput.removeAttribute('required');
+        if (totalDaysInput) totalDaysInput.removeAttribute('required');
+        if (singleDateInput) singleDateInput.removeAttribute('required');
 
         if (hoursBasedChecked) {
             timeRangeSection.style.display = 'block';
@@ -484,8 +664,8 @@ document.addEventListener('DOMContentLoaded', function() {
             multipleDatesSection.style.display = 'block';
         } else {
             singleDateSection.style.display = 'block';
-            totalDaysInput.setAttribute('required', 'required');
-            singleDateInput.setAttribute('required', 'required');
+            if (totalDaysInput) totalDaysInput.setAttribute('required', 'required');
+            if (singleDateInput) singleDateInput.setAttribute('required', 'required');
         }
         
         updateDatabaseFields();
@@ -523,7 +703,8 @@ document.addEventListener('DOMContentLoaded', function() {
             multipleTotalDaysInput.type = 'hidden';
             multipleTotalDaysInput.id = 'multiple_total_days_hidden';
             multipleTotalDaysInput.name = 'multiple_total_days';
-            document.querySelector('form').appendChild(multipleTotalDaysInput);
+            const form = document.querySelector('form');
+            if (form) form.appendChild(multipleTotalDaysInput);
         }
         
         if (!hoursInput) {
@@ -531,11 +712,13 @@ document.addEventListener('DOMContentLoaded', function() {
             hoursInput.type = 'hidden';
             hoursInput.id = 'hours_hidden';
             hoursInput.name = 'hours';
-            document.querySelector('form').appendChild(hoursInput);
+            const form = document.querySelector('form');
+            if (form) form.appendChild(hoursInput);
         }
         
         if (hoursBasedChecked) {
-            const calculatedHours = document.getElementById('hours').value;
+            const calculatedHoursElement = document.getElementById('hours');
+            const calculatedHours = calculatedHoursElement ? calculatedHoursElement.value : '0';
             hoursInput.value = calculatedHours || '0';
             multipleTotalDaysInput.value = '';
         } else if (multipleDatesChecked) {
@@ -556,20 +739,28 @@ document.addEventListener('DOMContentLoaded', function() {
         const startDateField = document.getElementById('start_date');
         const endDateField = document.getElementById('end_date');
         
+        if (!startDateField || !endDateField) return;
+        
         if (hoursBasedChecked) {
-            const leaveDate = document.getElementById('leave_date_hours').value;
-            const startTime = document.getElementById('start_time').value;
-            const endTime = document.getElementById('end_time').value;
+            const leaveDateElement = document.getElementById('leave_date_hours');
+            const startTimeElement = document.getElementById('start_time');
+            const endTimeElement = document.getElementById('end_time');
             
-            if (leaveDate && startTime && endTime) {
-                const formattedDate = formatDateMMDDYYYY(leaveDate);
-                const formattedStartTime = formatTime(startTime);
-                const formattedEndTime = formatTime(endTime);
+            if (leaveDateElement && startTimeElement && endTimeElement) {
+                const leaveDate = leaveDateElement.value;
+                const startTime = startTimeElement.value;
+                const endTime = endTimeElement.value;
                 
-                const concatenatedValue = `${formattedDate} ${formattedStartTime} - ${formattedEndTime}`;
-                startDateField.value = concatenatedValue;
-            } else {
-                startDateField.value = '';
+                if (leaveDate && startTime && endTime) {
+                    const formattedDate = formatDateMMDDYYYY(leaveDate);
+                    const formattedStartTime = formatTime(startTime);
+                    const formattedEndTime = formatTime(endTime);
+                    
+                    const concatenatedValue = `${formattedDate} ${formattedStartTime} - ${formattedEndTime}`;
+                    startDateField.value = concatenatedValue;
+                } else {
+                    startDateField.value = '';
+                }
             }
             endDateField.value = '';
             
@@ -589,11 +780,14 @@ document.addEventListener('DOMContentLoaded', function() {
             endDateField.value = '';
             
         } else {
-            const singleDate = document.getElementById('leave_date_single').value;
-            if (singleDate) {
-                startDateField.value = formatDateMMDDYYYY(singleDate);
-            } else {
-                startDateField.value = '';
+            const singleDateElement = document.getElementById('leave_date_single');
+            if (singleDateElement) {
+                const singleDate = singleDateElement.value;
+                if (singleDate) {
+                    startDateField.value = formatDateMMDDYYYY(singleDate);
+                } else {
+                    startDateField.value = '';
+                }
             }
             endDateField.value = '';
         }
@@ -601,63 +795,16 @@ document.addEventListener('DOMContentLoaded', function() {
         updateTotalDaysForSubmission();
     }
     
-    // Run once when page loads
-    updateToggleSections();
-    
-    // Add event listeners for checkbox changes
-    document.getElementById('hours_based').addEventListener('change', function() {
-        if (this.checked) {
-            document.getElementById('multiple_dates').checked = false;
-        }
-        updateToggleSections();
-    });
-    
-    document.getElementById('multiple_dates').addEventListener('change', function() {
-        if (this.checked) {
-            document.getElementById('hours_based').checked = false;
-        }
-        updateToggleSections();
-    });
-    
-    // Add event listeners for date/time changes
-    document.getElementById('leave_date_single').addEventListener('change', updateDatabaseFields);
-    document.getElementById('leave_date_hours').addEventListener('change', updateDatabaseFields);
-    document.getElementById('start_time').addEventListener('change', function() {
-        calculateHours();
-        updateDatabaseFields();
-    });
-    document.getElementById('end_time').addEventListener('change', function() {
-        calculateHours();
-        updateDatabaseFields();
-    });
-    
-    // Update total days when single date total_days changes
-    document.getElementById('total_days').addEventListener('change', updateTotalDaysForSubmission);
-    
-    // Update approver info when manually selected (only if no auto-approver)
-    const managerSelect = document.getElementById('manager_id');
-    if (managerSelect && managerSelect.tagName === 'SELECT') {
-        managerSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            
-            if (selectedOption && selectedOption.value) {
-                const approverEmail = selectedOption.dataset.email || '';
-                const approverName = selectedOption.textContent.trim();
-                const approverId = selectedOption.value;
-                const approverSignature = selectedOption.dataset.signature || '';
-                
-                document.getElementById('approver_email').value = approverEmail;
-                document.getElementById('approver_name').value = approverName;
-                document.getElementById('approver_id').value = approverId;
-                document.getElementById('appr_sign').value = approverSignature;
-            }
-        });
-    }
-    
     // Calculate hours for time-based leave
     function calculateHours() {
-        const startTime = document.getElementById('start_time').value;
-        const endTime = document.getElementById('end_time').value;
+        const startTimeElement = document.getElementById('start_time');
+        const endTimeElement = document.getElementById('end_time');
+        const hoursElement = document.getElementById('hours');
+        
+        if (!startTimeElement || !endTimeElement || !hoursElement) return;
+        
+        const startTime = startTimeElement.value;
+        const endTime = endTimeElement.value;
         
         if (startTime && endTime) {
             const start = new Date(`2023-01-01T${startTime}:00`);
@@ -665,103 +812,199 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (end > start) {
                 const diff = (end - start) / (1000 * 60 * 60);
-                document.getElementById('hours').value = diff.toFixed(1);
+                hoursElement.value = diff.toFixed(1);
             } else {
-                document.getElementById('hours').value = '0';
+                hoursElement.value = '0';
             }
         }
         updateTotalDaysForSubmission();
     }
     
-    // Handle multiple dates
-    document.getElementById('add_date').addEventListener('click', function() {
-        const container = document.getElementById('dates_container');
-        const newRow = document.createElement('div');
-        newRow.className = 'row date-row mb-2';
-        newRow.innerHTML = `
-            <div class="col-md-4">
-                <input type="date" name="leave_dates[]" class="form-control leave-date">
-            </div>
-            <div class="col-md-2">
-                <button type="button" class="btn btn-danger btn-sm remove-date">Remove</button>
-            </div>
-        `;
-        
-        container.appendChild(newRow);
-        
-        newRow.querySelector('.remove-date').addEventListener('click', function() {
-            container.removeChild(newRow);
-            updateMultipleDaysCount();
+    // ========================================
+    // EVENT LISTENERS SETUP
+    // ========================================
+    
+    // Run once when page loads
+    updateToggleSections();
+    
+    // Add event listeners for checkbox changes
+    const hoursBasedElement = document.getElementById('hours_based');
+    const multipleDatesElement = document.getElementById('multiple_dates');
+    
+    if (hoursBasedElement) {
+        hoursBasedElement.addEventListener('change', function() {
+            if (this.checked && multipleDatesElement) {
+                multipleDatesElement.checked = false;
+            }
+            updateToggleSections();
         });
-        
-        newRow.querySelector('.leave-date').addEventListener('change', function() {
-            updateMultipleDaysCount();
+    }
+    
+    if (multipleDatesElement) {
+        multipleDatesElement.addEventListener('change', function() {
+            if (this.checked && hoursBasedElement) {
+                hoursBasedElement.checked = false;
+            }
+            updateToggleSections();
+        });
+    }
+    
+    // Add event listeners for date/time changes
+    const leaveDateSingleElement = document.getElementById('leave_date_single');
+    const leaveDateHoursElement = document.getElementById('leave_date_hours');
+    const startTimeElement = document.getElementById('start_time');
+    const endTimeElement = document.getElementById('end_time');
+    const totalDaysElement = document.getElementById('total_days');
+    
+    if (leaveDateSingleElement) {
+        leaveDateSingleElement.addEventListener('change', updateDatabaseFields);
+    }
+    
+    if (leaveDateHoursElement) {
+        leaveDateHoursElement.addEventListener('change', updateDatabaseFields);
+    }
+    
+    if (startTimeElement) {
+        startTimeElement.addEventListener('change', function() {
+            calculateHours();
             updateDatabaseFields();
         });
-    });
+    }
+    
+    if (endTimeElement) {
+        endTimeElement.addEventListener('change', function() {
+            calculateHours();
+            updateDatabaseFields();
+        });
+    }
+    
+    if (totalDaysElement) {
+        totalDaysElement.addEventListener('change', updateTotalDaysForSubmission);
+    }
+    
+    // ========================================
+    // MULTIPLE DATES HANDLING
+    // ========================================
+    
+    // Handle multiple dates
+    const addDateButton = document.getElementById('add_date');
+    if (addDateButton) {
+        addDateButton.addEventListener('click', function() {
+            const container = document.getElementById('dates_container');
+            if (!container) return;
+            
+            const newRow = document.createElement('div');
+            newRow.className = 'row date-row mb-2';
+            newRow.innerHTML = `
+                <div class="col-md-4">
+                    <input type="date" name="leave_dates[]" class="form-control leave-date">
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-danger btn-sm remove-date">Remove</button>
+                </div>
+            `;
+            
+            container.appendChild(newRow);
+            
+            const removeButton = newRow.querySelector('.remove-date');
+            const dateInput = newRow.querySelector('.leave-date');
+            
+            if (removeButton) {
+                removeButton.addEventListener('click', function() {
+                    container.removeChild(newRow);
+                    updateMultipleDaysCount();
+                });
+            }
+            
+            if (dateInput) {
+                dateInput.addEventListener('change', function() {
+                    updateMultipleDaysCount();
+                    updateDatabaseFields();
+                });
+            }
+        });
+    }
     
     // Event delegation for remove buttons
-    document.getElementById('dates_container').addEventListener('click', function(e) {
-        if (e.target.classList.contains('remove-date')) {
-            const row = e.target.closest('.date-row');
-            row.parentNode.removeChild(row);
-            updateMultipleDaysCount();
-            updateDatabaseFields();
-        }
-    });
+    const datesContainer = document.getElementById('dates_container');
+    if (datesContainer) {
+        datesContainer.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-date')) {
+                const row = e.target.closest('.date-row');
+                if (row) {
+                    row.parentNode.removeChild(row);
+                    updateMultipleDaysCount();
+                    updateDatabaseFields();
+                }
+            }
+        });
+    }
     
     function updateMultipleDaysCount() {
         const dateInputs = document.querySelectorAll('.leave-date');
         const validDates = Array.from(dateInputs).filter(input => input.value !== '');
-        document.getElementById('multiple_total_days').value = validDates.length;
+        const multipleTotalDaysElement = document.getElementById('multiple_total_days');
+        if (multipleTotalDaysElement) {
+            multipleTotalDaysElement.value = validDates.length;
+        }
         updateDatabaseFields();
     }
     
+    // ========================================
+    // FORM VALIDATION
+    // ========================================
+    
     // Form validation
-    document.querySelector('form').addEventListener('submit', function(e) {
-        updateDatabaseFields();
-        updateTotalDaysForSubmission();
-        
-        let isValid = true;
-        let errorMessage = '';
-        
-        if (!document.getElementById('leave_type').value) {
-            isValid = false;
-            errorMessage = 'Please select a leave type';
-        }
-        
-        // Special validation for "Other" leave type
-        const leaveType = document.getElementById('leave_type').value;
-        if (leaveType === 'Other') {
-            const selectedExtensions = document.querySelectorAll('.work-extension-checkbox:checked');
-            if (selectedExtensions.length === 0) {
+    const formElement = document.querySelector('form');
+    if (formElement) {
+        formElement.addEventListener('submit', function(e) {
+            updateDatabaseFields();
+            updateTotalDaysForSubmission();
+            
+            let isValid = true;
+            let errorMessage = '';
+            
+            const leaveTypeElement = document.getElementById('leave_type');
+            if (!leaveTypeElement || !leaveTypeElement.value) {
                 isValid = false;
-                errorMessage = 'Please select at least one approved work extension for "Other" leave type';
+                errorMessage = 'Please select a leave type';
             }
-        }
-        
-        if (!document.getElementById('reason').value.trim()) {
-            isValid = false;
-            errorMessage = 'Please provide a reason for your leave';
-        }
-        
-        if (!document.getElementById('contact').value.trim()) {
-            isValid = false;
-            errorMessage = 'Please provide a contact number';
-        }
-        
-        // Check if approver is selected (for manual selection case)
-        const managerSelect = document.getElementById('manager_id');
-        if (managerSelect && managerSelect.tagName === 'SELECT' && !managerSelect.value) {
-            isValid = false;
-            errorMessage = 'Please select an approver';
-        }
-        
-        if (!isValid) {
-            alert(errorMessage);
-            e.preventDefault();
-        }
-    });
+            
+            // Special validation for "Other" leave type
+            if (leaveTypeElement && leaveTypeElement.value === 'Other') {
+                const selectedExtensions = document.querySelectorAll('.work-extension-checkbox:checked');
+                if (selectedExtensions.length === 0) {
+                    isValid = false;
+                    errorMessage = 'Please select at least one approved work extension for "Other" leave type';
+                }
+            }
+            
+            const reasonElement = document.getElementById('reason');
+            if (!reasonElement || !reasonElement.value.trim()) {
+                isValid = false;
+                errorMessage = 'Please provide a reason for your leave';
+            }
+            
+            const contactElement = document.getElementById('contact');
+            if (!contactElement || !contactElement.value.trim()) {
+                isValid = false;
+                errorMessage = 'Please provide a contact number';
+            }
+            
+            // Check if approver is selected (for manual selection case)
+            if (managerSelectElement && managerSelectElement.tagName === 'SELECT' && !managerSelectElement.value) {
+                isValid = false;
+                errorMessage = 'Please select an approver';
+            }
+            
+            if (!isValid) {
+                alert(errorMessage);
+                e.preventDefault();
+            }
+        });
+    }
+    
+    console.log('✅ Leave request form initialization completed');
 });
 </script>
 {% endblock %}

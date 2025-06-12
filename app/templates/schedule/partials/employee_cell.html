@@ -1,13 +1,13 @@
-<div class="d-flex align-items-center">
-    <div class="employee-initials me-2" style="width: 32px; height: 32px; font-size: 0.7rem;">
+<div class="employee-info">
+    <div class="employee-initials">
         {{ member.initials }}
     </div>
-    <div>
-        <div class="fw-medium" style="font-size: 0.8rem; line-height: 1.2;">{{ member.full_name }}</div>
+    <div class="employee-text">
+        <div class="employee-name">{{ member.full_name }}</div>
         {% if member.unit %}
-            <small class="text-muted" style="font-size: 0.65rem;">{{ member.unit.name }}</small>
+            <div class="employee-unit">{{ member.unit.name }}</div>
         {% elif member.section %}
-            <small class="text-muted" style="font-size: 0.65rem;">{{ member.section.name }}</small>
+            <div class="employee-unit">{{ member.section.name }}</div>
         {% endif %}
     </div>
 </div>

@@ -132,7 +132,7 @@
                 <div class="row">
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <label for="personnel_number_readonly" class="form-label">Personnel Number</label>
+                            <label for="personnel_number_readonly" class="form-label">Personnel Number (Used in OTND)</label>
                             <input type="text" class="form-control" id="personnel_number_readonly" 
                                    value="{{ current_user.personnel_number or 'Not set' }}" readonly>
                             <small class="text-muted">Unique employee identification number</small>
@@ -140,10 +140,10 @@
                     </div>
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <label for="div_department_readonly" class="form-label">Div./Department (Legacy)</label>
+                            <label for="div_department_readonly" class="form-label">Div./Department (User in ALAF)</label>
                             <input type="text" class="form-control" id="div_department_readonly" 
                                    value="{{ current_user.div_department or 'Not set' }}" readonly>
-                            <small class="text-muted">Legacy division/department field</small>
+                            <small class="text-muted">This is used in ALAF</small>
                         </div>
                     </div>
                 </div>

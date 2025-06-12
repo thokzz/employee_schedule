@@ -75,7 +75,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="personnel_number" class="form-label">Personnel Number</label>
+                                <label for="personnel_number" class="form-label">Personnel Number (Used in OTND)</label>
                                 <input type="text" class="form-control" id="personnel_number" name="personnel_number" 
                                        value="{{ user.personnel_number or '' }}"
                                        placeholder="e.g., EMP-2024-001">
@@ -84,11 +84,11 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="div_department" class="form-label">Div./Department</label>
+                                <label for="div_department" class="form-label">Div./Department (Used in ALAF)</label>
                                 <input type="text" class="form-control" id="div_department" name="div_department" 
                                        value="{{ user.div_department or '' }}"
                                        placeholder="e.g., Information Technology Division">
-                                <small class="text-muted">Division or Department assignment</small>
+                                <small class="text-muted">TMSSD/POST, OPS/POST, PMD/POST</small>
                             </div>
                         </div>
                     </div>
@@ -151,15 +151,6 @@
                                        value="{{ user.id_number or '' }}"
                                        placeholder="e.g., SSN, National ID">
                                 <small class="text-muted">Government or company issued ID</small>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="typecode" class="form-label">Type Code</label>
-                                <input type="text" class="form-control" id="typecode" name="typecode" 
-                                       value="{{ user.typecode or '' }}"
-                                       placeholder="e.g., PROB, PERM">
-                                <small class="text-muted">Employment type code</small>
                             </div>
                         </div>
                     </div>

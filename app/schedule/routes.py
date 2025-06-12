@@ -89,6 +89,7 @@ def view_schedule():
                          date_remarks=date_remarks_dict,  # Empty for now
                          view_type=view_type,
                          selected_date=selected_date,
+                         today=date.today(),
                          can_edit=current_user.can_edit_schedule())
 
 
@@ -169,26 +170,45 @@ def create_or_update_shift():
         
         # Update shift data
         shift.date = datetime.strptime(data['date'], '%Y-%m-%d').date()
-        
-        # Handle time fields
-        if data.get('start_time') and data['start_time'].strip():
-            shift.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
-        else:
-            shift.start_time = None
-            
-        if data.get('end_time') and data['end_time'].strip():
-            shift.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
-        else:
-            shift.end_time = None
-        
-        shift.role = data.get('role', '') or None
-        shift.notes = data.get('notes', '') or None
         shift.status = ShiftStatus(data.get('status', 'scheduled'))
-        shift.color = data.get('color', '#007bff')
         
-        # NEW: Handle work arrangement
-        work_arrangement = data.get('work_arrangement', 'onsite')
-        shift.work_arrangement = WorkArrangement(work_arrangement)
+        # FIXED: Handle time fields conditionally based on status
+        if shift.status == ShiftStatus.SCHEDULED:
+            # For scheduled shifts, require time fields
+            if data.get('start_time') and data['start_time'].strip():
+                shift.start_time = datetime.strptime(data['start_time'], '%H:%M').time()
+            else:
+                shift.start_time = None
+                
+            if data.get('end_time') and data['end_time'].strip():
+                shift.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
+            else:
+                shift.end_time = None
+                
+            shift.role = data.get('role', '') or None
+            shift.work_arrangement = WorkArrangement(data.get('work_arrangement', 'onsite'))
+            
+        elif shift.status == ShiftStatus.REST_DAY:
+            # FIXED: For rest days, clear time and work fields
+            shift.start_time = None
+            shift.end_time = None
+            shift.role = None
+            shift.work_arrangement = WorkArrangement.ONSITE  # Default for rest days
+            
+        else:
+            # FIXED: For leave types, clear times but keep work arrangement
+            shift.start_time = None
+            shift.end_time = None
+            shift.role = None
+            # Keep work arrangement for leave types (might be WFH, etc.)
+            if data.get('work_arrangement'):
+                shift.work_arrangement = WorkArrangement(data.get('work_arrangement', 'onsite'))
+            else:
+                shift.work_arrangement = WorkArrangement.ONSITE
+        
+        # Always set these fields regardless of status
+        shift.notes = data.get('notes', '') or None
+        shift.color = data.get('color', '#007bff')
         
         if not shift_id or shift_id == '':
             db.session.add(shift)
@@ -213,7 +233,6 @@ def create_or_update_shift():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'Error saving shift: {str(e)}'}), 500
-
 @bp.route('/api/shifts/<int:employee_id>/<date_str>')
 @login_required
 def get_employee_day_shifts(employee_id, date_str):
@@ -1382,6 +1401,504 @@ def calendar_view():
                          shifts_by_date_serializable=shifts_by_date_serializable,
                          remarks_by_date_serializable=remarks_by_date_serializable)
 
+# ----------BLANK TEMPLATE
+
+@bp.route('/api/templates/create-blank', methods=['POST'])
+@login_required
+def create_blank_template():
+    """Create a BLANK template for clearing schedules"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Validate required fields
+        name = data.get('name', '').strip()
+        if not name or len(name) < 3:
+            return jsonify({
+                'success': False, 
+                'error': 'Template name must be at least 3 characters long'
+            }), 400
+        
+        if len(name) > 100:
+            return jsonify({
+                'success': False, 
+                'error': 'Template name cannot exceed 100 characters'
+            }), 400
+        
+        # Check for duplicate template names
+        existing_template = ScheduleTemplateV2.query.filter_by(
+            name=name,
+            created_by_id=current_user.id
+        ).first()
+        
+        if existing_template:
+            return jsonify({
+                'success': False, 
+                'error': f'You already have a template named "{name}". Please choose a different name.'
+            }), 400
+        
+        # Validate duration
+        duration_days = data.get('duration_days', 7)
+        try:
+            duration_days = int(duration_days)
+            if duration_days < 1 or duration_days > 14:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Duration must be between 1 and 14 days'
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({
+                'success': False, 
+                'error': 'Invalid duration format'
+            }), 400
+        
+        # SECURITY: Restrict scope to user's organizational boundaries
+        section_id = None
+        unit_id = None
+        department_id = None
+        division_id = None
+        
+        scope_type = data.get('scope_type')
+        scope_id = data.get('scope_id')
+        
+        # Handle scope selection with security validation
+        if scope_type and scope_id:
+            try:
+                scope_id = int(scope_id)
+                
+                if scope_type == 'section':
+                    # User can only create BLANK templates for their own section or if admin
+                    if not current_user.can_admin() and current_user.section_id != scope_id:
+                        return jsonify({
+                            'success': False, 
+                            'error': 'You can only create BLANK templates for your own section'
+                        }), 403
+                    section_id = scope_id
+                    
+                elif scope_type == 'unit':
+                    # User can only create BLANK templates for their own unit or if admin
+                    if not current_user.can_admin() and current_user.unit_id != scope_id:
+                        return jsonify({
+                            'success': False, 
+                            'error': 'You can only create BLANK templates for your own unit'
+                        }), 403
+                    unit_id = scope_id
+                    
+                else:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Invalid scope type for BLANK templates: {scope_type}. Only section or unit allowed.'
+                    }), 400
+                    
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid scope ID'
+                }), 400
+        else:
+            # Use current user's scope as default (section takes priority)
+            if current_user.section_id:
+                section_id = current_user.section_id
+            elif current_user.unit_id:
+                unit_id = current_user.unit_id
+            else:
+                return jsonify({
+                    'success': False, 
+                    'error': 'You must belong to a section or unit to create BLANK templates'
+                }), 403
+        
+        # Validate that exactly one scope is provided (section OR unit, not both)
+        scope_count = sum([1 for x in [section_id, unit_id] if x is not None])
+        if scope_count != 1:
+            return jsonify({
+                'success': False, 
+                'error': 'BLANK templates require exactly one organizational scope (section OR unit)'
+            }), 400
+        
+        # Create BLANK template
+        try:
+            template = ScheduleTemplateV2.create_blank_template(
+                user=current_user,
+                name=name,
+                description=data.get('description', '').strip(),
+                duration_days=duration_days,
+                section_id=section_id,
+                unit_id=unit_id,
+                department_id=None,  # Not allowed for BLANK templates
+                division_id=None,    # Not allowed for BLANK templates
+                is_public=data.get('is_public', False)
+            )
+            
+            db.session.add(template)
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'BLANK template "{template.name}" created successfully! This template will clear all shifts in a {duration_days}-day range.',
+                'template': template.to_dict(),
+                'template_info': {
+                    'type': 'BLANK',
+                    'duration_days': duration_days,
+                    'scope': template.scope_display,
+                    'purpose': 'Clear existing schedules'
+                }
+            })
+            
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False, 
+                'error': f'BLANK template creation failed: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False, 
+            'error': f'Unexpected error creating BLANK template: {str(e)}'
+        }), 500
+
+
+@bp.route('/api/templates/<int:template_id>/apply-blank', methods=['POST'])
+@login_required
+def apply_blank_template(template_id):
+    """Apply BLANK template to clear schedules"""
+    try:
+        if not current_user.can_edit_schedule():
+            return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
+        
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if template.template_type != TemplateType.BLANK:
+            return jsonify({'success': False, 'error': 'This is not a BLANK template'}), 400
+        
+        if not template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied to this template'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Parse and validate target dates
+        try:
+            target_start = datetime.strptime(data['target_start_date'], '%Y-%m-%d').date()
+            target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
+        except (ValueError, KeyError) as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid target date format: {str(e)}'
+            }), 400
+        
+        # Validate date range
+        if target_start > target_end:
+            return jsonify({
+                'success': False, 
+                'error': 'Target start date must be before or equal to target end date'
+            }), 400
+        
+        target_duration = (target_end - target_start).days + 1
+        template_duration = template.template_data.get('duration_days', 7)
+        
+        if target_duration != template_duration:
+            return jsonify({
+                'success': False, 
+                'error': f'Target date range ({target_duration} days) must match template duration ({template_duration} days)'
+            }), 400
+        
+        # Get application options
+        target_section_id = data.get('target_section_id')
+        target_unit_id = data.get('target_unit_id')
+        clear_all_types = data.get('clear_all_types', True)
+        preserve_leave_types = data.get('preserve_leave_types', [])
+        
+        # Convert preserve_leave_types to enum values if provided
+        preserve_enum_types = []
+        if preserve_leave_types:
+            try:
+                preserve_enum_types = [ShiftStatus(status) for status in preserve_leave_types]
+            except ValueError as e:
+                return jsonify({
+                    'success': False, 
+                    'error': f'Invalid preserve leave type: {str(e)}'
+                }), 400
+        
+        # SECURITY: Validate organizational scope restrictions
+        if target_section_id:
+            try:
+                target_section_id = int(target_section_id)
+                
+                # User can only clear shifts in their own section unless admin
+                if not current_user.can_admin() and current_user.section_id != target_section_id:
+                    return jsonify({
+                        'success': False, 
+                        'error': 'You can only clear shifts in your own section'
+                    }), 403
+                    
+                target_section = Section.query.get(target_section_id)
+                if not target_section:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Target section ID {target_section_id} not found'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid target section ID'
+                }), 400
+        
+        if target_unit_id:
+            try:
+                target_unit_id = int(target_unit_id)
+                
+                # User can only clear shifts in their own unit unless admin
+                if not current_user.can_admin() and current_user.unit_id != target_unit_id:
+                    return jsonify({
+                        'success': False, 
+                        'error': 'You can only clear shifts in your own unit'
+                    }), 403
+                    
+                target_unit = Unit.query.get(target_unit_id)
+                if not target_unit:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Target unit ID {target_unit_id} not found'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid target unit ID'
+                }), 400
+        
+        # If no target scope specified, use user's own scope
+        if not target_section_id and not target_unit_id:
+            if current_user.section_id:
+                target_section_id = current_user.section_id
+            elif current_user.unit_id:
+                target_unit_id = current_user.unit_id
+            else:
+                return jsonify({
+                    'success': False, 
+                    'error': 'You must belong to a section or unit to apply BLANK templates'
+                }), 403
+        
+        # Get preview of what will be deleted - SECURITY: Only user's scope
+        if target_section_id:
+            # Validate user can access this section
+            if not current_user.can_admin() and current_user.section_id != target_section_id:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Access denied to this section'
+                }), 403
+            target_employees = User.query.filter_by(section_id=target_section_id, is_active=True).all()
+            
+        elif target_unit_id:
+            # Validate user can access this unit
+            if not current_user.can_admin() and current_user.unit_id != target_unit_id:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Access denied to this unit'
+                }), 403
+            target_employees = User.query.filter_by(unit_id=target_unit_id, is_active=True).all()
+            
+        elif template.section_id:
+            # Validate user can access template's section
+            if not current_user.can_admin() and current_user.section_id != template.section_id:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Access denied to template\'s section'
+                }), 403
+            target_employees = User.query.filter_by(section_id=template.section_id, is_active=True).all()
+            
+        elif template.unit_id:
+            # Validate user can access template's unit
+            if not current_user.can_admin() and current_user.unit_id != template.unit_id:
+                return jsonify({
+                    'success': False, 
+                    'error': 'Access denied to template\'s unit'
+                }), 403
+            target_employees = User.query.filter_by(unit_id=template.unit_id, is_active=True).all()
+            
+        else:
+            return jsonify({
+                'success': False, 
+                'error': 'No valid organizational scope found for this template'
+            }), 400
+        
+        if not target_employees:
+            return jsonify({
+                'success': False, 
+                'error': 'No active employees found in target scope'
+            }), 400
+        
+        # Apply the BLANK template
+        try:
+            result = template.apply_blank_template(
+                start_date=target_start,
+                end_date=target_end,
+                user=current_user,
+                target_section_id=target_section_id,
+                target_unit_id=target_unit_id,
+                clear_all_types=clear_all_types,
+                preserve_leave_types=preserve_enum_types
+            )
+            
+            db.session.commit()
+            
+            # Create success message
+            success_message = f'BLANK template applied successfully! Cleared {result["deleted_shifts"]} shifts affecting {result["affected_employees"]} employees.'
+            if result['preserved_shifts'] > 0:
+                success_message += f' {result["preserved_shifts"]} shifts were preserved.'
+            
+            return jsonify({
+                'success': True,
+                'message': success_message,
+                'result': result
+            })
+            
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False, 
+                'error': f'BLANK template application failed: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False, 
+            'error': f'Unexpected error applying BLANK template: {str(e)}'
+        }), 500
+
+
+@bp.route('/api/templates/<int:template_id>/preview-blank', methods=['POST'])
+@login_required
+def preview_blank_template(template_id):
+    """Preview what a BLANK template application would do"""
+    try:
+        template = ScheduleTemplateV2.query.get(template_id)
+        if not template:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+        
+        if template.template_type != TemplateType.BLANK:
+            return jsonify({'success': False, 'error': 'This is not a BLANK template'}), 400
+        
+        if not template.can_user_access(current_user):
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Parse target dates
+        try:
+            target_start = datetime.strptime(data['target_start_date'], '%Y-%m-%d').date()
+            target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
+        except (ValueError, KeyError):
+            return jsonify({'success': False, 'error': 'Invalid date format'}), 400
+        
+        # Get target employees
+        target_section_id = data.get('target_section_id')
+        target_unit_id = data.get('target_unit_id')
+        clear_all_types = data.get('clear_all_types', True)
+        preserve_leave_types = data.get('preserve_leave_types', [])
+        
+        if target_section_id:
+            target_employees = User.query.filter_by(section_id=target_section_id, is_active=True).all()
+        elif target_unit_id:
+            target_employees = User.query.filter_by(unit_id=target_unit_id, is_active=True).all()
+        else:
+            return jsonify({'success': False, 'error': 'No target scope specified'}), 400
+        
+        if not target_employees:
+            return jsonify({'success': False, 'error': 'No employees found in target scope'}), 400
+        
+        # Find existing shifts that would be affected
+        preserve_enum_types = []
+        if preserve_leave_types:
+            try:
+                preserve_enum_types = [ShiftStatus(status) for status in preserve_leave_types]
+            except ValueError:
+                preserve_enum_types = []
+        
+        # Get all shifts in date range
+        all_shifts = Shift.query.filter(
+            Shift.date.between(target_start, target_end),
+            Shift.employee_id.in_([emp.id for emp in target_employees])
+        ).all()
+        
+        # Categorize shifts
+        shifts_to_delete = []
+        shifts_to_preserve = []
+        
+        for shift in all_shifts:
+            if not clear_all_types and shift.status in preserve_enum_types:
+                shifts_to_preserve.append(shift)
+            else:
+                shifts_to_delete.append(shift)
+        
+        # Count by type
+        delete_by_type = {}
+        preserve_by_type = {}
+        
+        for shift in shifts_to_delete:
+            shift_type = shift.status.value
+            delete_by_type[shift_type] = delete_by_type.get(shift_type, 0) + 1
+        
+        for shift in shifts_to_preserve:
+            shift_type = shift.status.value
+            preserve_by_type[shift_type] = preserve_by_type.get(shift_type, 0) + 1
+        
+        target_duration = (target_end - target_start).days + 1
+        template_duration = template.template_data.get('duration_days', 7)
+        
+        preview_data = {
+            'target_employees': [
+                {
+                    'id': emp.id, 
+                    'name': emp.full_name, 
+                    'role': emp.job_title
+                } for emp in target_employees
+            ],
+            'date_range': f"{target_start.strftime('%Y-%m-%d')} to {target_end.strftime('%Y-%m-%d')}",
+            'duration_match': target_duration == template_duration,
+            'duration_info': {
+                'target_days': target_duration,
+                'template_days': template_duration,
+                'difference': target_duration - template_duration
+            },
+            'shifts_to_delete': len(shifts_to_delete),
+            'shifts_to_preserve': len(shifts_to_preserve),
+            'total_existing_shifts': len(all_shifts),
+            'affected_employees': len(target_employees),
+            'delete_by_type': delete_by_type,
+            'preserve_by_type': preserve_by_type,
+            'clear_all_types': clear_all_types,
+            'preserve_leave_types': preserve_leave_types,
+            'action_summary': f"Will clear {len(shifts_to_delete)} shifts and preserve {len(shifts_to_preserve)} shifts"
+        }
+        
+        return jsonify({
+            'success': True,
+            'preview': preview_data
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False, 
+            'error': f'Error generating preview: {str(e)}'
+        }), 500
+
 # ----------TEMPLATE APPLICATION ---------
 
 @bp.route('/api/templates')
@@ -1440,84 +1957,225 @@ def get_templates():
 @bp.route('/api/templates/create-snapshot', methods=['POST'])
 @login_required
 def create_template_snapshot():
-    """Create template from current schedule snapshot"""
+    """FIXED: Create template from current schedule snapshot with better validation"""
     try:
         if not current_user.can_edit_schedule():
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
         
         data = request.get_json()
         
-        # Validate required fields
-        required_fields = ['name', 'start_date', 'end_date']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+        # FIXED: Enhanced validation with specific error messages
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
-        # Parse dates
+        required_fields = ['name', 'start_date', 'end_date']
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return jsonify({
+                'success': False, 
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        # FIXED: Parse and validate dates with better error handling
         try:
             start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
             end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
-        except ValueError:
-            return jsonify({'success': False, 'error': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+        except ValueError as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid date format. Use YYYY-MM-DD: {str(e)}'
+            }), 400
         
-        # Validate date range
+        # FIXED: Enhanced date range validation
         if start_date > end_date:
-            return jsonify({'success': False, 'error': 'Start date must be before end date.'}), 400
+            return jsonify({
+                'success': False, 
+                'error': 'Start date must be before or equal to end date'
+            }), 400
         
         duration = (end_date - start_date).days + 1
-        if duration > 14:  # Limit to 2 weeks
-            return jsonify({'success': False, 'error': 'Template duration cannot exceed 14 days.'}), 400
+        if duration > 14:
+            return jsonify({
+                'success': False, 
+                'error': f'Template duration cannot exceed 14 days. Requested: {duration} days'
+            }), 400
         
-        # Determine organizational scope
+        if duration < 1:
+            return jsonify({
+                'success': False, 
+                'error': 'Template must span at least 1 day'
+            }), 400
+        
+        # FIXED: Validate template name
+        name = data['name'].strip()
+        if len(name) < 3:
+            return jsonify({
+                'success': False, 
+                'error': 'Template name must be at least 3 characters long'
+            }), 400
+        
+        if len(name) > 100:
+            return jsonify({
+                'success': False, 
+                'error': 'Template name cannot exceed 100 characters'
+            }), 400
+        
+        # Check for duplicate template names
+        existing_template = ScheduleTemplateV2.query.filter_by(
+            name=name,
+            created_by_id=current_user.id
+        ).first()
+        
+        if existing_template:
+            return jsonify({
+                'success': False, 
+                'error': f'You already have a template named "{name}". Please choose a different name.'
+            }), 400
+        
+        # Determine organizational scope with validation
         section_id = data.get('section_id')
         unit_id = data.get('unit_id')
         department_id = data.get('department_id')
         division_id = data.get('division_id')
+        scope_type = data.get('scope_type')
+        scope_id = data.get('scope_id')
         
-        # Use current user's scope if not specified
+        # FIXED: Better scope validation and assignment
+        if scope_type and scope_id:
+            try:
+                scope_id = int(scope_id)
+                if scope_type == 'section':
+                    section_id = scope_id
+                elif scope_type == 'unit':
+                    unit_id = scope_id
+                elif scope_type == 'department':
+                    department_id = scope_id
+                elif scope_type == 'division':
+                    division_id = scope_id
+                else:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Invalid scope type: {scope_type}'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid scope ID - must be a number'
+                }), 400
+        else:
+            # Use current user's scope if not specified
+            section_id = section_id or current_user.section_id
+            unit_id = unit_id or current_user.unit_id
+            department_id = department_id or current_user.department_id
+            division_id = division_id or current_user.division_id
+        
+        # FIXED: Validate that at least one organizational scope is provided
         if not any([section_id, unit_id, department_id, division_id]):
-            section_id = current_user.section_id
-            unit_id = current_user.unit_id
-            department_id = current_user.department_id
-            division_id = current_user.division_id
+            return jsonify({
+                'success': False, 
+                'error': 'No organizational scope specified. Please select a department, division, section, or unit.'
+            }), 400
         
         # Determine template type
         template_type = TemplateType.WEEKLY if duration == 7 else TemplateType.CUSTOM
         
-        # Create template from schedule
-        template = ScheduleTemplateV2.create_from_schedule(
-            user=current_user,
-            name=data['name'],
-            description=data.get('description', ''),
-            start_date=start_date,
-            end_date=end_date,
-            section_id=section_id,
-            unit_id=unit_id,
-            department_id=department_id,
-            division_id=division_id,
-            is_public=data.get('is_public', False),
-            template_type=template_type
+        # FIXED: Pre-check if there are any shifts in the date range
+        preview_query = Shift.query.filter(
+            Shift.date.between(start_date, end_date)
         )
         
-        db.session.add(template)
-        db.session.commit()
+        # Apply organizational filter for preview
+        if section_id:
+            preview_employees = User.query.filter_by(section_id=section_id, is_active=True).all()
+        elif unit_id:
+            preview_employees = User.query.filter_by(unit_id=unit_id, is_active=True).all()
+        elif department_id:
+            preview_employees = User.query.filter_by(department_id=department_id, is_active=True).all()
+        elif division_id:
+            preview_employees = User.query.filter_by(division_id=division_id, is_active=True).all()
+        else:
+            return jsonify({
+                'success': False, 
+                'error': 'Unable to determine organizational scope'
+            }), 400
         
-        return jsonify({
-            'success': True,
-            'message': f'Template "{template.name}" created successfully!',
-            'template': template.to_dict()
-        })
+        if not preview_employees:
+            return jsonify({
+                'success': False, 
+                'error': 'No active employees found in the specified organizational scope'
+            }), 400
         
-    except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        # Check for shifts in the date range
+        shift_count = preview_query.filter(
+            Shift.employee_id.in_([emp.id for emp in preview_employees])
+        ).count()
+        
+        if shift_count == 0:
+            return jsonify({
+                'success': False, 
+                'error': f'No shifts found in the date range {start_date} to {end_date} for the selected organizational scope'
+            }), 400
+        
+        # FIXED: Create template with enhanced error handling
+        try:
+            template = ScheduleTemplateV2.create_from_schedule(
+                user=current_user,
+                name=name,
+                description=data.get('description', '').strip(),
+                start_date=start_date,
+                end_date=end_date,
+                section_id=section_id,
+                unit_id=unit_id,
+                department_id=department_id,
+                division_id=division_id,
+                is_public=data.get('is_public', False),
+                template_type=template_type
+            )
+            
+            # FIXED: Validate template was created properly
+            if not template.template_data or not template.template_data.get('shifts'):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Template creation failed - no shifts captured'
+                }), 500
+            
+            db.session.add(template)
+            db.session.commit()
+            
+            # FIXED: Return enhanced response with validation info
+            return jsonify({
+                'success': True,
+                'message': f'Template "{template.name}" created successfully with {template.total_shifts} shifts from {template.total_employees} employees!',
+                'template': template.to_dict(),
+                'validation': {
+                    'shifts_captured': len(template.template_data['shifts']),
+                    'employees_captured': len(template.template_data['employees']),
+                    'date_range': f"{start_date} to {end_date}",
+                    'duration_days': duration,
+                    'has_metadata': 'metadata' in template.template_data
+                }
+            })
+            
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False, 
+                'error': f'Template creation failed: {str(e)}'
+            }), 500
+            
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': f'Error creating template: {str(e)}'}), 500
+        return jsonify({
+            'success': False, 
+            'error': f'Unexpected error creating template: {str(e)}'
+        }), 500
 
 @bp.route('/api/templates/<int:template_id>/apply', methods=['POST'])
 @login_required
 def apply_template(template_id):
-    """Apply template to new date range"""
+    """FIXED: Apply template to new date range with comprehensive validation"""
     try:
         if not current_user.can_edit_schedule():
             return jsonify({'success': False, 'error': 'Insufficient permissions'}), 403
@@ -1530,13 +2188,47 @@ def apply_template(template_id):
             return jsonify({'success': False, 'error': 'Access denied to this template'}), 403
         
         data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
-        # Parse target dates
+        # FIXED: Enhanced validation for target dates
         try:
             target_start = datetime.strptime(data['target_start_date'], '%Y-%m-%d').date()
             target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
-        except (ValueError, KeyError):
-            return jsonify({'success': False, 'error': 'Invalid target date format'}), 400
+        except (ValueError, KeyError) as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Invalid target date format. Use YYYY-MM-DD: {str(e)}'
+            }), 400
+        
+        # FIXED: Validate date range
+        if target_start > target_end:
+            return jsonify({
+                'success': False, 
+                'error': 'Target start date must be before or equal to target end date'
+            }), 400
+        
+        target_duration = (target_end - target_start).days + 1
+        template_duration = template.duration_days
+        
+        if target_duration != template_duration:
+            return jsonify({
+                'success': False, 
+                'error': f'Target date range ({target_duration} days) must match template duration ({template_duration} days)'
+            }), 400
+        
+        # FIXED: Validate template data integrity
+        if not template.template_data or 'shifts' not in template.template_data:
+            return jsonify({
+                'success': False, 
+                'error': 'Template data is corrupted or missing'
+            }), 500
+        
+        if not template.template_data.get('employees'):
+            return jsonify({
+                'success': False, 
+                'error': 'Template contains no employee data'
+            }), 500
         
         # Get target organizational scope
         target_section_id = data.get('target_section_id')
@@ -1544,30 +2236,151 @@ def apply_template(template_id):
         replace_existing = data.get('replace_existing', False)
         employee_mapping_overrides = data.get('employee_mappings')
         
-        # Apply template
-        result = template.apply_to_date_range(
-            start_date=target_start,
-            end_date=target_end,
-            user=current_user,
-            target_section_id=target_section_id,
-            target_unit_id=target_unit_id,
-            employee_mapping_overrides=employee_mapping_overrides,
-            replace_existing=replace_existing
-        )
+        # FIXED: Validate organizational scope
+        if target_section_id:
+            try:
+                target_section_id = int(target_section_id)
+                target_section = Section.query.get(target_section_id)
+                if not target_section:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Target section ID {target_section_id} not found'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid target section ID'
+                }), 400
         
-        db.session.commit()
+        if target_unit_id:
+            try:
+                target_unit_id = int(target_unit_id)
+                target_unit = Unit.query.get(target_unit_id)
+                if not target_unit:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Target unit ID {target_unit_id} not found'
+                    }), 400
+            except (ValueError, TypeError):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Invalid target unit ID'
+                }), 400
         
-        return jsonify({
-            'success': True,
-            'message': f'Template applied successfully! Created {result["created_shifts"]} shifts.',
-            'result': result
-        })
+        # FIXED: Validate employee mapping overrides format
+        if employee_mapping_overrides:
+            if not isinstance(employee_mapping_overrides, dict):
+                return jsonify({
+                    'success': False, 
+                    'error': 'Employee mappings must be a dictionary'
+                }), 400
+            
+            # Validate mapping format
+            for template_emp_id, target_emp_id in employee_mapping_overrides.items():
+                try:
+                    int(target_emp_id)  # Ensure target employee ID is valid
+                except (ValueError, TypeError):
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Invalid target employee ID in mapping: {target_emp_id}'
+                    }), 400
         
-    except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
+        # FIXED: Pre-validate that we can apply the template
+        try:
+            # Get target employees to validate scope
+            if target_section_id:
+                target_employees = User.query.filter_by(section_id=target_section_id, is_active=True).all()
+            elif target_unit_id:
+                target_employees = User.query.filter_by(unit_id=target_unit_id, is_active=True).all()
+            elif template.section_id:
+                target_employees = User.query.filter_by(section_id=template.section_id, is_active=True).all()
+            elif template.unit_id:
+                target_employees = User.query.filter_by(unit_id=template.unit_id, is_active=True).all()
+            else:
+                return jsonify({
+                    'success': False, 
+                    'error': 'No target organizational scope specified'
+                }), 400
+            
+            if not target_employees:
+                return jsonify({
+                    'success': False, 
+                    'error': 'No active employees found in target scope'
+                }), 400
+            
+            # Check for existing shifts if not replacing
+            if not replace_existing:
+                existing_shift_count = Shift.query.filter(
+                    Shift.date.between(target_start, target_end),
+                    Shift.employee_id.in_([emp.id for emp in target_employees])
+                ).count()
+                
+                if existing_shift_count > 0:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'{existing_shift_count} shifts already exist in the target date range. Enable "Replace existing shifts" to overwrite them.',
+                        'existing_shift_count': existing_shift_count
+                    }), 400
+            
+        except Exception as e:
+            return jsonify({
+                'success': False, 
+                'error': f'Validation error: {str(e)}'
+            }), 400
+        
+        # FIXED: Apply template with comprehensive error handling
+        try:
+            result = template.apply_to_date_range(
+                start_date=target_start,
+                end_date=target_end,
+                user=current_user,
+                target_section_id=target_section_id,
+                target_unit_id=target_unit_id,
+                employee_mapping_overrides=employee_mapping_overrides,
+                replace_existing=replace_existing
+            )
+            
+            # FIXED: Validate application results
+            if result['created_shifts'] == 0 and result['skipped_shifts'] == 0:
+                return jsonify({
+                    'success': False, 
+                    'error': 'No shifts were created. Check employee mappings and template data.'
+                }), 500
+            
+            db.session.commit()
+            
+            # FIXED: Enhanced success response
+            success_message = f'Template applied successfully! Created {result["created_shifts"]} shifts.'
+            if result['skipped_shifts'] > 0:
+                success_message += f' {result["skipped_shifts"]} shifts were skipped.'
+            
+            return jsonify({
+                'success': True,
+                'message': success_message,
+                'result': result,
+                'template_info': {
+                    'name': template.name,
+                    'duration': template.duration_days,
+                    'version': template.template_data.get('version', 'unknown')
+                }
+            })
+            
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'success': False, 
+                'error': f'Template application failed: {str(e)}'
+            }), 500
+            
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': f'Error applying template: {str(e)}'}), 500
+        return jsonify({
+            'success': False, 
+            'error': f'Unexpected error applying template: {str(e)}'
+        }), 500
 
 @bp.route('/api/templates/<int:template_id>')
 @login_required
@@ -1597,7 +2410,7 @@ def get_template_details(template_id):
 @bp.route('/api/templates/<int:template_id>/preview', methods=['POST'])
 @login_required
 def preview_template_application():
-    """Preview what applying a template would look like"""
+    """FIXED: Preview template application with detailed validation"""
     try:
         template = ScheduleTemplateV2.query.get(template_id)
         if not template:
@@ -1607,6 +2420,8 @@ def preview_template_application():
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
         data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
         
         # Parse target dates
         try:
@@ -1614,6 +2429,13 @@ def preview_template_application():
             target_end = datetime.strptime(data['target_end_date'], '%Y-%m-%d').date()
         except (ValueError, KeyError):
             return jsonify({'success': False, 'error': 'Invalid date format'}), 400
+        
+        # FIXED: Validate template data integrity
+        if not template.template_data or not template.template_data.get('shifts'):
+            return jsonify({
+                'success': False, 
+                'error': 'Template data is corrupted - cannot generate preview'
+            }), 500
         
         # Get target employees
         target_section_id = data.get('target_section_id')
@@ -1626,23 +2448,86 @@ def preview_template_application():
         else:
             return jsonify({'success': False, 'error': 'No target scope specified'}), 400
         
-        # Generate preview of mappings and conflicts
-        preview_data = {
-            'target_employees': [{'id': emp.id, 'name': emp.full_name, 'role': emp.job_title} for emp in target_employees],
-            'template_employees': template.template_data.get('employees', {}),
-            'shifts_to_create': len(template.template_data.get('shifts', [])),
-            'date_range': f"{target_start.strftime('%Y-%m-%d')} to {target_end.strftime('%Y-%m-%d')}",
-            'duration_match': (target_end - target_start).days + 1 == template.duration_days
-        }
+        if not target_employees:
+            return jsonify({'success': False, 'error': 'No employees found in target scope'}), 400
         
-        # Check for existing shifts that would conflict
+        # FIXED: Enhanced preview data with detailed analysis
+        target_duration = (target_end - target_start).days + 1
+        template_duration = template.duration_days
+        
+        # Check for existing shifts
         existing_shifts = Shift.query.filter(
             Shift.date.between(target_start, target_end),
             Shift.employee_id.in_([emp.id for emp in target_employees])
         ).all()
         
-        preview_data['existing_shifts'] = len(existing_shifts)
-        preview_data['conflicts'] = len(existing_shifts) > 0
+        # Analyze employee role distribution
+        target_roles = {}
+        template_roles = {}
+        
+        for emp in target_employees:
+            role_key = f"{emp.job_title or 'General'}_{emp.rank or 'Staff'}"
+            target_roles[role_key] = target_roles.get(role_key, 0) + 1
+        
+        for emp_data in template.template_data['employees'].values():
+            role_key = f"{emp_data.get('job_title') or 'General'}_{emp_data.get('rank') or 'Staff'}"
+            template_roles[role_key] = template_roles.get(role_key, 0) + 1
+        
+        # Calculate mapping potential
+        mappable_employees = 0
+        role_mismatches = []
+        
+        for template_role, template_count in template_roles.items():
+            target_count = target_roles.get(template_role, 0)
+            if target_count >= template_count:
+                mappable_employees += template_count
+            else:
+                mappable_employees += target_count
+                if target_count == 0:
+                    role_mismatches.append(f"No target employees with role '{template_role}' (need {template_count})")
+                else:
+                    role_mismatches.append(f"Role '{template_role}': need {template_count}, found {target_count}")
+        
+        preview_data = {
+            'target_employees': [
+                {
+                    'id': emp.id, 
+                    'name': emp.full_name, 
+                    'role': emp.job_title,
+                    'rank': emp.rank,
+                    'role_key': f"{emp.job_title or 'General'}_{emp.rank or 'Staff'}"
+                } for emp in target_employees
+            ],
+            'template_employees': dict(template.template_data.get('employees', {})),
+            'shifts_to_create': len(template.template_data.get('shifts', [])),
+            'date_range': f"{target_start.strftime('%Y-%m-%d')} to {target_end.strftime('%Y-%m-%d')}",
+            'duration_match': target_duration == template_duration,
+            'duration_info': {
+                'target_days': target_duration,
+                'template_days': template_duration,
+                'difference': target_duration - template_duration
+            },
+            'existing_shifts': len(existing_shifts),
+            'conflicts': len(existing_shifts) > 0,
+            'role_analysis': {
+                'target_roles': target_roles,
+                'template_roles': template_roles,
+                'mappable_employees': mappable_employees,
+                'total_template_employees': len(template.template_data['employees']),
+                'role_mismatches': role_mismatches,
+                'mapping_success_rate': round((mappable_employees / len(template.template_data['employees'])) * 100, 1) if template.template_data['employees'] else 0
+            },
+            'template_validation': {
+                'has_metadata': 'metadata' in template.template_data,
+                'version': template.template_data.get('version', 'unknown'),
+                'data_integrity': all([
+                    'shifts' in template.template_data,
+                    'employees' in template.template_data,
+                    len(template.template_data['shifts']) > 0,
+                    len(template.template_data['employees']) > 0
+                ])
+            }
+        }
         
         return jsonify({
             'success': True,
@@ -1650,7 +2535,10 @@ def preview_template_application():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': f'Error generating preview: {str(e)}'}), 500
+        return jsonify({
+            'success': False, 
+            'error': f'Error generating preview: {str(e)}'
+        }), 500
 
 @bp.route('/api/templates/<int:template_id>', methods=['DELETE'])
 @login_required

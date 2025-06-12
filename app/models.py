@@ -14,7 +14,8 @@ import base64
 from cryptography.fernet import Fernet
 import os
 from sqlalchemy import text
-
+from sqlalchemy.ext.mutable import MutableDict
+import copy
 
 
 db = SQLAlchemy()
@@ -84,10 +85,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.Enum(UserRole, name='user_role'), default=UserRole.EMPLOYEE, nullable=False)
     avatar = db.Column(db.String(200), default='default_avatar.png')
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    #User.requires_2fa_setup = requires_2fa_setup
-    #User.is_2fa_enabled = is_2fa_enabled
-    #User.can_skip_2fa = can_skip_2fa
-    
+
     # Employment fields
     personnel_number = db.Column(db.String(50), unique=True, nullable=True, index=True)
     typecode = db.Column(db.String(20), nullable=True)
@@ -102,8 +100,8 @@ class User(UserMixin, db.Model):
     employee_type = db.Column(db.Enum(EmployeeType, name='employee_type'), nullable=True)
     schedule_format = db.Column(db.Enum(ScheduleFormat, name='schedule_format'), nullable=True)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
 # Relationships with foreign keys
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'), nullable=True)
@@ -147,25 +145,22 @@ class User(UserMixin, db.Model):
             db.session.add(self.two_factor)
         return self.two_factor
     
-    def can_skip_2fa(self, device_token):
+    def can_skip_2fa(self, device_token=None):
+        """Check if user can skip 2FA verification"""
         if not device_token:
             return False
-        
-        settings = TwoFactorSettings.get_settings()
-        if not settings.remember_device_enabled:
+            
+        try:
+            settings = TwoFactorSettings.get_settings()
+            if not settings.remember_device_enabled:
+                return False
+            
+            return TrustedDevice.is_trusted_device(self, device_token)
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error checking trusted device: {e}")
             return False
         
-        device = TrustedDevice.query.filter_by(
-            user_id=self.id,
-            device_token=device_token
-        ).first()
-        
-        if device and device.is_valid():
-            device.refresh()
-            return True
-        
-        return False
-    
     def cleanup_expired_devices(self):
         TrustedDevice.query.filter(
             TrustedDevice.user_id == self.id,
@@ -173,104 +168,144 @@ class User(UserMixin, db.Model):
         ).delete()
 
     def requires_2fa_setup(self):
-        """Check if user requires 2FA setup"""
-        # Import here to avoid circular imports
-        from app.models import TwoFactorSettings, TwoFactorStatus
-        
-        if not hasattr(self, 'two_factor') or not self.two_factor:
-            # Create 2FA record if it doesn't exist
+        """FIXED: Check if user requires 2FA setup"""
+        try:
             settings = TwoFactorSettings.get_settings()
+            if not settings.is_2fa_required_for_user(self):
+                return False
             
-            if settings.is_2fa_required_for_user(self):
+            if not hasattr(self, 'two_factor') or not self.two_factor:
+                # Create 2FA record if it doesn't exist
                 from app.models import UserTwoFactor
                 two_factor = UserTwoFactor(user_id=self.id)
                 two_factor.start_grace_period()
                 db.session.add(two_factor)
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except:
+                    db.session.rollback()
                 return True
+            
+            return self.two_factor.is_setup_required()
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error checking 2FA setup requirement: {e}")
             return False
-        
-        return self.two_factor.is_setup_required()
 
     def is_2fa_enabled(self):
-        """Check if user has 2FA enabled"""
-        from app.models import TwoFactorStatus
-        return (hasattr(self, 'two_factor') and 
-                self.two_factor and 
-                self.two_factor.status == TwoFactorStatus.ENABLED)
-        
-    def can_skip_2fa(self, device_token=None):
-        """Check if user can skip 2FA verification"""
-        from app.models import TwoFactorSettings, TrustedDevice
-        
-        settings = TwoFactorSettings.get_settings()
-        
-        # Check if remember device is enabled and device is trusted
-        if (settings.remember_device_enabled and 
-            device_token and 
-            TrustedDevice.is_trusted_device(self, device_token)):
-            return True
-        
-        return False
+        """FIXED: Check if user has 2FA enabled"""
+        try:
+            return (hasattr(self, 'two_factor') and 
+                    self.two_factor and 
+                    self.two_factor.status == TwoFactorStatus.ENABLED)
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error checking 2FA enabled status: {e}")
+            return False
+
+    def debug_2fa_status(self):
+        """Debug method to check 2FA status - remove in production"""
+        try:
+            from flask import current_app
+            
+            status_info = {
+                'user_id': self.id,
+                'username': self.username,
+                'has_2fa_record': hasattr(self, 'two_factor') and self.two_factor is not None,
+                '2fa_status': None,
+                'totp_secret_exists': False,
+                'totp_verified': False,
+                'grace_period_active': False,
+                'system_2fa_required': False
+            }
+            
+            # Check system settings
+            try:
+                settings = TwoFactorSettings.get_settings()
+                status_info['system_2fa_required'] = settings.is_2fa_required_for_user(self)
+            except Exception as e:
+                status_info['system_error'] = str(e)
+            
+            # Check user 2FA record
+            if self.two_factor:
+                status_info['2fa_status'] = self.two_factor.status.value
+                status_info['totp_secret_exists'] = bool(self.two_factor.totp_secret)
+                status_info['totp_verified'] = self.two_factor.totp_verified
+                status_info['grace_period_active'] = self.two_factor.is_in_grace_period()
+                
+                # Test TOTP secret decryption
+                try:
+                    secret = self.two_factor.get_totp_secret()
+                    status_info['totp_secret_decrypt_ok'] = secret is not None
+                    if secret:
+                        status_info['totp_secret_length'] = len(secret)
+                except Exception as e:
+                    status_info['totp_secret_decrypt_error'] = str(e)
+            
+            current_app.logger.info(f"2FA Debug Status: {status_info}")
+            return status_info
+            
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error in debug_2fa_status: {e}")
+            return {'error': str(e)}
 
     def can_approve_leaves(self):
-        """FIXED: Check if user can approve leave applications"""
-        # Administrators can approve all leaves
-        if self.role == UserRole.ADMINISTRATOR:
+        """FIXED: Check if user can approve leave applications - Section/Unit Restricted"""
+        # post_it@gmanetwork.com is the sole global admin
+        if self.role == UserRole.ADMINISTRATOR and self.email == 'post_it@gmanetwork.com':
             return True
         
-        # Managers can approve leaves
-        if self.role == UserRole.MANAGER:
-            return True
-            
-        # Section approvers can approve leaves
+        # Section approvers can approve leaves in their section
         if self.is_section_approver:
             return True
             
-        # Unit approvers can approve leaves  
+        # Unit approvers can approve leaves in their unit
         if self.is_unit_approver:
+            return True
+        
+        # Managers can approve leaves in their section/unit
+        if self.role == UserRole.MANAGER and (self.section_id or self.unit_id):
+            return True
+        
+        # Other administrators can only approve if they're in same section/unit
+        if self.role == UserRole.ADMINISTRATOR and (self.section_id or self.unit_id):
             return True
             
         return False
     
+
     def get_approvable_employees(self):
-        """FIXED: Get list of employees whose leave this user can approve"""
-        if self.can_admin():
-            # Administrators can approve for all active employees
-            return User.query.filter_by(is_active=True).all()
+        """FIXED: Get list of employees whose leave this user can approve - Section/Unit Restricted"""
+        # post_it@gmanetwork.com has global access to all employees
+        if self.role == UserRole.ADMINISTRATOR and self.email == 'post_it@gmanetwork.com':
+            return User.query.filter(
+                User.is_active == True,
+                User.id != self.id  # Exclude self
+            ).all()
         
         employees = set()  # Use set to avoid duplicates
         
-        # Section approvers can approve for all employees in the same section
-        if self.is_section_approver and self.section_id:
+        # Section-based approval (for section approvers, managers, and other admins in same section)
+        if (self.is_section_approver or 
+            (self.role in [UserRole.MANAGER, UserRole.ADMINISTRATOR])) and self.section_id:
             section_employees = User.query.filter_by(
                 section_id=self.section_id, 
                 is_active=True
             ).all()
             employees.update(section_employees)
         
-        # Unit approvers can approve for employees in the same unit
-        if self.is_unit_approver and self.unit_id:
+        # Unit-based approval (for unit approvers, managers, and other admins in same unit)
+        if (self.is_unit_approver or 
+            (self.role in [UserRole.MANAGER, UserRole.ADMINISTRATOR])) and self.unit_id:
             unit_employees = User.query.filter_by(
                 unit_id=self.unit_id, 
                 is_active=True
             ).all()
             employees.update(unit_employees)
         
-        # Managers can approve for employees in their section/unit
-        if self.role == UserRole.MANAGER:
-            if self.section_id:
-                manager_section_employees = User.query.filter_by(
-                    section_id=self.section_id,
-                    is_active=True
-                ).all()
-                employees.update(manager_section_employees)
-            elif self.unit_id:
-                manager_unit_employees = User.query.filter_by(
-                    unit_id=self.unit_id,
-                    is_active=True
-                ).all()
-                employees.update(manager_unit_employees)
+        # Remove self from the list (users shouldn't approve their own requests)
+        employees.discard(self)
         
         return list(employees)
     
@@ -955,9 +990,15 @@ class User(UserMixin, db.Model):
         return (self.employee_type in [EmployeeType.CONFIDENTIAL, EmployeeType.CONFIDENTIAL_PROBATIONARY] 
                 and self.is_active)
 
+    def is_global_admin(self):
+        """Check if user is the global administrator"""
+        return (self.role == UserRole.ADMINISTRATOR and 
+                self.email == 'post_it@gmanetwork.com')
+
     def can_admin(self):
+        """Check if user has admin privileges (global or regular)"""
         return self.role == UserRole.ADMINISTRATOR
-    
+
     def get_break_duration_minutes(self):
         """Get break duration in minutes based on schedule format"""
         if self.schedule_format == ScheduleFormat.EIGHT_HOUR:
@@ -976,8 +1017,8 @@ class Section(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     units = db.relationship('Unit', backref='section', lazy='dynamic', cascade='all, delete-orphan')
@@ -994,8 +1035,8 @@ class Unit(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     section_id = db.Column(db.Integer, db.ForeignKey('sections.id'), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Unique constraint for name within section
     __table_args__ = (db.UniqueConstraint('name', 'section_id', name='unique_unit_per_section'),)
@@ -1022,8 +1063,8 @@ class Shift(db.Model):
     work_arrangement = db.Column(db.Enum(WorkArrangement, name='work_arrangement'), default=WorkArrangement.ONSITE, nullable=True)
     sequence = db.Column(db.Integer, default=1, nullable=False)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
         db.Index('idx_shifts_date_employee', 'date', 'employee_id'),
@@ -1081,6 +1122,39 @@ class Shift(db.Model):
     def __repr__(self):
         return f'<Shift {self.employee.username} on {self.date} #{self.sequence}>'
 
+
+# ----------added function for snapshot
+class MutableJSON(MutableDict):
+    """Custom mutable type for JSON fields that properly tracks nested changes"""
+    
+    @classmethod
+    def coerce(cls, key, value):
+        if isinstance(value, MutableJSON):
+            return value
+        if isinstance(value, dict):
+            return MutableJSON(value)
+        return super(MutableJSON, cls).coerce(key, value)
+    
+    def __setitem__(self, key, value):
+        # Create a deep copy to ensure change detection
+        super(MutableJSON, self).__setitem__(key, copy.deepcopy(value))
+        self.changed()
+    
+    def __delitem__(self, key):
+        super(MutableJSON, self).__delitem__(key)
+        self.changed()
+    
+    def update(self, *args, **kwargs):
+        super(MutableJSON, self).update(*args, **kwargs)
+        self.changed()
+    
+    def pop(self, *args):
+        result = super(MutableJSON, self).pop(*args)
+        self.changed()
+        return result
+
+# 
+
 class Department(db.Model):
     """Top-level organizational unit in 4-level hierarchy"""
     __tablename__ = 'departments'
@@ -1088,8 +1162,8 @@ class Department(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text)
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     divisions = db.relationship('Division', backref='department', lazy='dynamic', cascade='all, delete-orphan')
@@ -1106,8 +1180,8 @@ class Division(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Unique constraint for name within department
     __table_args__ = (db.UniqueConstraint('name', 'department_id', name='unique_division_per_department'),)
@@ -1129,7 +1203,7 @@ class LeaveRequest(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     reason = db.Column(db.Text)
     status = db.Column(db.String(20), default='pending')
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at = db.Column(db.DateTime(timezone=True))
     reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     
@@ -1144,8 +1218,8 @@ class ScheduleTemplate(db.Model):
     description = db.Column(db.Text)
     template_data = db.Column(db.JSON)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     creator = db.relationship('User', backref='templates')
     
@@ -1167,8 +1241,8 @@ class EmailSettings(db.Model):
     notify_new_users = db.Column(db.Boolean, default=True)
     notify_leave_requests = db.Column(db.Boolean, default=False)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     @classmethod
     def get_settings(cls):
@@ -1224,8 +1298,8 @@ class AppSettings(db.Model):
     # NEW: Add this line to your existing AppSettings class
     backup_settings = db.Column(db.Text, nullable=True)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     @classmethod
     def get_settings(cls):
@@ -1400,8 +1474,8 @@ class LeaveApplication(db.Model):
     reviewer_comments = db.Column(db.Text, nullable=True)
     
     # Timestamps
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     employee = db.relationship('User', foreign_keys=[employee_id], backref='leave_applications_filed')
@@ -1640,8 +1714,8 @@ class TwoFactorSettings(db.Model):
     backup_codes_enabled = db.Column(db.Boolean, default=True, nullable=False)
     backup_codes_count = db.Column(db.Integer, default=10, nullable=False)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     @classmethod
     def get_settings(cls):
@@ -1693,32 +1767,73 @@ class TwoFactorSettings(db.Model):
         return f.decrypt(encrypted_value.encode()).decode()
     
     def _get_encryption_key(self):
-        """Get or create encryption key for 2FA settings"""
-        key_file = os.path.join(os.environ.get('INSTANCE_PATH', '.'), '2fa_key.key')
-        if os.path.exists(key_file):
-            with open(key_file, 'rb') as f:
-                return f.read()
-        else:
-            key = Fernet.generate_key()
-            os.makedirs(os.path.dirname(key_file), exist_ok=True)
-            with open(key_file, 'wb') as f:
-                f.write(key)
-            return key
+        """Get or create encryption key with environment variable support"""
+        import os
+        from cryptography.fernet import Fernet
+        import base64
     
-    def to_dict(self):
-        """Convert to dictionary for JSON responses"""
-        return {
-            'system_2fa_enabled': self.system_2fa_enabled,
-            'grace_period_days': self.grace_period_days,
-            'remember_device_enabled': self.remember_device_enabled,
-            'remember_device_days': self.remember_device_days,
-            'require_admin_2fa': self.require_admin_2fa,
-            'totp_enabled': self.totp_enabled,
-            'sms_enabled': self.sms_enabled,
-            'email_enabled': self.email_enabled,
-            'backup_codes_enabled': self.backup_codes_enabled,
-            'backup_codes_count': self.backup_codes_count
-        }
+        # Try to get key from environment variable first
+        env_key = os.environ.get('TWOFACTOR_ENCRYPTION_KEY')
+        if env_key:
+            try:
+            # Decode the base64 encoded key from environment
+                return base64.b64decode(env_key.encode())
+            except Exception as e:
+                from flask import current_app
+                current_app.logger.warning(f"Invalid encryption key in environment: {e}")
+    
+    # Fallback to file-based key
+        instance_path = os.environ.get('INSTANCE_PATH')
+        if not instance_path:
+            from flask import current_app
+            instance_path = current_app.instance_path
+    
+        key_file = os.path.join(instance_path, '2fa_key.key')
+    
+        try:
+            if os.path.exists(key_file):
+                with open(key_file, 'rb') as f:
+                    key = f.read()
+                # Log that we're using file-based key
+                    from flask import current_app
+                    current_app.logger.info("Using file-based encryption key")
+                    return key
+            else:
+            # Create new key
+                key = Fernet.generate_key()
+                os.makedirs(os.path.dirname(key_file), exist_ok=True)
+                with open(key_file, 'wb') as f:
+                    f.write(key)
+                os.chmod(key_file, 0o600)
+            
+            # Log the base64 key for environment variable use
+                from flask import current_app
+                key_b64 = base64.b64encode(key).decode()
+                current_app.logger.warning(f"New encryption key created. To persist across rebuilds, set environment variable:")
+                current_app.logger.warning(f"TWOFACTOR_ENCRYPTION_KEY={key_b64}")
+            
+                return key
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error managing encryption key: {e}")
+        # Generate a session-only key as fallback
+            session_key = Fernet.generate_key()
+            current_app.logger.warning("Using session-only encryption key - data will not persist across restarts!")
+            return session_key    
+        def to_dict(self):
+            """Convert to dictionary for JSON responses"""
+            return {
+                'system_2fa_enabled': self.system_2fa_enabled,
+                'grace_period_days': self.grace_period_days,
+                'remember_device_enabled': self.remember_device_enabled,
+                'remember_device_days': self.remember_device_days,
+                'require_admin_2fa': self.require_admin_2fa,
+                'totp_enabled': self.totp_enabled,
+                'sms_enabled': self.sms_enabled,
+                'email_enabled': self.email_enabled,
+                'backup_codes_enabled': self.backup_codes_enabled,
+                'backup_codes_count': self.backup_codes_count
+            }
 
 class UserTwoFactor(db.Model):
     """Individual user 2FA configuration and data"""
@@ -1746,22 +1861,24 @@ class UserTwoFactor(db.Model):
     backup_codes = db.Column(db.Text, nullable=True)
     backup_codes_used = db.Column(db.Text, nullable=True)
     
-    # Grace Period
-    grace_period_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Grace Period - FIXED: Use consistent datetime columns
+    grace_period_start = db.Column(db.DateTime, nullable=True)
     grace_period_reminded = db.Column(db.Boolean, default=False, nullable=False)
     
-    # Last verification tracking
-    last_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Last verification tracking - FIXED: Use consistent datetime columns
+    last_verified_at = db.Column(db.DateTime, nullable=True)
     verification_attempts = db.Column(db.Integer, default=0, nullable=False)
-    locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    locked_until = db.Column(db.DateTime, nullable=True)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    # FIXED: Use consistent datetime columns
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     user = db.relationship('User', back_populates='two_factor')
         
     def generate_totp_secret(self):
         """Generate new TOTP secret for user"""
+        import pyotp
         secret = pyotp.random_base32()
         self.totp_secret = self._encrypt_data(secret)
         return secret
@@ -1783,41 +1900,94 @@ class UserTwoFactor(db.Model):
             return None
     
     def verify_totp_code(self, code):
-        """Verify TOTP code"""
+        """FIXED: Verify TOTP code with better error handling and wider time window"""
         secret = self.get_totp_secret()
         if not secret:
+            from flask import current_app
+            current_app.logger.error(f"No TOTP secret available for user {self.user_id}")
             return False
         
-        totp = pyotp.TOTP(secret)
-        return totp.verify(code, valid_window=1)
+        try:
+            import pyotp
+            totp = pyotp.TOTP(secret)
+            
+            # CRITICAL FIX: Use a wider valid_window to account for time sync issues
+            # valid_window=2 means it accepts codes from 2 periods before and after current time
+            # This gives a total window of 5 periods (2.5 minutes) instead of 30 seconds
+            is_valid = totp.verify(code, valid_window=2)
+            
+            if not is_valid:
+                # DEBUGGING: Log the current time and expected codes for troubleshooting
+                from flask import current_app
+                current_time = datetime.utcnow()
+                current_code = totp.now()
+                current_app.logger.warning(
+                    f"TOTP verification failed for user {self.user_id}. "
+                    f"Submitted: {code}, Expected: {current_code}, "
+                    f"Time: {current_time.isoformat()}"
+                )
+            
+            return is_valid
+            
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"TOTP verification error for user {self.user_id}: {e}")
+            return False
     
     def generate_qr_code(self, app_name="Employee Scheduling"):
-        """Generate QR code for TOTP setup"""
+        """Generate QR code for TOTP setup - FIXED VERSION"""
         secret = self.get_totp_secret()
         if not secret:
             return None
         
-        totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
-            name=self.user.email,
-            issuer_name=app_name
-        )
+        # Check if user has email
+        if not self.user or not self.user.email:
+            from flask import current_app
+            current_app.logger.error(f"User {self.user_id} has no email for QR code generation")
+            return None
         
-        qr = qrcode.QRCode(version=1, box_size=10, border=5)
-        qr.add_data(totp_uri)
-        qr.make(fit=True)
-        
-        img = qr.make_image(fill_color="black", back_color="white")
-        img_io = io.BytesIO()
-        img.save(img_io, 'PNG')
-        img_io.seek(0)
-        
-        img_b64 = base64.b64encode(img_io.getvalue()).decode()
-        return f"data:image/png;base64,{img_b64}"
+        try:
+            # Create TOTP URI
+            totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+                name=self.user.email,
+                issuer_name=app_name
+            )
+            
+            # Generate QR code with better settings
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(totp_uri)
+            qr.make(fit=True)
+            
+            # Create image
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to base64
+            img_io = io.BytesIO()
+            img.save(img_io, 'PNG')
+            img_io.seek(0)
+            
+            # Properly encode to base64
+            img_data = img_io.getvalue()
+            img_b64 = base64.b64encode(img_data).decode('utf-8')
+            
+            # Return properly formatted data URL
+            return f"data:image/png;base64,{img_b64}"
+            
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"QR code generation failed: {e}")
+            return None
     
     def generate_backup_codes(self, count=10):
         """Generate new backup codes"""
         import secrets
         import string
+        import json
         
         codes = []
         for _ in range(count):
@@ -1835,6 +2005,7 @@ class UserTwoFactor(db.Model):
             return []
         
         try:
+            import json
             all_codes = json.loads(self._decrypt_data(self.backup_codes))
             used_codes = json.loads(self._decrypt_data(self.backup_codes_used) or "[]")
             return [code for code in all_codes if code not in used_codes]
@@ -1849,6 +2020,7 @@ class UserTwoFactor(db.Model):
             return False
         
         try:
+            import json
             all_codes = json.loads(self._decrypt_data(self.backup_codes))
             used_codes = json.loads(self._decrypt_data(self.backup_codes_used) or "[]")
             
@@ -1871,19 +2043,28 @@ class UserTwoFactor(db.Model):
             return False
     
     def is_in_grace_period(self):
-        """Check if user is in grace period"""
+        """Check if user is in grace period - FIXED"""
         if not self.grace_period_start:
             return False
         
         settings = TwoFactorSettings.get_settings()
         grace_end = self.grace_period_start + timedelta(days=settings.grace_period_days)
-        return datetime.utcnow().replace(tzinfo=timezone.utc) < grace_end
-    
+        
+        # CRITICAL FIX: Ensure both datetimes are naive
+        current_time = datetime.utcnow()
+        if hasattr(self.grace_period_start, 'tzinfo') and self.grace_period_start.tzinfo:
+            # Convert to naive if it has timezone info
+            grace_start_naive = self.grace_period_start.replace(tzinfo=None)
+            grace_end = grace_start_naive + timedelta(days=settings.grace_period_days)
+        
+        return current_time < grace_end
+   
     def start_grace_period(self):
-        """Start grace period for user"""
-        self.grace_period_start = datetime.utcnow().replace(tzinfo=timezone.utc)
+        """Start grace period for user - FIXED"""
+        # Always use naive datetime
+        self.grace_period_start = datetime.utcnow()
         self.status = TwoFactorStatus.GRACE_PERIOD
-    
+ 
     def is_setup_required(self):
         """Check if user needs to set up 2FA"""
         settings = TwoFactorSettings.get_settings()
@@ -1907,6 +2088,7 @@ class UserTwoFactor(db.Model):
         try:
             settings = TwoFactorSettings.get_settings()
             key = settings._get_encryption_key()
+            from cryptography.fernet import Fernet
             f = Fernet(key)
             return f.encrypt(data.encode()).decode()
         except Exception as e:
@@ -1922,6 +2104,7 @@ class UserTwoFactor(db.Model):
         try:
             settings = TwoFactorSettings.get_settings()
             key = settings._get_encryption_key()
+            from cryptography.fernet import Fernet
             f = Fernet(key)
             return f.decrypt(encrypted_data.encode()).decode()
         except Exception as e:
@@ -1941,25 +2124,40 @@ class TrustedDevice(db.Model):
     user_agent = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
     
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    last_used_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_used_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
     user = db.relationship('User', back_populates='trusted_devices')
 
-    
+    @staticmethod
+    def ensure_naive_datetime(dt):
+        """Convert timezone-aware datetime to naive UTC datetime"""
+        if dt is None:
+            return None
+        
+        if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+            # Convert to UTC and make naive
+            if hasattr(dt, 'utctimetuple'):
+                utc_dt = dt.utctimetuple()
+                return datetime(*utc_dt[:6])
+            else:
+                # Fallback - just remove timezone info
+                return dt.replace(tzinfo=None)
+        
+        return dt
+
     @classmethod
     def create_for_user(cls, user, request_obj, remember_days=30):
         """Create a new trusted device for user"""
         import secrets
         
         device_token = secrets.token_urlsafe(32)
-        # FIX: Use timezone-aware datetime
-        expires_at = datetime.utcnow().replace(tzinfo=timezone.utc) + timedelta(days=remember_days)
+        expires_at = datetime.utcnow() + timedelta(days=remember_days)
         
         device = cls(
             user_id=user.id,
             device_token=device_token,
-            user_agent=request_obj.headers.get('User-Agent', '')[:500],
+            user_agent=request_obj.headers.get('User-Agent', '')[:500] if request_obj.headers.get('User-Agent') else '',
             ip_address=request_obj.remote_addr,
             expires_at=expires_at
         )
@@ -1981,36 +2179,81 @@ class TrustedDevice(db.Model):
         if not device:
             return False
         
-        # FIX: Use timezone-aware datetime for comparison
-        now = datetime.utcnow().replace(tzinfo=timezone.utc)
-        if device.expires_at < now:
-            db.session.delete(device)
+        # Use naive datetime for comparison
+        now = datetime.utcnow()
+        expires_at = cls.ensure_naive_datetime(device.expires_at)
+        
+        if expires_at < now:
+            try:
+                db.session.delete(device)
+                # DON'T commit here - let the calling code handle it
+                # db.session.commit()  # REMOVED
+            except Exception as e:
+                db.session.rollback()
+                from flask import current_app
+                current_app.logger.error(f"Error deleting expired device: {e}")
             return False
         
-        # FIX: Use timezone-aware datetime
-        device.last_used_at = datetime.utcnow().replace(tzinfo=timezone.utc)
+        # Update last used with naive datetime
+        device.last_used_at = datetime.utcnow()
+        # DON'T commit here - let the calling code handle it
+        # The refresh method below will handle committing if needed
+        
         return True
     
     @classmethod
     def cleanup_expired(cls):
         """Remove expired trusted devices"""
-        # FIX: Use timezone-aware datetime
-        now = datetime.utcnow().replace(tzinfo=timezone.utc)
-        expired = cls.query.filter(cls.expires_at < now).all()
-        for device in expired:
-            db.session.delete(device)
-        return len(expired)
+        now = datetime.utcnow()
+        expired_count = 0
+        
+        try:
+            # Use a more efficient query to find expired devices
+            expired_devices = cls.query.filter(cls.expires_at < now).all()
+            
+            for device in expired_devices:
+                # Double-check with timezone handling
+                expires_at = cls.ensure_naive_datetime(device.expires_at)
+                if expires_at < now:
+                    db.session.delete(device)
+                    expired_count += 1
+            
+            # Only commit if we actually deleted something
+            if expired_count > 0:
+                db.session.commit()
+                
+        except Exception as e:
+            db.session.rollback()
+            from flask import current_app
+            current_app.logger.error(f"Error during device cleanup: {e}")
+        
+        return expired_count
     
     def is_valid(self):
         """Check if device is still valid (not expired)"""
-        # FIX: Use timezone-aware datetime
-        now = datetime.utcnow().replace(tzinfo=timezone.utc)
-        return self.expires_at > now
+        now = datetime.utcnow()
+        expires_at = self.ensure_naive_datetime(self.expires_at)
+        return expires_at > now
     
     def refresh(self):
         """Update last_used_at timestamp"""
-        # FIX: Use timezone-aware datetime
-        self.last_used_at = datetime.utcnow().replace(tzinfo=timezone.utc)
+        self.last_used_at = datetime.utcnow()
+        # DON'T auto-commit here - let the calling code decide when to commit
+        # This prevents session conflicts
+        
+    def refresh_and_commit(self):
+        """Update last_used_at timestamp and commit"""
+        self.last_used_at = datetime.utcnow()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            from flask import current_app
+            current_app.logger.error(f"Error refreshing device timestamp: {e}")
+
+    def __repr__(self):
+        return f'<TrustedDevice {self.device_token[:8]}... for user {self.user_id}>'
+
 
 class TemplateType(Enum):
     WEEKLY = "weekly"
@@ -2018,9 +2261,10 @@ class TemplateType(Enum):
     DEPARTMENT = "department"
     SECTION = "section"
     UNIT = "unit"
+    BLANK = "blank"  # ADD THIS NEW TYPE
 
 class ScheduleTemplateV2(db.Model):
-    """Enhanced Schedule Template with snapshot capabilities"""
+    """Enhanced Schedule Template with snapshot capabilities - FIXED VERSION"""
     __tablename__ = 'schedule_templates_v2'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -2035,23 +2279,23 @@ class ScheduleTemplateV2(db.Model):
     unit_id = db.Column(db.Integer, db.ForeignKey('units.id'), nullable=True)
     
     # Template metadata
-    source_start_date = db.Column(db.Date, nullable=True)  # Original date range
+    source_start_date = db.Column(db.Date, nullable=True)
     source_end_date = db.Column(db.Date, nullable=True)
     total_employees = db.Column(db.Integer, default=0)
     total_shifts = db.Column(db.Integer, default=0)
     
-    # Template data - JSON structure with shifts and employee mappings
-    template_data = db.Column(db.JSON, nullable=False)
-    employee_mappings = db.Column(db.JSON, nullable=True)  # Maps roles/positions to employees
+    # FIXED: Use MutableJSON for proper change detection
+    template_data = db.Column(MutableJSON.as_mutable(db.JSON), nullable=False)
+    employee_mappings = db.Column(MutableJSON.as_mutable(db.JSON), nullable=True)
     
     # Access control
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    is_public = db.Column(db.Boolean, default=False)  # Can others use this template?
+    is_public = db.Column(db.Boolean, default=False)
     usage_count = db.Column(db.Integer, default=0)
     
     # Timestamps
-    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
     
     # Relationships
@@ -2142,7 +2386,7 @@ class ScheduleTemplateV2(db.Model):
     def create_from_schedule(cls, user, name, description, start_date, end_date, 
                            section_id=None, unit_id=None, department_id=None, division_id=None,
                            is_public=False, template_type=TemplateType.WEEKLY):
-        """Create a template from existing schedule data"""
+        """FIXED: Create a template from existing schedule data with consistent data types"""
         
         # Get shifts for the date range and organizational scope
         shifts_query = Shift.query.filter(
@@ -2169,14 +2413,16 @@ class ScheduleTemplateV2(db.Model):
             Shift.employee_id.in_([tm.id for tm in team_members])
         ).order_by(Shift.employee_id, Shift.date, Shift.sequence).all()
         
-        # Build template data structure
-        template_data = {
+        # FIXED: Build template data structure with consistent data types
+        template_data = MutableJSON({
             'shifts': [],
             'employees': {},
-            'date_pattern': []
-        }
+            'date_pattern': [],
+            'version': '2.0',  # Add version for future compatibility
+            'created_at': datetime.utcnow().isoformat()
+        })
         
-        employee_mappings = {}
+        employee_mappings = MutableJSON({})
         
         # Calculate relative day offsets from start date
         total_days = (end_date - start_date).days + 1
@@ -2184,10 +2430,14 @@ class ScheduleTemplateV2(db.Model):
         for shift in shifts:
             day_offset = (shift.date - start_date).days
             
+            # FIXED: Use string keys consistently for employee IDs to avoid type issues
+            employee_id_str = str(shift.employee_id)
+            
             # Store employee info if not already stored
-            if shift.employee_id not in template_data['employees']:
+            if employee_id_str not in template_data['employees']:
                 employee = shift.employee
-                template_data['employees'][shift.employee_id] = {
+                template_data['employees'][employee_id_str] = {
+                    'original_id': shift.employee_id,  # Keep original ID for reference
                     'personnel_number': employee.personnel_number,
                     'full_name': employee.full_name,
                     'job_title': employee.job_title,
@@ -2204,20 +2454,23 @@ class ScheduleTemplateV2(db.Model):
                 mapping_key = f"{employee.job_title or 'General'}_{employee.rank or 'Staff'}"
                 if mapping_key not in employee_mappings:
                     employee_mappings[mapping_key] = []
-                employee_mappings[mapping_key].append(shift.employee_id)
+                employee_mappings[mapping_key].append(employee_id_str)
             
-            # Store shift data with relative day offset
+            # FIXED: Store shift data with consistent data types and validation
             shift_data = {
-                'employee_id': shift.employee_id,
+                'employee_id': employee_id_str,  # Use string for consistency
+                'original_employee_id': shift.employee_id,  # Keep original for reference
                 'day_offset': day_offset,
                 'start_time': shift.start_time.strftime('%H:%M') if shift.start_time else None,
                 'end_time': shift.end_time.strftime('%H:%M') if shift.end_time else None,
                 'role': shift.role,
                 'status': shift.status.value,
                 'notes': shift.notes,
-                'color': shift.color,
+                'color': shift.color or '#007bff',
                 'work_arrangement': shift.work_arrangement.value if shift.work_arrangement else 'onsite',
-                'sequence': shift.sequence
+                'sequence': shift.sequence,
+                'duration_hours': shift.duration_hours,  # Add calculated duration
+                'qualifies_for_break': shift.qualifies_for_break  # Add break qualification
             }
             template_data['shifts'].append(shift_data)
         
@@ -2227,11 +2480,27 @@ class ScheduleTemplateV2(db.Model):
             template_data['date_pattern'].append({
                 'offset': (current_date - start_date).days,
                 'weekday': current_date.weekday(),
-                'date_str': current_date.strftime('%Y-%m-%d')
+                'date_str': current_date.strftime('%Y-%m-%d'),
+                'is_weekend': current_date.weekday() >= 5
             })
             current_date += timedelta(days=1)
         
-        # Create the template
+        # FIXED: Add metadata for debugging and validation
+        template_data['metadata'] = {
+            'total_days': total_days,
+            'start_weekday': start_date.weekday(),
+            'end_weekday': end_date.weekday(),
+            'unique_employees': len(template_data['employees']),
+            'total_shifts': len(template_data['shifts']),
+            'source_scope': {
+                'section_id': section_id,
+                'unit_id': unit_id,
+                'department_id': department_id,
+                'division_id': division_id
+            }
+        }
+        
+        # Create the template with proper mutation tracking
         template = cls(
             name=name,
             description=description,
@@ -2255,7 +2524,7 @@ class ScheduleTemplateV2(db.Model):
     def apply_to_date_range(self, start_date, end_date, user, 
                           target_section_id=None, target_unit_id=None,
                           employee_mapping_overrides=None, replace_existing=False):
-        """Apply template to a new date range"""
+        """FIXED: Apply template to a new date range with better error handling and validation"""
         
         # Validate date range matches template duration
         target_days = (end_date - start_date).days + 1
@@ -2263,6 +2532,13 @@ class ScheduleTemplateV2(db.Model):
         
         if target_days != template_days:
             raise ValueError(f"Target date range ({target_days} days) must match template duration ({template_days} days)")
+        
+        # FIXED: Validate template data exists and is properly formatted
+        if not self.template_data or 'shifts' not in self.template_data:
+            raise ValueError("Template data is missing or corrupted")
+        
+        if not self.template_data['employees']:
+            raise ValueError("Template contains no employee data")
         
         # Get target employees
         if target_section_id:
@@ -2279,12 +2555,16 @@ class ScheduleTemplateV2(db.Model):
         if not target_employees:
             raise ValueError("No active employees found in target scope")
         
-        # Create employee mapping
+        # FIXED: Create employee mapping with proper type handling
         employee_id_mapping = {}
         
         if employee_mapping_overrides:
-            # Use provided mapping overrides
-            employee_id_mapping = employee_mapping_overrides
+            # FIXED: Ensure consistent data types in mapping overrides
+            for template_id, target_id in employee_mapping_overrides.items():
+                # Convert to consistent string format for template IDs
+                template_id_str = str(template_id)
+                target_id_int = int(target_id)
+                employee_id_mapping[template_id_str] = target_id_int
         else:
             # Auto-map employees by role/position
             target_employee_by_role = {}
@@ -2295,13 +2575,13 @@ class ScheduleTemplateV2(db.Model):
                 target_employee_by_role[role_key].append(emp)
             
             # Map template employees to target employees
-            for template_emp_id, template_emp_data in self.template_data['employees'].items():
+            for template_emp_id_str, template_emp_data in self.template_data['employees'].items():
                 template_role_key = f"{template_emp_data.get('job_title') or 'General'}_{template_emp_data.get('rank') or 'Staff'}"
                 
                 if template_role_key in target_employee_by_role and target_employee_by_role[template_role_key]:
                     # Map to first available employee with same role
                     target_emp = target_employee_by_role[template_role_key].pop(0)
-                    employee_id_mapping[int(template_emp_id)] = target_emp.id
+                    employee_id_mapping[template_emp_id_str] = target_emp.id
         
         # Remove existing shifts if replace_existing is True
         if replace_existing:
@@ -2313,20 +2593,26 @@ class ScheduleTemplateV2(db.Model):
             for shift in existing_shifts:
                 db.session.delete(shift)
         
-        # Create new shifts from template
+        # FIXED: Create new shifts from template with better validation
         created_shifts = []
         skipped_shifts = []
         
         for shift_data in self.template_data['shifts']:
-            template_employee_id = shift_data['employee_id']
+            # FIXED: Handle both string and integer employee IDs from template
+            template_employee_id = str(shift_data['employee_id'])
             
             # Skip if no mapping for this employee
             if template_employee_id not in employee_id_mapping:
-                skipped_shifts.append(f"No mapping for employee ID {template_employee_id}")
+                skipped_shifts.append(f"No mapping for template employee ID {template_employee_id}")
                 continue
             
             target_employee_id = employee_id_mapping[template_employee_id]
             shift_date = start_date + timedelta(days=shift_data['day_offset'])
+            
+            # FIXED: Better validation of shift date
+            if shift_date < start_date or shift_date > end_date:
+                skipped_shifts.append(f"Invalid shift date {shift_date} outside target range")
+                continue
             
             # Check if shift already exists (if not replacing)
             if not replace_existing:
@@ -2337,34 +2623,213 @@ class ScheduleTemplateV2(db.Model):
                 ).first()
                 
                 if existing:
-                    skipped_shifts.append(f"Shift already exists for {existing.employee.full_name} on {shift_date}")
+                    target_employee = User.query.get(target_employee_id)
+                    employee_name = target_employee.full_name if target_employee else f"ID {target_employee_id}"
+                    skipped_shifts.append(f"Shift already exists for {employee_name} on {shift_date}")
                     continue
             
-            # Create new shift
-            new_shift = Shift(
-                employee_id=target_employee_id,
-                date=shift_date,
-                start_time=datetime.strptime(shift_data['start_time'], '%H:%M').time() if shift_data['start_time'] else None,
-                end_time=datetime.strptime(shift_data['end_time'], '%H:%M').time() if shift_data['end_time'] else None,
-                role=shift_data['role'],
-                status=ShiftStatus(shift_data['status']),
-                notes=shift_data['notes'],
-                color=shift_data['color'],
-                work_arrangement=WorkArrangement(shift_data['work_arrangement']),
-                sequence=shift_data['sequence']
-            )
-            
-            db.session.add(new_shift)
-            created_shifts.append(new_shift)
+            # FIXED: Create new shift with proper validation and error handling
+            try:
+                new_shift = Shift(
+                    employee_id=target_employee_id,
+                    date=shift_date,
+                    start_time=datetime.strptime(shift_data['start_time'], '%H:%M').time() if shift_data['start_time'] else None,
+                    end_time=datetime.strptime(shift_data['end_time'], '%H:%M').time() if shift_data['end_time'] else None,
+                    role=shift_data['role'],
+                    status=ShiftStatus(shift_data['status']),
+                    notes=shift_data['notes'],
+                    color=shift_data['color'] or '#007bff',
+                    work_arrangement=WorkArrangement(shift_data['work_arrangement']),
+                    sequence=shift_data['sequence']
+                )
+                
+                db.session.add(new_shift)
+                created_shifts.append(new_shift)
+                
+            except (ValueError, KeyError) as e:
+                skipped_shifts.append(f"Invalid shift data: {str(e)}")
+                continue
         
         # Update template usage
         self.increment_usage()
+        
+        # FIXED: Force database update for JSON fields
+        db.session.flush()  # Ensure changes are written
         
         return {
             'created_shifts': len(created_shifts),
             'skipped_shifts': len(skipped_shifts),
             'skipped_details': skipped_shifts,
             'employee_mappings_used': len(employee_id_mapping),
-            'unmapped_employees': len(self.template_data['employees']) - len(employee_id_mapping)
+            'unmapped_employees': len(self.template_data['employees']) - len(employee_id_mapping),
+            'template_validation': {
+                'has_metadata': 'metadata' in self.template_data,
+                'version': self.template_data.get('version', 'unknown'),
+                'employee_count_match': len(self.template_data['employees']) == self.total_employees
+            }
         }
 
+    @classmethod
+    def create_blank_template(cls, user, name, description, duration_days=7, 
+                             section_id=None, unit_id=None, department_id=None, division_id=None,
+                             is_public=False):
+        """Create a BLANK template for clearing schedules"""
+        
+        # Validate duration
+        if duration_days < 1 or duration_days > 14:
+            raise ValueError("Duration must be between 1 and 14 days")
+        
+        # Create blank template data structure
+        template_data = MutableJSON({
+            'type': 'blank',
+            'action': 'clear_schedule',
+            'duration_days': duration_days,
+            'version': '2.0',
+            'created_at': datetime.utcnow().isoformat(),
+            'metadata': {
+                'purpose': 'Clear existing shifts in date range',
+                'affects_all_employees': True,
+                'removes_all_shift_types': True,
+                'source_scope': {
+                    'section_id': section_id,
+                    'unit_id': unit_id,
+                    'department_id': department_id,
+                    'division_id': division_id
+                }
+            }
+        })
+        
+        # Create the blank template
+        template = cls(
+            name=name,
+            description=description or "Blank template to clear all shifts in the specified date range",
+            template_type=TemplateType.BLANK,
+            department_id=department_id,
+            division_id=division_id,
+            section_id=section_id,
+            unit_id=unit_id,
+            source_start_date=None,  # No source dates for blank templates
+            source_end_date=None,
+            total_employees=0,  # Will be calculated during application
+            total_shifts=0,     # Always 0 for blank templates
+            template_data=template_data,
+            employee_mappings=MutableJSON({}),  # Empty mappings
+            created_by_id=user.id,
+            is_public=is_public
+        )
+        
+        return template
+
+    def apply_blank_template(self, start_date, end_date, user, 
+                            target_section_id=None, target_unit_id=None,
+                            clear_all_types=True, preserve_leave_types=None):
+        """Apply BLANK template to clear schedules in date range - RESTRICTED to user's scope"""
+        
+        # Validate this is a blank template
+        if self.template_type != TemplateType.BLANK:
+            raise ValueError("This method can only be used with BLANK templates")
+        
+        # Validate date range
+        target_days = (end_date - start_date).days + 1
+        template_duration = self.template_data.get('duration_days', 7)
+        
+        if target_days != template_duration:
+            raise ValueError(f"Target date range ({target_days} days) must match template duration ({template_duration} days)")
+        
+        # SECURITY: Restrict to user's organizational scope only
+        allowed_scope = None
+        
+        # Determine user's scope and validate target scope
+        if target_section_id:
+            # User must belong to the target section or be an admin
+            if not user.can_admin() and user.section_id != target_section_id:
+                raise ValueError("You can only clear shifts in your own section")
+            target_employees = User.query.filter_by(section_id=target_section_id, is_active=True).all()
+            allowed_scope = f"Section ID {target_section_id}"
+            
+        elif target_unit_id:
+            # User must belong to the target unit or be an admin
+            if not user.can_admin() and user.unit_id != target_unit_id:
+                raise ValueError("You can only clear shifts in your own unit")
+            target_employees = User.query.filter_by(unit_id=target_unit_id, is_active=True).all()
+            allowed_scope = f"Unit ID {target_unit_id}"
+            
+        else:
+            # Use user's own scope as default
+            if user.section_id:
+                target_employees = User.query.filter_by(section_id=user.section_id, is_active=True).all()
+                allowed_scope = f"User's Section ID {user.section_id}"
+            elif user.unit_id:
+                target_employees = User.query.filter_by(unit_id=user.unit_id, is_active=True).all()
+                allowed_scope = f"User's Unit ID {user.unit_id}"
+            else:
+                raise ValueError("You must belong to a section or unit to use BLANK templates")
+        
+        if not target_employees:
+            raise ValueError(f"No active employees found in target scope: {allowed_scope}")
+        
+        # Determine which shift types to preserve
+        preserve_types = preserve_leave_types or []
+        if not clear_all_types:
+            # Default preserve list for important leave types
+            preserve_types = [
+                ShiftStatus.ANNUAL_VACATION,
+                ShiftStatus.SICK_LEAVE,
+                ShiftStatus.MATERNITY_LEAVE,
+                ShiftStatus.PATERNITY_LEAVE,
+                ShiftStatus.BEREAVEMENT_LEAVE
+            ]
+        
+        # Find existing shifts to delete
+        shifts_query = Shift.query.filter(
+            Shift.date.between(start_date, end_date),
+            Shift.employee_id.in_([emp.id for emp in target_employees])
+        )
+        
+        # Apply preserve filter if needed
+        if preserve_types:
+            shifts_query = shifts_query.filter(
+                ~Shift.status.in_(preserve_types)
+            )
+        
+        existing_shifts = shifts_query.all()
+        
+        # Count shifts by type for reporting
+        deleted_by_type = {}
+        preserved_count = 0
+        
+        for shift in existing_shifts:
+            shift_type = shift.status.value
+            deleted_by_type[shift_type] = deleted_by_type.get(shift_type, 0) + 1
+            db.session.delete(shift)
+        
+        # Count preserved shifts if any
+        if preserve_types:
+            preserved_count = Shift.query.filter(
+                Shift.date.between(start_date, end_date),
+                Shift.employee_id.in_([emp.id for emp in target_employees]),
+                Shift.status.in_(preserve_types)
+            ).count()
+        
+        # Update template usage
+        self.increment_usage()
+        
+        return {
+            'deleted_shifts': len(existing_shifts),
+            'preserved_shifts': preserved_count,
+            'affected_employees': len(target_employees),
+            'deleted_by_type': deleted_by_type,
+            'date_range': f"{start_date} to {end_date}",
+            'preserve_types': [t.value for t in preserve_types] if preserve_types else [],
+            'template_info': {
+                'name': self.name,
+                'type': 'BLANK',
+                'duration': template_duration
+            }
+        }
+
+    # Add property to check if template is blank
+    @property
+    def is_blank_template(self):
+        """Check if this is a blank template"""
+        return self.template_type == TemplateType.BLANK

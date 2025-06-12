@@ -1,5 +1,3 @@
-<!-- Replace your entire employee_database.html with this fixed version -->
-
 {% extends "base.html" %}
 
 {% block title %}Employee Database{% endblock %}
@@ -14,7 +12,7 @@
     }
     
     .employee-table {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
     
     .employee-table th {
@@ -22,11 +20,13 @@
         border-top: none;
         font-weight: 600;
         white-space: nowrap;
+        padding: 12px 8px;
     }
     
     .employee-table td {
         vertical-align: middle;
         border-top: 1px solid #dee2e6;
+        padding: 10px 8px;
     }
     
     .table-responsive {
@@ -39,10 +39,29 @@
         padding: 0.25rem 0.5rem;
     }
     
-    /* Loading overlay removed - not needed */
-    
     .export-actions {
         gap: 10px;
+    }
+    
+    .employee-name {
+        min-width: 150px;
+    }
+    
+    .employee-details {
+        min-width: 120px;
+    }
+    
+    .approver-badge {
+        font-size: 0.7rem;
+        margin: 1px;
+    }
+    
+    .hierarchy-info {
+        font-size: 0.75rem;
+    }
+    
+    .schedule-badge {
+        font-size: 0.7rem;
     }
 </style>
 {% endblock %}
@@ -78,7 +97,29 @@
         </h6>
         <form id="filter-form">
             <div class="row g-3">
-                <div class="col-md-3">
+                {% if departments %}
+                <div class="col-md-2">
+                    <label for="department-filter" class="form-label">Department</label>
+                    <select class="form-select" id="department-filter" name="department_id">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}">{{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                {% if divisions %}
+                <div class="col-md-2">
+                    <label for="division-filter" class="form-label">Division</label>
+                    <select class="form-select" id="division-filter" name="division_id">
+                        <option value="">All Divisions</option>
+                        {% for div in divisions %}
+                        <option value="{{ div.id }}">{{ div.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-md-2">
                     <label for="section-filter" class="form-label">Section</label>
                     <select class="form-select" id="section-filter" name="section_id">
                         <option value="">All Sections</option>
@@ -87,16 +128,16 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label for="unit-filter" class="form-label">Unit</label>
                     <select class="form-select" id="unit-filter" name="unit_id">
                         <option value="">All Units</option>
                         {% for unit in units %}
-                        <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.section.name }})</option>
+                        <option value="{{ unit.id }}">{{ unit.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label for="employee-type-filter" class="form-label">Employee Type</label>
                     <select class="form-select" id="employee-type-filter" name="employee_type">
                         <option value="">All Types</option>
@@ -107,10 +148,10 @@
                         <option value="contractual">Contractual</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label for="search-filter" class="form-label">Search</label>
                     <input type="text" class="form-control" id="search-filter" name="search" 
-                           placeholder="Name, Email, Job Title...">
+                           placeholder="Name, Email, ID...">
                 </div>
             </div>
             <div class="row mt-3">
@@ -137,87 +178,163 @@
             <table class="table table-hover employee-table mb-0">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Date Hired</th>
-                        <th>Section</th>
-                        <th>Unit</th>
-                        <th>Job Title</th>
-                        <th>Rank</th>
-                        <th>Employee Type</th>
-                        <th>ID Number</th>
-                        <th>Service</th>
-                        <th>Contact</th>
-                        <th>Email</th>
+                        <th class="employee-name">Employee Info</th>
+                        <th>Hierarchy</th>
+                        <th>Employment Details</th>
+                        <th>Job Information</th>
+                        <th>Contact & System</th>
+                        <th>Service & Status</th>
+                        <th>Approver Roles</th>
                     </tr>
                 </thead>
                 <tbody id="employee-table-body">
                     {% for employee in employees %}
                     <tr>
-                        <td>
-                            <strong>{{ employee.last_name }}, {{ employee.first_name }}</strong>
-                            {% if employee.personnel_number %}
-                            <br><small class="text-muted">{{ employee.personnel_number }}</small>
-                            {% endif %}
+                        <!-- Employee Info -->
+                        <td class="employee-name">
+                            <div>
+                                <strong>{{ employee.last_name }}, {{ employee.first_name }}</strong>
+                                <br>
+                                <small class="text-muted">{{ employee.username }}</small>
+                                {% if employee.personnel_number %}
+                                <br><small class="text-primary">{{ employee.personnel_number }}</small>
+                                {% endif %}
+                            </div>
                         </td>
-                        <td>
-                            {% if employee.hiring_date %}
-                                {{ employee.hiring_date.strftime('%Y-%m-%d') }}
-                            {% else %}
-                                <span class="text-muted">Not set</span>
+
+                        <!-- Hierarchy -->
+                        <td class="hierarchy-info">
+                            {% if employee.department %}
+                                <div><span class="badge bg-dark">{{ employee.department.name }}</span></div>
                             {% endif %}
-                        </td>
-                        <td>
+                            {% if employee.division %}
+                                <div><span class="badge bg-warning text-dark">{{ employee.division.name }}</span></div>
+                            {% endif %}
                             {% if employee.section %}
-                                <span class="badge bg-primary">{{ employee.section.name }}</span>
-                            {% else %}
-                                <span class="text-muted">Not assigned</span>
+                                <div><span class="badge bg-primary">{{ employee.section.name }}</span></div>
                             {% endif %}
-                        </td>
-                        <td>
                             {% if employee.unit %}
-                                <span class="badge bg-info">{{ employee.unit.name }}</span>
-                            {% else %}
+                                <div><span class="badge bg-info">{{ employee.unit.name }}</span></div>
+                            {% endif %}
+                            {% if not (employee.department or employee.division or employee.section or employee.unit) %}
                                 <span class="text-muted">Not assigned</span>
                             {% endif %}
                         </td>
-                        <td>{{ employee.job_title or '-' }}</td>
-                        <td>{{ employee.rank or '-' }}</td>
-                        <td>
-                            {% if employee.employee_type %}
-                                <span class="badge bg-secondary">
-                                    {{ employee.employee_type.value.replace('_', ' ').title() }}
+
+                        <!-- Employment Details -->
+                        <td class="employee-details">
+                            <div>
+                                {% if employee.employee_type %}
+                                    <span class="badge bg-secondary">
+                                        {{ employee.employee_type.value.replace('_', ' ').title() }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% if employee.schedule_format %}
+                            <div class="mt-1">
+                                <span class="badge schedule-badge bg-light text-dark">
+                                    {{ employee.schedule_format.value.replace('_', ' ').title() }}
                                 </span>
-                            {% else %}
-                                <span class="text-muted">Not set</span>
+                            </div>
+                            {% endif %}
+                            {% if employee.hiring_date %}
+                                <div class="mt-1"><small class="text-muted">Hired: {{ employee.hiring_date.strftime('%Y-%m-%d') }}</small></div>
+                            {% endif %}
+                            {% if employee.id_number %}
+                                <div><small class="text-muted">ID: {{ employee.id_number }}</small></div>
                             {% endif %}
                         </td>
-                        <td>{{ employee.id_number or '-' }}</td>
-                        <td>
-                            {% if employee.years_of_service is not none %}
-                                <span class="badge years-badge 
-                                    {% if employee.years_of_service < 1 %}bg-warning text-dark
-                                    {% elif employee.years_of_service < 5 %}bg-info
-                                    {% elif employee.years_of_service < 10 %}bg-success
-                                    {% else %}bg-dark{% endif %}">
-                                    {{ employee.years_of_service }} {{ 'year' if employee.years_of_service == 1 else 'years' }}
-                                </span>
-                            {% else %}
-                                <span class="text-muted">N/A</span>
+
+                        <!-- Job Information -->
+                        <td class="employee-details">
+                            <div>
+                                {% if employee.job_title %}
+                                    <strong>{{ employee.job_title }}</strong>
+                                {% else %}
+                                    <span class="text-muted">No job title</span>
+                                {% endif %}
+                            </div>
+                            {% if employee.rank %}
+                                <div><small class="text-muted">Rank: {{ employee.rank }}</small></div>
+                            {% endif %}
+                            {% if employee.div_department %}
+                                <div><small class="text-muted">Div/Dept: {{ employee.div_department }}</small></div>
+                            {% endif %}
+                            {% if employee.typecode %}
+                                <div><small class="text-muted">Type Code: {{ employee.typecode }}</small></div>
                             {% endif %}
                         </td>
-                        <td>
-                            {% if employee.contact_number %}
-                                <a href="tel:{{ employee.contact_number }}" class="text-decoration-none">
-                                    {{ employee.contact_number }}
+
+                        <!-- Contact & System -->
+                        <td class="employee-details">
+                            <div>
+                                <a href="mailto:{{ employee.email }}" class="text-decoration-none">
+                                    {{ employee.email }}
                                 </a>
-                            {% else %}
-                                <span class="text-muted">Not provided</span>
+                            </div>
+                            {% if employee.contact_number %}
+                                <div class="mt-1">
+                                    <a href="tel:{{ employee.contact_number }}" class="text-decoration-none">
+                                        <i class="bi bi-telephone"></i> {{ employee.contact_number }}
+                                    </a>
+                                </div>
+                            {% endif %}
+                            <div class="mt-1">
+                                <span class="badge {{ 'bg-success' if employee.is_active else 'bg-danger' }}">
+                                    {{ 'Active' if employee.is_active else 'Inactive' }}
+                                </span>
+                            </div>
+                            <div><small class="text-muted">Role: {{ employee.role.value.title() }}</small></div>
+                        </td>
+
+                        <!-- Service & Status -->
+                        <td class="employee-details">
+                            {% if employee.years_of_service is not none %}
+                                <div>
+                                    <span class="badge years-badge 
+                                        {% if employee.years_of_service < 1 %}bg-warning text-dark
+                                        {% elif employee.years_of_service < 5 %}bg-info
+                                        {% elif employee.years_of_service < 10 %}bg-success
+                                        {% else %}bg-dark{% endif %}">
+                                        {{ employee.years_of_service }} {{ 'year' if employee.years_of_service == 1 else 'years' }}
+                                    </span>
+                                </div>
+                            {% endif %}
+                            
+                            {% if employee.signature %}
+                                <div class="mt-1">
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-pen"></i> Signature
+                                    </span>
+                                </div>
+                            {% endif %}
+                            
+                            {% if employee.avatar and employee.avatar != 'default_avatar.png' %}
+                                <div class="mt-1">
+                                    <span class="badge bg-info">
+                                        <i class="bi bi-person-circle"></i> Avatar
+                                    </span>
+                                </div>
                             {% endif %}
                         </td>
+
+                        <!-- Approver Roles -->
                         <td>
-                            <a href="mailto:{{ employee.email }}" class="text-decoration-none">
-                                {{ employee.email }}
-                            </a>
+                            {% if employee.is_department_approver %}
+                                <div><span class="badge approver-badge bg-dark">Dept Approver</span></div>
+                            {% endif %}
+                            {% if employee.is_division_approver %}
+                                <div><span class="badge approver-badge bg-warning text-dark">Div Approver</span></div>
+                            {% endif %}
+                            {% if employee.is_section_approver %}
+                                <div><span class="badge approver-badge bg-primary">Section Approver</span></div>
+                            {% endif %}
+                            {% if employee.is_unit_approver %}
+                                <div><span class="badge approver-badge bg-info">Unit Approver</span></div>
+                            {% endif %}
+                            {% if not (employee.is_department_approver or employee.is_division_approver or employee.is_section_approver or employee.is_unit_approver) %}
+                                <span class="text-muted">No approver roles</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -236,16 +353,16 @@
 
 <!-- Employee Count Summary -->
 <div class="row mt-4">
-    <div class="col-md-6">
+    <div class="col-md-8">
         <div class="card">
             <div class="card-body">
                 <h6 class="card-title">Summary Statistics</h6>
                 <div class="row text-center">
-                    <div class="col-4">
+                    <div class="col-2">
                         <div class="h4 text-primary" id="total-employees">{{ employees|length }}</div>
-                        <small class="text-muted">Total Employees</small>
+                        <small class="text-muted">Total</small>
                     </div>
-                    <div class="col-4">
+                    <div class="col-2">
                         <div class="h4 text-success" id="with-contact">
                             {% set contact_count = 0 %}
                             {% for emp in employees %}
@@ -257,17 +374,41 @@
                         </div>
                         <small class="text-muted">With Contact</small>
                     </div>
-                    <div class="col-4">
+                    <div class="col-2">
                         <div class="h4 text-info" id="assigned-units">
                             {{ employees|selectattr('unit')|list|length }}
                         </div>
-                        <small class="text-muted">Assigned to Units</small>
+                        <small class="text-muted">In Units</small>
+                    </div>
+                    <div class="col-2">
+                        <div class="h4 text-warning" id="approvers-count">
+                            {% set approver_count = 0 %}
+                            {% for emp in employees %}
+                                {% if emp.is_section_approver or emp.is_unit_approver or emp.is_department_approver or emp.is_division_approver %}
+                                    {% set approver_count = approver_count + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {{ approver_count }}
+                        </div>
+                        <small class="text-muted">Approvers</small>
+                    </div>
+                    <div class="col-2">
+                        <div class="h4 text-secondary" id="with-signatures">
+                            {{ employees|selectattr('signature')|list|length }}
+                        </div>
+                        <small class="text-muted">Signatures</small>
+                    </div>
+                    <div class="col-2">
+                        <div class="h4 text-dark" id="active-count">
+                            {{ employees|selectattr('is_active')|list|length }}
+                        </div>
+                        <small class="text-muted">Active</small>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card">
             <div class="card-body">
                 <h6 class="card-title">Quick Actions</h6>
@@ -291,7 +432,6 @@
 <script>
 let currentEmployees = [];
 
-// Simple status indicator instead of spinner
 function showStatus(message) {
     const statusElement = document.getElementById('result-count');
     if (statusElement && message) {
@@ -321,11 +461,9 @@ function filterEmployees() {
         }
     }
     
-    // FIXED: Use direct URL path
     const filterUrl = '/admin/api/employees/filter' + (params.toString() ? '?' + params.toString() : '');
     console.log('🌐 Filter URL:', filterUrl);
     
-    // Show a simple status message instead of spinner
     showStatus('Filtering...');
     
     fetch(filterUrl, {
@@ -404,7 +542,6 @@ function filterEmployees() {
     })
     .finally(() => {
         console.log('🏁 Filter request completed');
-        // Status will auto-update after the timeout in showStatus()
     });
 }
 
@@ -420,7 +557,7 @@ function updateEmployeeTable(employees) {
     if (employees.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="11" class="text-center py-4">
+                <td colspan="7" class="text-center py-4">
                     <i class="bi bi-search display-4 text-muted"></i>
                     <p class="text-muted mt-2">No employees found matching your criteria.</p>
                 </td>
@@ -432,39 +569,84 @@ function updateEmployeeTable(employees) {
     try {
         tbody.innerHTML = employees.map(emp => `
             <tr>
-                <td>
-                    <strong>${escapeHtml(emp.last_name)}, ${escapeHtml(emp.first_name)}</strong>
-                    ${emp.personnel_number ? `<br><small class="text-muted">${escapeHtml(emp.personnel_number)}</small>` : ''}
+                <!-- Employee Info -->
+                <td class="employee-name">
+                    <div>
+                        <strong>${escapeHtml(emp.last_name)}, ${escapeHtml(emp.first_name)}</strong>
+                        <br>
+                        <small class="text-muted">${escapeHtml(emp.username || '')}</small>
+                        ${emp.personnel_number ? `<br><small class="text-primary">${escapeHtml(emp.personnel_number)}</small>` : ''}
+                    </div>
                 </td>
-                <td>
-                    ${emp.hiring_date ? escapeHtml(emp.hiring_date) : '<span class="text-muted">Not set</span>'}
+
+                <!-- Hierarchy -->
+                <td class="hierarchy-info">
+                    ${emp.department ? `<div><span class="badge bg-dark">${escapeHtml(emp.department)}</span></div>` : ''}
+                    ${emp.division ? `<div><span class="badge bg-warning text-dark">${escapeHtml(emp.division)}</span></div>` : ''}
+                    ${emp.section ? `<div><span class="badge bg-primary">${escapeHtml(emp.section)}</span></div>` : ''}
+                    ${emp.unit ? `<div><span class="badge bg-info">${escapeHtml(emp.unit)}</span></div>` : ''}
+                    ${!emp.department && !emp.division && !emp.section && !emp.unit ? '<span class="text-muted">Not assigned</span>' : ''}
                 </td>
-                <td>
-                    ${emp.section ? `<span class="badge bg-primary">${escapeHtml(emp.section)}</span>` : '<span class="text-muted">Not assigned</span>'}
+
+                <!-- Employment Details -->
+                <td class="employee-details">
+                    <div>
+                        ${emp.employee_type ? `<span class="badge bg-secondary">${escapeHtml(emp.employee_type)}</span>` : ''}
+                    </div>
+                    ${emp.schedule_format ? `<div class="mt-1"><span class="badge schedule-badge bg-light text-dark">${getScheduleFormatDisplay(emp.schedule_format)}</span></div>` : ''}
+                    ${emp.hiring_date ? `<div class="mt-1"><small class="text-muted">Hired: ${escapeHtml(emp.hiring_date)}</small></div>` : ''}
+                    ${emp.id_number ? `<div><small class="text-muted">ID: ${escapeHtml(emp.id_number)}</small></div>` : ''}
                 </td>
-                <td>
-                    ${emp.unit ? `<span class="badge bg-info">${escapeHtml(emp.unit)}</span>` : '<span class="text-muted">Not assigned</span>'}
+
+                <!-- Job Information -->
+                <td class="employee-details">
+                    <div>
+                        ${emp.job_title ? `<strong>${escapeHtml(emp.job_title)}</strong>` : '<span class="text-muted">No job title</span>'}
+                    </div>
+                    ${emp.rank ? `<div><small class="text-muted">Rank: ${escapeHtml(emp.rank)}</small></div>` : ''}
+                    ${emp.div_department ? `<div><small class="text-muted">Div/Dept: ${escapeHtml(emp.div_department)}</small></div>` : ''}
+                    ${emp.typecode ? `<div><small class="text-muted">Type Code: ${escapeHtml(emp.typecode)}</small></div>` : ''}
                 </td>
-                <td>${escapeHtml(emp.job_title) || '-'}</td>
-                <td>${escapeHtml(emp.rank) || '-'}</td>
-                <td>
-                    ${emp.employee_type ? `<span class="badge bg-secondary">${escapeHtml(emp.employee_type)}</span>` : '<span class="text-muted">Not set</span>'}
-                </td>
-                <td>${escapeHtml(emp.id_number) || '-'}</td>
-                <td>
-                    ${emp.years_of_service !== 'N/A' && emp.years_of_service !== null ? 
-                        `<span class="badge years-badge ${getServiceBadgeClass(emp.years_of_service)}">${emp.years_of_service} ${emp.years_of_service == 1 ? 'year' : 'years'}</span>` :
-                        '<span class="text-muted">N/A</span>'
-                    }
-                </td>
-                <td>
+
+                <!-- Contact & System -->
+                <td class="employee-details">
+                    <div>
+                        <a href="mailto:${escapeHtml(emp.email)}" class="text-decoration-none">
+                            ${escapeHtml(emp.email)}
+                        </a>
+                    </div>
                     ${emp.contact_number ? 
-                        `<a href="tel:${escapeHtml(emp.contact_number)}" class="text-decoration-none">${escapeHtml(emp.contact_number)}</a>` :
-                        '<span class="text-muted">Not provided</span>'
+                        `<div class="mt-1">
+                            <a href="tel:${escapeHtml(emp.contact_number)}" class="text-decoration-none">
+                                <i class="bi bi-telephone"></i> ${escapeHtml(emp.contact_number)}
+                            </a>
+                        </div>` : ''
                     }
+                    <div class="mt-1">
+                        <span class="badge ${emp.is_active ? 'bg-success' : 'bg-danger'}">
+                            ${emp.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                    <div><small class="text-muted">Role: ${escapeHtml(emp.role || '')}</small></div>
                 </td>
+
+                <!-- Service & Status -->
+                <td class="employee-details">
+                    ${emp.years_of_service !== 'N/A' && emp.years_of_service !== null ? 
+                        `<div><span class="badge years-badge ${getServiceBadgeClass(emp.years_of_service)}">${emp.years_of_service} ${emp.years_of_service == 1 ? 'year' : 'years'}</span></div>` :
+                        ''
+                    }
+                    ${emp.has_signature ? '<div class="mt-1"><span class="badge bg-success"><i class="bi bi-pen"></i> Signature</span></div>' : ''}
+                    ${emp.has_avatar ? '<div class="mt-1"><span class="badge bg-info"><i class="bi bi-person-circle"></i> Avatar</span></div>' : ''}
+                </td>
+
+                <!-- Approver Roles -->
                 <td>
-                    <a href="mailto:${escapeHtml(emp.email)}" class="text-decoration-none">${escapeHtml(emp.email)}</a>
+                    ${emp.is_department_approver ? '<div><span class="badge approver-badge bg-dark">Dept Approver</span></div>' : ''}
+                    ${emp.is_division_approver ? '<div><span class="badge approver-badge bg-warning text-dark">Div Approver</span></div>' : ''}
+                    ${emp.is_section_approver ? '<div><span class="badge approver-badge bg-primary">Section Approver</span></div>' : ''}
+                    ${emp.is_unit_approver ? '<div><span class="badge approver-badge bg-info">Unit Approver</span></div>' : ''}
+                    ${!emp.is_department_approver && !emp.is_division_approver && !emp.is_section_approver && !emp.is_unit_approver ? '<span class="text-muted">No approver roles</span>' : ''}
                 </td>
             </tr>
         `).join('');
@@ -474,13 +656,22 @@ function updateEmployeeTable(employees) {
         console.error('Error updating table:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="11" class="text-center py-4 text-danger">
+                <td colspan="7" class="text-center py-4 text-danger">
                     <i class="bi bi-exclamation-triangle display-4"></i>
                     <p class="mt-2">Error updating table: ${error.message}</p>
                 </td>
             </tr>
         `;
     }
+}
+
+function getScheduleFormatDisplay(scheduleFormat) {
+    const formatDisplayMap = {
+        '8_hour_shift': '8-hour shift',
+        '9_hour_shift': '9-hour shift',
+        'others': 'Others'
+    };
+    return formatDisplayMap[scheduleFormat] || scheduleFormat;
 }
 
 function escapeHtml(unsafe) {
@@ -515,6 +706,9 @@ function updateSummaryStats(employees) {
         const totalElement = document.getElementById('total-employees');
         const contactElement = document.getElementById('with-contact');
         const unitsElement = document.getElementById('assigned-units');
+        const approversElement = document.getElementById('approvers-count');
+        const signaturesElement = document.getElementById('with-signatures');
+        const activeElement = document.getElementById('active-count');
         
         if (totalElement) totalElement.textContent = employees.length;
         
@@ -528,6 +722,24 @@ function updateSummaryStats(employees) {
             unitsElement.textContent = assignedUnits;
         }
         
+        if (approversElement) {
+            const approvers = employees.filter(emp => 
+                emp.is_department_approver || emp.is_division_approver || 
+                emp.is_section_approver || emp.is_unit_approver
+            ).length;
+            approversElement.textContent = approvers;
+        }
+        
+        if (signaturesElement) {
+            const withSignatures = employees.filter(emp => emp.has_signature).length;
+            signaturesElement.textContent = withSignatures;
+        }
+        
+        if (activeElement) {
+            const activeUsers = employees.filter(emp => emp.is_active).length;
+            activeElement.textContent = activeUsers;
+        }
+        
         console.log('Summary stats updated successfully');
     } catch (error) {
         console.error('Error updating summary stats:', error);
@@ -538,7 +750,6 @@ function clearFilters() {
     const form = document.getElementById('filter-form');
     if (form) {
         form.reset();
-        // Trigger a filter to show all employees again
         filterEmployees();
     }
 }
@@ -554,13 +765,11 @@ function exportEmployees() {
         }
     }
     
-    // FIXED: Use direct URL path
     const exportUrl = '/admin/employees/export?' + params.toString();
     window.location.href = exportUrl;
 }
 
 function downloadTemplate() {
-    // FIXED: Use direct URL path
     window.location.href = '/admin/employees/template';
 }
 
@@ -568,7 +777,7 @@ function downloadTemplate() {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Employee Database loaded, initializing...');
     
-    // Set up event listeners - FIXED to prevent double-firing
+    // Set up event listeners
     const filterButton = document.getElementById('filter-button');
     if (filterButton) {
         filterButton.addEventListener('click', function(e) {
@@ -625,16 +834,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Add dropdown change listeners for real-time filtering (but throttled to prevent double calls)
+    // Add dropdown change listeners for real-time filtering (throttled)
     let filterTimeout;
     function throttledFilter() {
         clearTimeout(filterTimeout);
-        filterTimeout = setTimeout(filterEmployees, 300); // Wait 300ms before filtering
+        filterTimeout = setTimeout(filterEmployees, 300);
     }
     
+    const departmentFilter = document.getElementById('department-filter');
+    const divisionFilter = document.getElementById('division-filter');
     const sectionFilter = document.getElementById('section-filter');
     const unitFilter = document.getElementById('unit-filter');
     const typeFilter = document.getElementById('employee-type-filter');
+    
+    if (departmentFilter) {
+        departmentFilter.addEventListener('change', throttledFilter);
+    }
+    
+    if (divisionFilter) {
+        divisionFilter.addEventListener('change', throttledFilter);
+    }
     
     if (sectionFilter) {
         sectionFilter.addEventListener('change', throttledFilter);
